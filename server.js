@@ -358,7 +358,7 @@ app.get('/api/download-excel', async (req, res) => {
     } catch (e) { res.status(500).send(e.message); }
 });
 
-// 12. PDF DOWNLOAD
+// 12. PDF DOWNLOAD (With bufferPages FIX)
 app.get('/api/download-pdf/:id', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -367,7 +367,9 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         
         const p = result.recordset[0];
         const d = JSON.parse(p.FullDataJSON);
-        const doc = new PDFDocument({ margin: 30, size: 'A4' });
+        
+        // --- FIX: bufferPages: true IS CRITICAL FOR WATERMARKS ---
+        const doc = new PDFDocument({ margin: 30, size: 'A4', bufferPages: true });
         
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=${p.PermitID}.pdf`);
@@ -445,7 +447,7 @@ app.get('/api/download-pdf/:id', async (req, res) => {
 
         const hazards = ["H_H2S", "H_LackOxygen", "H_Corrosive", "H_ToxicGas", "H_Combustible", "H_Steam", "H_PyroIron", "H_N2Gas", "H_Height", "H_LooseEarth", "H_HighNoise", "H_Radiation", "H_Other"];
         let hList = hazards.filter(h => d[h] === 'Y').map(h => h.replace('H_','')).join(', ');
-        if(d.H_Other === 'Y' && d.H_Other_Detail) hList += ` (Other: ${d.H_Other_Detail})`; // Add custom details
+        if(d.H_Other === 'Y' && d.H_Other_Detail) hList += ` (Other: ${d.H_Other_Detail})`;
 
         const ppe = ["P_FaceShield", "P_FreshAirMask", "P_CompressedBA", "P_Goggles", "P_DustRespirator", "P_Earmuff", "P_LifeLine", "P_Apron", "P_SafetyHarness", "P_SafetyNet", "P_Airline"];
         let pList = ppe.filter(p => d[p] === 'Y').map(p => p.replace('P_','')).join(', ');
@@ -472,9 +474,17 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.text(`Receiver Sig: ${d.Closure_Receiver_Sig || 'Not Signed'}`);
         doc.text(`Issuer Sig: ${d.Closure_Issuer_Sig || 'Not Signed'} (Remarks: ${d.Closure_Issuer_Remarks || '-'})`);
 
+        // --- SAFE WATERMARKING USING BUFFERED PAGES ---
         const watermarkText = p.Status.includes('Closed') ? 'CLOSED' : 'ACTIVE';
         const color = p.Status.includes('Closed') ? '#ef4444' : '#22c55e';
-        [0, 1, 2].forEach(i => { doc.switchToPage(i); doc.save(); doc.rotate(-45, { origin: [300, 400] }); doc.fontSize(80).fillColor(color).opacity(0.15).text(watermarkText, 100, 350, { align: 'center', width: 400 }); doc.restore(); });
+        const range = doc.bufferedPageRange(); // Get total pages
+        for (let i = 0; i < range.count; i++) {
+            doc.switchToPage(i);
+            doc.save();
+            doc.rotate(-45, { origin: [300, 400] });
+            doc.fontSize(80).fillColor(color).opacity(0.15).text(watermarkText, 100, 350, { align: 'center', width: 400 });
+            doc.restore();
+        }
 
         doc.end();
     } catch (e) { res.status(500).send(e.message); }

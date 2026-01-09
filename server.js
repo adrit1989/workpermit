@@ -15,7 +15,7 @@ app.use(bodyParser.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, '.')));
 
 // ==========================================
-// AZURE BLOB STORAGE SETUP
+// 1. AZURE BLOB STORAGE CONFIGURATION
 // ==========================================
 const AZURE_CONN_STR = process.env.AZURE_STORAGE_CONNECTION_STRING;
 let containerClient, kmlContainerClient;
@@ -23,24 +23,41 @@ let containerClient, kmlContainerClient;
 if (AZURE_CONN_STR) {
     try {
         const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_CONN_STR);
+        
+        // Container for Permit Attachments (Images/PDFs)
         containerClient = blobServiceClient.getContainerClient("permit-attachments");
+        
+        // Container for Map Layers (KML Files)
         kmlContainerClient = blobServiceClient.getContainerClient("map-layers");
+        
+        // Ensure containers exist on startup
         (async () => {
-            try { await containerClient.createIfNotExists(); } catch(e) { console.log("Attachments container exists"); }
-            try { await kmlContainerClient.createIfNotExists({ access: 'blob' }); } catch(e) { console.log("KML container exists"); }
+            try { 
+                await containerClient.createIfNotExists(); 
+                console.log("✅ Attachments Container Ready");
+            } catch(e) { 
+                console.log("ℹ️ Attachments Container Check:", e.message); 
+            }
+            
+            try { 
+                await kmlContainerClient.createIfNotExists({ access: 'blob' }); 
+                console.log("✅ KML Container Ready");
+            } catch(e) { 
+                console.log("ℹ️ KML Container Check:", e.message); 
+            }
         })();
     } catch (err) { 
-        console.error("Blob Storage Error:", err.message); 
+        console.error("❌ Blob Storage Error:", err.message); 
     }
 }
 
 const upload = multer({ storage: multer.memoryStorage() });
 
 // ==========================================
-// HELPER FUNCTIONS
+// 2. HELPER FUNCTIONS
 // ==========================================
 
-// Get current time in IST (Indian Standard Time)
+// Get current time in IST (Indian Standard Time) for Audit Trails
 function getNowIST() { 
     return new Date().toLocaleString("en-GB", { 
         timeZone: "Asia/Kolkata", 
@@ -53,11 +70,11 @@ function getNowIST() {
     }).replace(',', ''); 
 }
 
-// Format Date string to DD-MM-YYYY HH:mm
+// Format Date string from DB (ISO) to Readable (DD-MM-YYYY HH:mm)
 function formatDate(dateStr) {
     if (!dateStr) return '-';
     const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr; // Return as-is if it's already a string
+    if (isNaN(d.getTime())) return dateStr; // Return as-is if not a valid date object
     return d.toLocaleString("en-GB", { 
         day: '2-digit', 
         month: '2-digit', 
@@ -69,10 +86,12 @@ function formatDate(dateStr) {
 }
 
 // ==========================================
-// API ROUTES
+// 3. API ROUTES
 // ==========================================
 
-// 1. LOGIN
+// ------------------------------------------
+// ROUTE: User Login
+// ------------------------------------------
 app.post('/api/login', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -92,11 +111,14 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// 2. GET USERS LIST
+// ------------------------------------------
+// ROUTE: Get All Users (for Dropdowns)
+// ------------------------------------------
 app.get('/api/users', async (req, res) => {
     try {
         const pool = await getConnection();
         const result = await pool.request().query('SELECT Name, Role, Email FROM Users');
+        
         res.json({
             Requesters: result.recordset.filter(u => u.Role === 'Requester').map(u => ({ name: u.Name, email: u.Email })),
             Reviewers: result.recordset.filter(u => u.Role === 'Reviewer').map(u => ({ name: u.Name, email: u.Email })),
@@ -107,16 +129,21 @@ app.get('/api/users', async (req, res) => {
     }
 });
 
-// 2.5 ADD NEW USER
+// ------------------------------------------
+// ROUTE: Add New User (User Management)
+// ------------------------------------------
 app.post('/api/add-user', async (req, res) => {
     try {
         const { name, email, role, password } = req.body;
+        
+        // Basic Validation
         if (!name || !email || !role || !password) {
             return res.status(400).json({ error: "All fields required" });
         }
 
         const pool = await getConnection();
-        // Check duplication
+        
+        // Check for Duplicates
         const check = await pool.request()
             .input('e', sql.NVarChar, email)
             .query("SELECT * FROM Users WHERE Email = @e");
@@ -125,6 +152,7 @@ app.post('/api/add-user', async (req, res) => {
             return res.status(400).json({ error: "User with this email already exists." });
         }
 
+        // Insert New User
         await pool.request()
             .input('n', sql.NVarChar, name)
             .input('e', sql.NVarChar, email)
@@ -138,17 +166,25 @@ app.post('/api/add-user', async (req, res) => {
     }
 });
 
-// 3. DASHBOARD DATA
+// ------------------------------------------
+// ROUTE: Dashboard Data (Filtered by Role)
+// ------------------------------------------
 app.post('/api/dashboard', async (req, res) => {
     try {
         const { role, email } = req.body;
         const pool = await getConnection();
-        const result = await pool.request().query('SELECT PermitID, Status, ValidFrom, ValidTo, RequesterEmail, ReviewerEmail, ApproverEmail, FullDataJSON FROM Permits');
+        
+        // Fetch Key Columns Only for Speed
+        const result = await pool.request().query(`
+            SELECT PermitID, Status, ValidFrom, ValidTo, 
+                   RequesterEmail, ReviewerEmail, ApproverEmail, FullDataJSON 
+            FROM Permits
+        `);
         
         const permits = result.recordset.map(p => {
             const d = JSON.parse(p.FullDataJSON || "{}");
             return { 
-                ...d, 
+                ...d, // Spread full JSON data
                 PermitID: p.PermitID, 
                 Status: p.Status, 
                 ValidFrom: p.ValidFrom, 
@@ -156,51 +192,90 @@ app.post('/api/dashboard', async (req, res) => {
             };
         });
 
+        // Filter Logic based on User Role
         const filtered = permits.filter(p => {
             const st = (p.Status || "").toLowerCase();
-            if (role === 'Requester') return p.RequesterEmail === email;
+            
+            if (role === 'Requester') {
+                return p.RequesterEmail === email;
+            }
             
             if (role === 'Reviewer') {
-                return (p.ReviewerEmail === email && (st.includes('pending review') || st.includes('closure') || st === 'closed' || st.includes('renewal')));
+                // Reviewer sees their assigned permits + active/closed for history
+                return (p.ReviewerEmail === email && (
+                    st.includes('pending review') || 
+                    st.includes('closure') || 
+                    st === 'closed' || 
+                    st.includes('renewal')
+                ));
             }
             
             if (role === 'Approver') {
-                return (p.ApproverEmail === email && (st.includes('pending approval') || st === 'active' || st === 'closed' || st.includes('renewal') || st.includes('closure')));
+                // Approver sees their assigned permits + active/closed for history
+                return (p.ApproverEmail === email && (
+                    st.includes('pending approval') || 
+                    st === 'active' || 
+                    st === 'closed' || 
+                    st.includes('renewal') || 
+                    st.includes('closure')
+                ));
             }
             return false;
         });
         
+        // Sort Newest First
         res.json(filtered.sort((a, b) => b.PermitID.localeCompare(a.PermitID)));
     } catch (e) { 
         res.status(500).json({ error: e.message }); 
     }
 });
 
-// 4. SAVE NEW PERMIT
+// ------------------------------------------
+// ROUTE: Save New Permit OR Update Pending Permit
+// ------------------------------------------
 app.post('/api/save-permit', upload.single('file'), async (req, res) => {
     try {
         const vf = new Date(req.body.ValidFrom);
         const vt = new Date(req.body.ValidTo);
 
-        // Validation: End time > Start time
+        // Date Validations
         if (vt <= vf) return res.status(400).json({ error: "End time must be greater than Start time." });
-        
-        // Validation: Max 7 Days
         const diffTime = Math.abs(vt - vf);
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
         if (diffDays > 7) return res.status(400).json({ error: "Permit duration cannot exceed 7 days." });
 
         const pool = await getConnection();
         
-        // Generate ID
-        const idRes = await pool.request().query("SELECT TOP 1 PermitID FROM Permits ORDER BY Id DESC");
-        const lastId = idRes.recordset.length > 0 ? idRes.recordset[0].PermitID : "WP-1000";
-        const newId = `WP-${parseInt(lastId.split('-')[1]) + 1}`;
+        // Determine ID (New vs Update)
+        let permitId = req.body.PermitID;
+        let isUpdate = false;
 
-        const fullData = { ...req.body, PermitID: newId };
+        if (permitId) {
+            // Check if existing
+            const check = await pool.request().input('pid', sql.NVarChar, permitId).query("SELECT Status FROM Permits WHERE PermitID = @pid");
+            if (check.recordset.length > 0) {
+                // Allow Update ONLY if it is still Pending Review (Requestor Edit Mode)
+                if (check.recordset[0].Status === 'Pending Review' || check.recordset[0].Status === 'New') {
+                    isUpdate = true;
+                } else {
+                    return res.status(400).json({ error: "Cannot edit an Active or Processed permit. Use renewal/closure workflow." });
+                }
+            } else {
+                permitId = null; // ID invalid, create new
+            }
+        }
+
+        if (!permitId) {
+            // Generate New ID
+            const idRes = await pool.request().query("SELECT TOP 1 PermitID FROM Permits ORDER BY Id DESC");
+            const lastId = idRes.recordset.length > 0 ? idRes.recordset[0].PermitID : "WP-1000";
+            permitId = `WP-${parseInt(lastId.split('-')[1]) + 1}`;
+        }
+
+        const fullData = { ...req.body, PermitID: permitId };
         
-        await pool.request()
-            .input('pid', sql.NVarChar, newId)
+        const q = pool.request()
+            .input('pid', sql.NVarChar, permitId)
             .input('status', sql.NVarChar, 'Pending Review')
             .input('wt', sql.NVarChar, req.body.WorkType)
             .input('req', sql.NVarChar, req.body.RequesterEmail)
@@ -224,24 +299,64 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
             .input('exactLoc', sql.NVarChar, req.body.ExactLocation)
             .input('desc', sql.NVarChar, req.body.Desc)
             .input('offName', sql.NVarChar, req.body.OfficialName)
-            .input('json', sql.NVarChar, JSON.stringify(fullData))
-            .query(`INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, 
-                    LocationPermitSno, RefIsolationCert, CrossRefPermits, JsaRef, MocRequired, MocRef, CctvAvailable, CctvDetail, Vendor, IssuedToDept, LocationUnit, ExactLocation, [Desc], OfficialName, RenewalsJSON, FullDataJSON) 
-                    VALUES (@pid, @status, @wt, @req, @rev, @app, @vf, @vt, @lat, @lng, 
-                    @locSno, @iso, @cross, @jsa, @mocReq, @mocRef, @cctv, @cctvDet, @vendor, @dept, @locUnit, @exactLoc, @desc, @offName, '[]', @json)`);
+            .input('json', sql.NVarChar, JSON.stringify(fullData));
 
-        res.json({ success: true, permitId: newId });
+        if (isUpdate) {
+            // Update Existing Row
+            await q.query(`
+                UPDATE Permits SET 
+                WorkType=@wt, ReviewerEmail=@rev, ApproverEmail=@app, ValidFrom=@vf, ValidTo=@vt, 
+                Latitude=@lat, Longitude=@lng, LocationPermitSno=@locSno, RefIsolationCert=@iso, 
+                CrossRefPermits=@cross, JsaRef=@jsa, MocRequired=@mocReq, MocRef=@mocRef, 
+                CctvAvailable=@cctv, CctvDetail=@cctvDet, Vendor=@vendor, IssuedToDept=@dept, 
+                LocationUnit=@locUnit, ExactLocation=@exactLoc, [Desc]=@desc, OfficialName=@offName, 
+                FullDataJSON=@json, Status='Pending Review' 
+                WHERE PermitID=@pid
+            `);
+        } else {
+            // Insert New Row
+            await q.query(`
+                INSERT INTO Permits (
+                    PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, 
+                    ValidFrom, ValidTo, Latitude, Longitude, LocationPermitSno, RefIsolationCert, 
+                    CrossRefPermits, JsaRef, MocRequired, MocRef, CctvAvailable, CctvDetail, 
+                    Vendor, IssuedToDept, LocationUnit, ExactLocation, [Desc], OfficialName, 
+                    RenewalsJSON, FullDataJSON
+                ) VALUES (
+                    @pid, @status, @wt, @req, @rev, @app, 
+                    @vf, @vt, @lat, @lng, @locSno, @iso, 
+                    @cross, @jsa, @mocReq, @mocRef, @cctv, @cctvDet, 
+                    @vendor, @dept, @locUnit, @exactLoc, @desc, @offName, 
+                    '[]', @json
+                )
+            `);
+        }
+
+        // Handle File Upload to Azure Blob
+        if(req.file && containerClient) {
+            const blobClient = containerClient.getBlockBlobClient(`${permitId}_${req.file.originalname}`);
+            await blobClient.uploadData(req.file.buffer);
+        }
+
+        res.json({ success: true, permitId: permitId });
     } catch (e) { 
         res.status(500).json({ error: e.message }); 
     }
 });
 
-// 5. UPDATE STATUS (With Strict Logic & Locking)
+// ------------------------------------------
+// ROUTE: Update Status (Review, Approve, Reject, Closure, Renewal Actions)
+// ------------------------------------------
 app.post('/api/update-status', async (req, res) => {
     try {
         const { PermitID, action, role, user, comment, rejectionReason, ...extras } = req.body;
         const pool = await getConnection();
-        const current = await pool.request().input('pid', sql.NVarChar, PermitID).query("SELECT * FROM Permits WHERE PermitID = @pid");
+        
+        // Fetch Current State
+        const current = await pool.request()
+            .input('pid', sql.NVarChar, PermitID)
+            .query("SELECT * FROM Permits WHERE PermitID = @pid");
+            
         if(current.recordset.length === 0) return res.json({ error: "Not found" });
         
         let p = current.recordset[0];
@@ -250,43 +365,29 @@ app.post('/api/update-status', async (req, res) => {
         const now = getNowIST();
         const sig = `${user} on ${now}`;
 
-        // STRICT LOCKING: Only update data fields if status is 'Pending Review' (Requestor Edit Mode)
-        // Otherwise, ignore changes to core fields (checkboxes etc) from Requestor.
-        if (status === 'Pending Review' || status === 'New') {
-            Object.assign(data, extras); // Allow edits
-        } else if (role === 'Reviewer' || role === 'Approver') {
-            // Reviewer/Approver can add their specific fields (Hazards, PPE, Color) but not change Requestor data
-            if(extras.ForceBackgroundColor) data.ForceBackgroundColor = extras.ForceBackgroundColor;
-            // Hazards/PPE are handled in frontend logic to only send if Reviewer
-            Object.assign(data, extras); 
-        }
+        // Merge incoming extras (like checkboxes) into main data
+        Object.assign(data, extras);
 
-        // --- CLOSURE WORKFLOW LOGIC ---
-        if (role === 'Requester' && action === 'initiate_closure') {
-            status = 'Closure Pending Review'; 
-            data.Closure_Receiver_Sig = sig; // Signature of Receiver/Requestor
-            data.Site_Restored_Check = "Yes"; 
-            
-            // Save Requestor's specific remarks and date
-            data.Closure_Requestor_Remarks = req.body.Closure_Requestor_Remarks;
-            data.Closure_Requestor_Date = now;
-        }
-        else if (role === 'Reviewer') {
+        // --- ROLE BASED LOGIC ---
+
+        if (role === 'Reviewer') {
             if (action === 'reject') { 
                 status = 'Rejected'; 
                 data.Reviewer_Remarks = (data.Reviewer_Remarks||"") + `\n[Rejected by ${user}: ${comment}]`; 
-            } else if (action === 'review') { 
+            } 
+            else if (action === 'review') { 
                 status = 'Pending Approval'; 
                 data.Reviewer_Sig = sig; 
                 data.Reviewer_Remarks = comment; 
-            } else if (action === 'approve' && status.includes('Closure')) { 
+            } 
+            else if (action === 'approve' && status.includes('Closure')) { 
                 status = 'Closure Pending Approval'; 
-                
-                // Save Reviewer's specific closure remarks and date
+                // Save specific closure data
                 data.Closure_Reviewer_Remarks = req.body.Closure_Reviewer_Remarks;
                 data.Closure_Reviewer_Date = now;
                 data.Closure_Reviewer_Sig = sig; 
-            } else if (action === 'reject_closure') {
+            } 
+            else if (action === 'reject_closure') {
                 status = 'Active'; 
                 data.Closure_Reviewer_Remarks = `[REJECTED by ${user}]: ${req.body.Closure_Reviewer_Remarks}`;
                 data.Closure_Reviewer_Date = now;
@@ -296,25 +397,35 @@ app.post('/api/update-status', async (req, res) => {
             if (action === 'reject') { 
                 status = 'Rejected'; 
                 data.Approver_Remarks = (data.Approver_Remarks||"") + `\n[Rejected by ${user}: ${comment}]`; 
-            } else if (action === 'approve' && status === 'Pending Approval') { 
+            } 
+            else if (action === 'approve' && status === 'Pending Approval') { 
                 status = 'Active'; 
                 data.Approver_Sig = sig; 
                 data.Approver_Remarks = comment; 
-            } else if (action === 'approve' && status.includes('Closure')) { 
+            } 
+            else if (action === 'approve' && status.includes('Closure')) { 
                 status = 'Closed'; 
-                
-                // Save Approver's specific closure remarks and date
+                // Save specific closure data
                 data.Closure_Approver_Remarks = req.body.Closure_Approver_Remarks;
                 data.Closure_Approver_Date = now;
                 data.Closure_Issuer_Sig = sig; 
                 data.Closure_Issuer_Remarks = comment; 
-            } else if (action === 'reject_closure') {
+            } 
+            else if (action === 'reject_closure') {
                 status = 'Active'; 
                 data.Closure_Approver_Remarks = `[REJECTED by ${user}]: ${req.body.Closure_Approver_Remarks}`;
                 data.Closure_Approver_Date = now;
             }
         }
+        else if (role === 'Requester' && action === 'initiate_closure') {
+            status = 'Closure Pending Review'; 
+            data.Closure_Receiver_Sig = sig; 
+            data.Site_Restored_Check = "Yes"; 
+            data.Closure_Requestor_Remarks = req.body.Closure_Requestor_Remarks;
+            data.Closure_Requestor_Date = now;
+        }
 
+        // Update DB
         let q = pool.request()
             .input('pid', sql.NVarChar, PermitID)
             .input('status', sql.NVarChar, status)
@@ -328,26 +439,47 @@ app.post('/api/update-status', async (req, res) => {
         }
 
         res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { 
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
-// 6. PERMIT DATA
+// ------------------------------------------
+// ROUTE: Get Single Permit Data
+// ------------------------------------------
 app.post('/api/permit-data', async (req, res) => {
     try {
         const pool = await getConnection();
-        const result = await pool.request().input('pid', sql.NVarChar, req.body.permitId).query("SELECT * FROM Permits WHERE PermitID = @pid");
+        const result = await pool.request()
+            .input('pid', sql.NVarChar, req.body.permitId)
+            .query("SELECT * FROM Permits WHERE PermitID = @pid");
+            
         if (result.recordset.length === 0) return res.json({ error: "Not found" });
+        
         const p = result.recordset[0];
-        res.json({ ...JSON.parse(p.FullDataJSON), PermitID: p.PermitID, Status: p.Status, RenewalsJSON: p.RenewalsJSON, Latitude: p.Latitude, Longitude: p.Longitude });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        res.json({ 
+            ...JSON.parse(p.FullDataJSON), 
+            PermitID: p.PermitID, 
+            Status: p.Status, 
+            RenewalsJSON: p.RenewalsJSON, 
+            Latitude: p.Latitude, 
+            Longitude: p.Longitude 
+        });
+    } catch (e) { 
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
-// 7. RENEWALS
+// ------------------------------------------
+// ROUTE: Handle Renewals (Approve/Reject)
+// ------------------------------------------
 app.post('/api/renewal', async (req, res) => {
     try {
         const { PermitID, userRole, userName, action, rejectionReason, ...data } = req.body;
         const pool = await getConnection();
-        const current = await pool.request().input('pid', sql.NVarChar, PermitID).query("SELECT RenewalsJSON, Status, ValidFrom, ValidTo FROM Permits WHERE PermitID = @pid");
+        const current = await pool.request()
+            .input('pid', sql.NVarChar, PermitID)
+            .query("SELECT RenewalsJSON, Status, ValidFrom, ValidTo FROM Permits WHERE PermitID = @pid");
         
         let renewals = JSON.parse(current.recordset[0].RenewalsJSON || "[]");
         let status = current.recordset[0].Status;
@@ -359,17 +491,10 @@ app.post('/api/renewal', async (req, res) => {
              const reqStart = new Date(data.RenewalValidFrom);
              const reqEnd = new Date(data.RenewalValidTill);
 
-             if (reqStart < permitStart || reqEnd > permitEnd) return res.status(400).json({ error: "Renewal must be within original Permit Validity." });
+             if (reqStart < permitStart || reqEnd > permitEnd) return res.status(400).json({ error: "Renewal time must be within original Permit Validity." });
              if (reqStart >= reqEnd) return res.status(400).json({ error: "Invalid Time Range." });
-             
-             const duration = (reqEnd - reqStart) / (1000 * 60 * 60);
-             if (duration > 8) return res.status(400).json({ error: "Renewal cannot exceed 8 Hours." });
-
-             if (renewals.length > 0) {
-                 const lastRen = renewals[renewals.length - 1];
-                 const lastEnd = new Date(lastRen.valid_till);
-                 if (reqStart < lastEnd && lastRen.status !== 'rejected') return res.status(400).json({ error: "Renewal must start after the previous renewal ends." });
-             }
+             const durationHours = (reqEnd - reqStart) / 36e5; // 36e5 = 1 hour in ms
+             if (durationHours > 8) return res.status(400).json({ error: "Renewal cannot exceed 8 Hours." });
 
              renewals.push({ 
                  status: 'pending_review', 
@@ -379,8 +504,8 @@ app.post('/api/renewal', async (req, res) => {
                  toxic: data.RenewalToxic, 
                  oxygen: data.RenewalOxygen, 
                  precautions: data.RenewalPrecautions, 
-                 req_name: userName,
-                 req_at: now
+                 req_name: userName, 
+                 req_at: now 
              });
              status = "Renewal Pending Review";
         } 
@@ -390,12 +515,12 @@ app.post('/api/renewal', async (req, res) => {
                 last.status = 'rejected'; 
                 last.rev_name = userName; 
                 last.rev_at = now; 
-                last.rejection_reason = rejectionReason; // Store rejection reason
+                last.rejection_reason = rejectionReason; 
                 status = 'Active'; 
             } else { 
                 last.status = 'pending_approval'; 
                 last.rev_name = userName; 
-                last.rev_at = now;
+                last.rev_at = now; 
                 Object.assign(last, { 
                     valid_from: data.RenewalValidFrom, 
                     valid_till: data.RenewalValidTill, 
@@ -413,7 +538,7 @@ app.post('/api/renewal', async (req, res) => {
                 last.status = 'rejected'; 
                 last.app_name = userName; 
                 last.app_at = now; 
-                last.rejection_reason = rejectionReason; // Store rejection reason
+                last.rejection_reason = rejectionReason; 
                 status = 'Active'; 
             } else { 
                 last.status = 'approved'; 
@@ -423,43 +548,83 @@ app.post('/api/renewal', async (req, res) => {
             }
         }
 
-        await pool.request().input('pid', sql.NVarChar, PermitID).input('status', sql.NVarChar, status).input('ren', sql.NVarChar, JSON.stringify(renewals))
+        await pool.request()
+            .input('pid', sql.NVarChar, PermitID)
+            .input('status', sql.NVarChar, status)
+            .input('ren', sql.NVarChar, JSON.stringify(renewals))
             .query("UPDATE Permits SET Status = @status, RenewalsJSON = @ren WHERE PermitID = @pid");
+            
         res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { 
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
-// 8. MAP DATA
+// ------------------------------------------
+// ROUTE: Map Data
+// ------------------------------------------
 app.post('/api/map-data', async (req, res) => {
     try {
         const pool = await getConnection();
         const result = await pool.request().query("SELECT PermitID, FullDataJSON, Latitude, Longitude FROM Permits WHERE Status = 'Active' AND Latitude IS NOT NULL");
+        
         const mapPoints = result.recordset.map(row => {
             const d = JSON.parse(row.FullDataJSON);
-            return { PermitID: row.PermitID, lat: parseFloat(row.Latitude), lng: parseFloat(row.Longitude), WorkType: d.WorkType, Desc: d.Desc, RequesterName: d.RequesterName, ValidFrom: d.ValidFrom, ValidTo: d.ValidTo };
+            return { 
+                PermitID: row.PermitID, 
+                lat: parseFloat(row.Latitude), 
+                lng: parseFloat(row.Longitude), 
+                WorkType: d.WorkType, 
+                Desc: d.Desc, 
+                ExactLocation: d.ExactLocation 
+            };
         });
         res.json(mapPoints);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { 
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
-// 9. KML ENDPOINTS
-app.get('/api/kml', async (req, res) => { if(!kmlContainerClient) return res.json([]); let b=[]; for await(const x of kmlContainerClient.listBlobsFlat()) b.push({name:x.name,url:kmlContainerClient.getBlockBlobClient(x.name).url}); res.json(b); });
-app.post('/api/kml', upload.single('file'), async (req, res) => { if(!kmlContainerClient) return; const b = kmlContainerClient.getBlockBlobClient(`${Date.now()}-${req.file.originalname}`); await b.uploadData(req.file.buffer, {blobHTTPHeaders:{blobContentType:"application/vnd.google-earth.kml+xml"}}); res.json({success:true, url:b.url}); });
-app.delete('/api/kml/:name', async (req, res) => { if(!kmlContainerClient) return; await kmlContainerClient.getBlockBlobClient(req.params.name).delete(); res.json({success:true}); });
+// ------------------------------------------
+// ROUTE: KML / Stats / Excel (Standard)
+// ------------------------------------------
+app.get('/api/kml', async (req, res) => { 
+    if(!kmlContainerClient) return res.json([]); 
+    let b=[]; 
+    for await(const x of kmlContainerClient.listBlobsFlat()) 
+        b.push({name:x.name,url:kmlContainerClient.getBlockBlobClient(x.name).url}); 
+    res.json(b); 
+});
 
-// 10. STATISTICS API
+app.post('/api/kml', upload.single('file'), async (req, res) => { 
+    if(!kmlContainerClient) return; 
+    const b = kmlContainerClient.getBlockBlobClient(`${Date.now()}-${req.file.originalname}`); 
+    await b.uploadData(req.file.buffer, {blobHTTPHeaders:{blobContentType:"application/vnd.google-earth.kml+xml"}}); 
+    res.json({success:true, url:b.url}); 
+});
+
+app.delete('/api/kml/:name', async (req, res) => { 
+    if(!kmlContainerClient) return; 
+    await kmlContainerClient.getBlockBlobClient(req.params.name).delete(); 
+    res.json({success:true}); 
+});
+
 app.post('/api/stats', async (req, res) => {
     try {
         const pool = await getConnection();
         const result = await pool.request().query("SELECT Status, WorkType FROM Permits");
         const statusCounts = {};
         const typeCounts = {};
-        result.recordset.forEach(r => { statusCounts[r.Status] = (statusCounts[r.Status] || 0) + 1; typeCounts[r.WorkType] = (typeCounts[r.WorkType] || 0) + 1; });
+        result.recordset.forEach(r => { 
+            statusCounts[r.Status] = (statusCounts[r.Status] || 0) + 1; 
+            typeCounts[r.WorkType] = (typeCounts[r.WorkType] || 0) + 1; 
+        });
         res.json({ success: true, statusCounts, typeCounts });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { 
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
-// 11. EXCEL DOWNLOAD
 app.get('/api/download-excel', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -467,7 +632,6 @@ app.get('/api/download-excel', async (req, res) => {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Permits Summary');
         
-        // Define Columns
         worksheet.columns = [
             { header: 'Permit ID', key: 'id', width: 15 }, 
             { header: 'Status', key: 'status', width: 20 }, 
@@ -481,7 +645,6 @@ app.get('/api/download-excel', async (req, res) => {
             { header: 'Valid To', key: 'vt', width: 20 }
         ];
 
-        // Header Styling
         worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
         worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
         
@@ -508,7 +671,9 @@ app.get('/api/download-excel', async (req, res) => {
     } catch (e) { res.status(500).send(e.message); }
 });
 
-// 12. PDF DOWNLOAD (Fully Updated with Closure Remarks Table & Rejection Reasons)
+// ------------------------------------------
+// ROUTE: PDF Generation (Professional Table Format)
+// ------------------------------------------
 app.get('/api/download-pdf/:id', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -518,33 +683,34 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         const p = result.recordset[0];
         const d = JSON.parse(p.FullDataJSON);
         
-        // FIX: bufferPages: true IS CRITICAL FOR WATERMARKS
+        // --- PDF SETUP ---
         const doc = new PDFDocument({ margin: 30, size: 'A4', bufferPages: true });
         
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=${p.PermitID}.pdf`);
         doc.pipe(res);
 
-        // Helper: Split Signature
+        // --- Helper: Split Signature ---
         const splitSig = (sigStr) => {
             if (!sigStr) return { name: 'Pending', date: '' };
             const parts = sigStr.split(' on ');
             return { name: parts[0], date: parts[1] || '' };
         };
 
-        // Helper: Draw Grid Table
+        // --- Helper: Draw Table ---
         function drawTable(startY, rows, colsWidth) {
             let currentY = startY;
             doc.fontSize(8).font('Helvetica');
             rows.forEach((row, i) => {
                 let currentX = 40;
                 let maxCellHeight = 0;
-                // Calculate max height
+                // Calculate max height based on content
                 row.forEach((cell, j) => {
                     const height = doc.heightOfString(cell, { width: colsWidth[j] - 10 });
                     if(height > maxCellHeight) maxCellHeight = height;
                 });
-                maxCellHeight += 10;
+                maxCellHeight += 10; // Padding
+                
                 // Draw cells
                 row.forEach((cell, j) => {
                     doc.rect(currentX, currentY, colsWidth[j], maxCellHeight).stroke();
@@ -552,17 +718,20 @@ app.get('/api/download-pdf/:id', async (req, res) => {
                     currentX += colsWidth[j];
                 });
                 currentY += maxCellHeight;
-                // Page break check
-                if(currentY > 750) { doc.addPage(); currentY = 40; }
+                
+                // Page Break?
+                if(currentY > 750) { 
+                    doc.addPage(); 
+                    currentY = 40; 
+                }
             });
             return currentY;
         }
 
-        // --- PAGE 1 CONTENT ---
+        // --- PAGE 1 ---
         doc.rect(40, 40, 515, 60).stroke();
         doc.font('Helvetica-Bold').fontSize(14).text('INDIAN OIL CORPORATION LIMITED', 40, 55, { align: 'center', width: 515 });
         doc.fontSize(10).text('Pipeline Division', 40, 75, { align: 'center', width: 515 });
-        
         doc.moveDown(4);
         doc.fontSize(12).text('COMPOSITE WORK PERMIT', { align: 'center', underline:true });
         doc.moveDown();
@@ -596,7 +765,7 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         });
         drawTable(doc.y, [['No', 'Question', 'Status', 'Remarks'], ...gpRows], [30, 250, 80, 155]);
 
-        // --- PAGE 2 CONTENT ---
+        // --- PAGE 2 ---
         doc.addPage();
         doc.font('Helvetica-Bold').fontSize(10).text('SPECIFIC WORK CHECKLIST');
         const spQs = [{id:"HW_Q1", t:"Ventilation/Lighting"}, {id:"HW_Q2", t:"Means of Exit"}, {id:"HW_Q3", t:"Standby Person"}, {id:"HW_Q4", t:"Trapped Oil/Gas Check"}, {id:"HW_Q5", t:"Shield Against Spark"}, {id:"HW_Q6", t:"Equipment Grounded"}, {id:"HW_Q16", t:"Height Permit Taken", d:"HW_Q16_Detail"}, {id:"VE_Q1", t:"Spark Arrestor (Veh)"}, {id:"EX_Q1", t:"Excavation Clear"}];
@@ -634,7 +803,7 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         ];
         drawTable(doc.y, sigRows, [100, 250, 165]);
 
-        // --- PAGE 3 CONTENT ---
+        // --- PAGE 3 ---
         doc.addPage();
         doc.font('Helvetica-Bold').text('CLEARANCE RENEWAL HISTORY');
         const rens = JSON.parse(p.RenewalsJSON || "[]");

@@ -5,7 +5,7 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const PDFDocument = require('pdfkit'); 
-const ExcelJS = require('exceljs'); // Professional Excel Library
+const ExcelJS = require('exceljs'); 
 const { BlobServiceClient } = require('@azure/storage-blob');
 const { getConnection, sql } = require('./db');
 
@@ -64,7 +64,7 @@ app.get('/api/users', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 3. DASHBOARD (Fixed to show Renewals)
+// 3. DASHBOARD
 app.post('/api/dashboard', async (req, res) => {
     try {
         const { role, email } = req.body;
@@ -79,13 +79,8 @@ app.post('/api/dashboard', async (req, res) => {
         const filtered = permits.filter(p => {
             const st = (p.Status || "").toLowerCase();
             if (role === 'Requester') return p.RequesterEmail === email;
-            
-            // Reviewer sees: Pending Review, Renewals, Closures, Closed
             if (role === 'Reviewer') return (p.ReviewerEmail === email && (st.includes('pending review') || st.includes('closure') || st === 'closed' || st.includes('renewal')));
-            
-            // Approver sees: Pending Approval, Active, Renewals, Closures, Closed
             if (role === 'Approver') return (p.ApproverEmail === email && (st.includes('pending approval') || st === 'active' || st === 'closed' || st.includes('renewal') || st.includes('closure')));
-            
             return false;
         });
         
@@ -93,9 +88,19 @@ app.post('/api/dashboard', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 4. SAVE PERMIT
+// 4. SAVE PERMIT (With Validation)
 app.post('/api/save-permit', upload.single('file'), async (req, res) => {
     try {
+        const vf = new Date(req.body.ValidFrom);
+        const vt = new Date(req.body.ValidTo);
+
+        // Validation D & G: Max 7 days, Start < End
+        if (vt <= vf) return res.status(400).json({ error: "End time must be greater than Start time." });
+        
+        const diffTime = Math.abs(vt - vf);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+        if (diffDays > 7) return res.status(400).json({ error: "Permit duration cannot exceed 7 days." });
+
         const pool = await getConnection();
         const idRes = await pool.request().query("SELECT TOP 1 PermitID FROM Permits ORDER BY Id DESC");
         const lastId = idRes.recordset.length > 0 ? idRes.recordset[0].PermitID : "WP-1000";
@@ -110,8 +115,8 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
             .input('req', sql.NVarChar, req.body.RequesterEmail)
             .input('rev', sql.NVarChar, req.body.ReviewerEmail)
             .input('app', sql.NVarChar, req.body.ApproverEmail)
-            .input('vf', sql.DateTime, new Date(req.body.ValidFrom))
-            .input('vt', sql.DateTime, new Date(req.body.ValidTo))
+            .input('vf', sql.DateTime, vf)
+            .input('vt', sql.DateTime, vt)
             .input('lat', sql.NVarChar, req.body.Latitude || null)
             .input('lng', sql.NVarChar, req.body.Longitude || null)
             .input('locSno', sql.NVarChar, req.body.LocationPermitSno)
@@ -152,7 +157,6 @@ app.post('/api/update-status', async (req, res) => {
         const now = getNowIST();
         const sig = `${user} on ${now}`;
 
-        // Merge existing data with new extras (preserving checkboxes)
         Object.assign(data, extras);
 
         if (role === 'Reviewer') {
@@ -174,7 +178,6 @@ app.post('/api/update-status', async (req, res) => {
             .input('status', sql.NVarChar, status)
             .input('json', sql.NVarChar, JSON.stringify(data));
             
-        // Allow updating WorkType if changed by Reviewer/Approver
         if(extras.WorkType) {
              q.input('wt', sql.NVarChar, extras.WorkType)
               .query("UPDATE Permits SET Status = @status, FullDataJSON = @json, WorkType = @wt WHERE PermitID = @pid");
@@ -197,7 +200,7 @@ app.post('/api/permit-data', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 7. RENEWALS
+// 7. RENEWALS (With Validation E, F, H)
 app.post('/api/renewal', async (req, res) => {
     try {
         const { PermitID, userRole, userName, action, ...data } = req.body;
@@ -206,9 +209,27 @@ app.post('/api/renewal', async (req, res) => {
         
         let renewals = JSON.parse(current.recordset[0].RenewalsJSON || "[]");
         let status = current.recordset[0].Status;
+        const permitStart = new Date(current.recordset[0].ValidFrom);
+        const permitEnd = new Date(current.recordset[0].ValidTo);
         const now = getNowIST();
 
         if (userRole === 'Requester') {
+             const reqStart = new Date(data.RenewalValidFrom);
+             const reqEnd = new Date(data.RenewalValidTill);
+
+             // Validation F: Must be within permit period
+             if (reqStart < permitStart || reqEnd > permitEnd) return res.status(400).json({ error: "Renewal must be within original Permit Validity." });
+             
+             // Validation G: Start < End
+             if (reqStart >= reqEnd) return res.status(400).json({ error: "Invalid Time Range." });
+
+             // Validation E: Sequential (No overlapping with previous)
+             if (renewals.length > 0) {
+                 const lastRen = renewals[renewals.length - 1];
+                 const lastEnd = new Date(lastRen.valid_till);
+                 if (reqStart < lastEnd) return res.status(400).json({ error: "Renewal must start after the previous clearance ends." });
+             }
+
              renewals.push({ status: 'pending_review', valid_from: data.RenewalValidFrom, valid_till: data.RenewalValidTill, hc: data.RenewalHC, toxic: data.RenewalToxic, oxygen: data.RenewalOxygen, precautions: data.RenewalPrecautions, req_sig: `${userName} on ${now}` });
              status = "Renewal Pending Review";
         } 
@@ -233,49 +254,45 @@ app.post('/api/renewal', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 8. MAP DATA & 9. KML (Standard Code from previous)
+// 8. MAP DATA
 app.post('/api/map-data', async (req, res) => {
     try {
         const pool = await getConnection();
         const result = await pool.request().query("SELECT PermitID, FullDataJSON, Latitude, Longitude FROM Permits WHERE Status = 'Active' AND Latitude IS NOT NULL");
         const mapPoints = result.recordset.map(row => {
             const d = JSON.parse(row.FullDataJSON);
-            return { PermitID: row.PermitID, lat: parseFloat(row.Latitude), lng: parseFloat(row.Longitude), WorkType: d.WorkType, Desc: d.Desc, RequesterName: d.RequesterName };
+            return { PermitID: row.PermitID, lat: parseFloat(row.Latitude), lng: parseFloat(row.Longitude), WorkType: d.WorkType, Desc: d.Desc, RequesterName: d.RequesterName, ValidFrom: d.ValidFrom, ValidTo: d.ValidTo };
         });
         res.json(mapPoints);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
-// (KML routes kept standard)
+
 app.get('/api/kml', async (req, res) => { if(!kmlContainerClient) return res.json([]); let b=[]; for await(const x of kmlContainerClient.listBlobsFlat()) b.push({name:x.name,url:kmlContainerClient.getBlockBlobClient(x.name).url}); res.json(b); });
 app.post('/api/kml', upload.single('file'), async (req, res) => { if(!kmlContainerClient) return; const b = kmlContainerClient.getBlockBlobClient(`${Date.now()}-${req.file.originalname}`); await b.uploadData(req.file.buffer, {blobHTTPHeaders:{blobContentType:"application/vnd.google-earth.kml+xml"}}); res.json({success:true, url:b.url}); });
 app.delete('/api/kml/:name', async (req, res) => { if(!kmlContainerClient) return; await kmlContainerClient.getBlockBlobClient(req.params.name).delete(); res.json({success:true}); });
 
-// 10. STATISTICS API (For Charts)
+// 10. STATISTICS API
 app.post('/api/stats', async (req, res) => {
     try {
         const pool = await getConnection();
         const result = await pool.request().query("SELECT Status, WorkType FROM Permits");
         const statusCounts = {};
         const typeCounts = {};
-        
-        result.recordset.forEach(r => {
-            statusCounts[r.Status] = (statusCounts[r.Status] || 0) + 1;
-            typeCounts[r.WorkType] = (typeCounts[r.WorkType] || 0) + 1;
-        });
+        result.recordset.forEach(r => { statusCounts[r.Status] = (statusCounts[r.Status] || 0) + 1; typeCounts[r.WorkType] = (typeCounts[r.WorkType] || 0) + 1; });
         res.json({ success: true, statusCounts, typeCounts });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 11. PROFESSIONAL EXCEL DOWNLOAD
+// 11. EXCEL DOWNLOAD (Requirement I: Status column included)
 app.get('/api/download-excel', async (req, res) => {
     try {
         const pool = await getConnection();
-        const result = await pool.request().query("SELECT * FROM Permits");
+        const result = await pool.request().query("SELECT * FROM Permits ORDER BY Id DESC");
         
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Permits Summary');
 
-        // Professional Headers
+        // Headers
         worksheet.columns = [
             { header: 'Permit ID', key: 'id', width: 15 },
             { header: 'Status', key: 'status', width: 20 },
@@ -289,11 +306,9 @@ app.get('/api/download-excel', async (req, res) => {
             { header: 'Valid To', key: 'vt', width: 20 }
         ];
 
-        // Header Styling
         worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } }; // Indigo
+        worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
 
-        // Data Rows
         result.recordset.forEach(r => {
             const d = JSON.parse(r.FullDataJSON || "{}");
             worksheet.addRow({
@@ -317,7 +332,7 @@ app.get('/api/download-excel', async (req, res) => {
     } catch (e) { res.status(500).send(e.message); }
 });
 
-// 12. PDF DOWNLOAD (STRICTLY MIMIC UPLOADED PDF)
+// 12. PDF DOWNLOAD (Requirement C: Watermark & Format)
 app.get('/api/download-pdf/:id', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -332,15 +347,24 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         res.setHeader('Content-Disposition', `attachment; filename=${p.PermitID}.pdf`);
         doc.pipe(res);
 
-        // --- PAGE 1: DETAILS & GENERAL CHECKLIST ---
+        // WATERMARK LOGIC
+        const addWatermark = () => {
+            const watermarkText = p.Status.includes('Closed') ? 'CLOSED' : 'ACTIVE';
+            const color = p.Status.includes('Closed') ? '#ef4444' : '#22c55e'; // Red or Green
+            doc.save();
+            doc.rotate(-45, { origin: [300, 400] });
+            doc.fontSize(80).fillColor(color).opacity(0.15).text(watermarkText, 100, 350, { align: 'center', width: 400 });
+            doc.restore();
+        };
+
+        // --- PAGE 1: DETAILS ---
+        addWatermark();
         doc.font('Helvetica-Bold').fontSize(14).text('INDIAN OIL CORPORATION LIMITED', { align: 'center' });
         doc.fontSize(10).text('Pipeline Division', { align: 'center' });
         doc.text('COMPOSITE WORK PERMIT', { align: 'center', underline:true });
         doc.moveDown();
 
-        const tableTop = doc.y;
         doc.fontSize(9).font('Helvetica');
-        
         const row = (l, r, y) => { doc.text(l, 50, y); doc.text(r, 320, y); };
         
         doc.font('Helvetica-Bold').text(`Type of Work: ${d.WorkType}`, 50, doc.y); doc.moveDown(0.5);
@@ -360,7 +384,6 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.text(`CCTV Available: ${d.CctvAvailable} | Details: ${d.CctvDetail || '-'}`);
         doc.moveDown();
 
-        // GENERAL CHECKLIST (Table format)
         doc.font('Helvetica-Bold').text('SAFETY CHECKLIST (GENERAL POINTS)', {underline:true});
         doc.font('Helvetica').fontSize(9);
         const gpQs = [
@@ -380,8 +403,9 @@ app.get('/api/download-pdf/:id', async (req, res) => {
             if(q.d && d[q.d]) doc.text(`   Details: ${d[q.d]}`, {indent: 20});
         });
 
-        // --- PAGE 2: SPECIFIC, HAZARDS, SIGS ---
+        // --- PAGE 2 ---
         doc.addPage();
+        addWatermark();
         doc.font('Helvetica-Bold').text('SPECIFIC WORK CHECKLIST');
         doc.font('Helvetica');
         const spQs = [
@@ -417,8 +441,9 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.text(`Reviewed By: ${d.Reviewer_Sig || 'Pending'} (${d.Reviewer_Remarks || '-'})`);
         doc.text(`Approved By: ${d.Approver_Sig || 'Pending'} (${d.Approver_Remarks || '-'})`);
 
-        // --- PAGE 3: RENEWALS & CLOSURE ---
+        // --- PAGE 3 ---
         doc.addPage();
+        addWatermark();
         doc.font('Helvetica-Bold').text('CLEARANCE RENEWAL');
         doc.font('Helvetica');
         const rens = JSON.parse(p.RenewalsJSON || "[]");
@@ -430,9 +455,8 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.moveDown(2);
         doc.font('Helvetica-Bold').text('CLOSING OF WORK PERMIT');
         doc.font('Helvetica');
-        doc.text(`Receiver (Job Completed): ${d.Closure_Receiver_Sig || 'Not Signed'}`);
-        doc.text(`Reviewer (Verified): ${d.Reviewer_Sig.includes('Closure') ? 'Verified' : 'Pending'}`);
-        doc.text(`Issuer (Safe): ${d.Closure_Issuer_Sig || 'Not Signed'} (Remarks: ${d.Closure_Issuer_Remarks || '-'})`);
+        doc.text(`Receiver Sig: ${d.Closure_Receiver_Sig || 'Not Signed'}`);
+        doc.text(`Issuer Sig: ${d.Closure_Issuer_Sig || 'Not Signed'} (Remarks: ${d.Closure_Issuer_Remarks || '-'})`);
 
         doc.moveDown();
         doc.font('Helvetica-Bold').text('GENERAL INSTRUCTIONS');

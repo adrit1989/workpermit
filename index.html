@@ -11,7 +11,6 @@
       body { background: linear-gradient(135deg, #0f172a 0%, #312e81 50%, #4c1d95 100%); color: #1e293b; font-family: sans-serif; font-size: 0.85rem; }
       .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); border-radius: 0.75rem; padding: 1.25rem; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
       input, select, textarea { width: 100%; border: 1px solid #cbd5e1; padding: 0.4rem; border-radius: 0.375rem; font-size: 0.85rem; }
-      /* Locked Fields are Read-Only but Clear */
       input:disabled, select:disabled, textarea:disabled { 
           background-color: #f8fafc; 
           color: #0f172a; 
@@ -20,7 +19,6 @@
           opacity: 1; 
           font-weight: 500;
       }
-      /* Radio/Checkbox disabled state */
       input[type="radio"]:disabled, input[type="checkbox"]:disabled {
           accent-color: #4f46e5;
           opacity: 0.8;
@@ -252,6 +250,8 @@
           if(diff > 7 * 24 * 60 * 60 * 1000) return alert("Error: Permit duration cannot exceed 7 days.");
           if(diff <= 0) return alert("Error: End time must be after Start time.");
           const fd=new FormData(document.getElementById("permit-form")); document.querySelectorAll('input[type="checkbox"]').forEach(c=>fd.set(c.name, c.checked?"Y":"N")); fd.append("RequesterEmail", currentUser.Email); 
+          // Explicitly add Other Hazard Detail
+          if(document.getElementById("H_Other").checked) fd.append("H_Other_Detail", document.getElementById("H_Other_Detail").value);
           const res=await fetch(API+'/save-permit', {method:'POST', body:fd}); const json=await res.json(); if(json.success){alert("Created: "+json.permitId); showDashboard();} else alert(json.error); 
       }
 
@@ -259,41 +259,27 @@
           const p = await apiCall('/permit-data', 'POST', {permitId:id});
           currentPermitId=id;
           
-          // --- FIX: Robust Population of ALL fields including Radios/Checkboxes ---
-          // 1. Lock all fields initially
-          document.querySelectorAll('input, textarea, select').forEach(e => e.disabled = true);
+          document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=true);
           
-          // 2. Iterate through JSON data
-          Object.keys(p).forEach(key => {
-              // Try finding element by ID (Text, Select, Textarea)
-              const el = document.getElementById(key);
-              if(el) {
-                  if(el.type === 'checkbox') el.checked = (p[key] === 'Y');
-                  else el.value = p[key];
-              }
-              
-              // Try finding Radio Buttons by Name (Checklists)
+          Object.keys(p).forEach(key=>{ 
+              const el=document.getElementById(key); 
+              if(el) { if(el.type==='checkbox')el.checked=(p[key]==='Y'); else el.value=p[key]; }
               const radios = document.querySelectorAll(`input[name="${key}"]`);
-              if(radios.length > 0) {
-                  radios.forEach(r => {
-                      if(r.value === p[key]) r.checked = true;
-                  });
-              }
-              
-              // Try finding Checkboxes by Name (Hazards)
-              const checkboxes = document.querySelectorAll(`input[type="checkbox"][name="${key}"]`);
-              if(checkboxes.length > 0) {
-                  checkboxes.forEach(c => {
-                      if(p[key] === 'Y') c.checked = true;
-                  });
-              }
+              if(radios.length>0) radios.forEach(r=>{ if(r.value===p[key]) r.checked=true; });
+              const checks = document.querySelectorAll(`input[type="checkbox"][name="${key}"]`);
+              if(checks.length>0) checks.forEach(c=>{ if(p[key]==='Y') c.checked=true; });
           });
 
-          // 3. UI State Management
-          document.getElementById("fs-reviewer-section").classList.add('hidden'); 
-          document.getElementById("fs-approver-section").classList.add('hidden');
-          document.getElementById("renewals-section").classList.add('hidden'); 
-          document.getElementById("closure-section").classList.add('hidden');
+          // Handle Other Hazard Detail Visibility
+          if(p.H_Other === 'Y') {
+              document.getElementById("H_Other_Detail").classList.remove("hidden");
+              document.getElementById("H_Other_Detail").value = p.H_Other_Detail || "";
+          } else {
+              document.getElementById("H_Other_Detail").classList.add("hidden");
+          }
+
+          document.getElementById("fs-reviewer-section").classList.add('hidden'); document.getElementById("fs-approver-section").classList.add('hidden');
+          document.getElementById("renewals-section").classList.add('hidden'); document.getElementById("closure-section").classList.add('hidden');
           document.getElementById("btn-reject-renewal").classList.add('hidden');
           
           const btns = document.getElementById("action-buttons"); btns.innerHTML="";
@@ -304,6 +290,8 @@
               document.getElementById("WorkType").disabled=false;
               document.getElementById("Reviewer_Remarks").disabled=false;
               document.querySelectorAll('#fs-reviewer-section input, #fs-reviewer-section textarea').forEach(e=>e.disabled=false);
+              // Ensure dynamic toggle works if enabled
+              document.getElementById("H_Other").onchange = function() { toggleOtherHazard(this); };
               btns.innerHTML = `<button onclick="upd('reject')" class="bg-red-500 text-white px-4 py-2 rounded font-bold">Reject</button><button onclick="upd('review')" class="bg-emerald-600 text-white px-4 py-2 rounded font-bold">Submit Review</button>`;
           }
           if(s.includes('Pending Approval') && r==='Approver') {
@@ -383,7 +371,11 @@
               if(!document.getElementById("Site_Restored_Check").checked) return alert("You must confirm the site is cleared and restored.");
           }
           const body={PermitID:currentPermitId, action:act, role:currentUser.Role, user:currentUser.name, comment:currentUser.Role==='Reviewer'?document.getElementById("Reviewer_Remarks").value:document.getElementById("Approver_Remarks").value, ForceBackgroundColor:document.getElementById("ForceBackgroundColor").value, WorkType:document.getElementById("WorkType").value, Closure_Issuer_Remarks:document.getElementById("Closure_Issuer_Remarks").value};
-          if(currentUser.Role==='Reviewer' && !act.includes('closure')) { document.querySelectorAll('#hazards-container input, #ppe-container input').forEach(c=>body[c.name]=c.checked?"Y":"N"); body.AdditionalPrecautions=document.getElementById("AdditionalPrecautions").value; }
+          if(currentUser.Role==='Reviewer' && !act.includes('closure')) { 
+              document.querySelectorAll('#hazards-container input, #ppe-container input').forEach(c=>body[c.name]=c.checked?"Y":"N"); 
+              body.AdditionalPrecautions=document.getElementById("AdditionalPrecautions").value; 
+              if(document.getElementById("H_Other").checked) body.H_Other_Detail = document.getElementById("H_Other_Detail").value;
+          }
           const res=await apiCall('/update-status', 'POST', body); if(res.success) showDashboard(); else alert(res.error);
       }
       
@@ -406,8 +398,41 @@
           const res=await apiCall('/renewal', 'POST', body); if(res.success){alert("Renewal Rejected"); showDashboard();} else alert(res.error);
       }
 
+      function toggleOtherHazard(el) {
+          const input = document.getElementById("H_Other_Detail");
+          if(el.checked) { input.classList.remove("hidden"); input.disabled = false; }
+          else { input.classList.add("hidden"); input.value = ""; }
+      }
+
       function getGeo() { navigator.geolocation.getCurrentPosition(p=>{document.getElementById("Latitude").value=p.coords.latitude;document.getElementById("Longitude").value=p.coords.longitude;}); }
-      function buildUI() { const c=document.getElementById("checklist-container"); c.innerHTML=""; questions.forEach(q=>c.innerHTML+=q.gas?`<div class="border p-2 rounded bg-white col-span-1 md:col-span-2"><label class="font-bold">${q.t}</label><div class="grid grid-cols-3 gap-1 mt-1"><input name="${q.id}_ToxicGas" placeholder="Tox"><input name="${q.id}_HC" placeholder="HC"><input name="${q.id}_Oxygen" placeholder="O2"></div></div>`:`<div class="border p-2 rounded bg-white"><label class="font-bold">${q.t}</label><div class="flex gap-2 mt-1"><label><input type="radio" name="${q.id}" value="Yes"> Yes</label><label><input type="radio" name="${q.id}" value="NA"> NA</label></div>${q.d?`<input name="${q.d}" placeholder="Details..." class="mt-1">`:''}</div>`); specific.forEach(q=>document.getElementById("specific-container").innerHTML+=`<div class="border p-2 rounded bg-white"><label class="font-bold">${q.t}</label><div class="flex gap-2 mt-1"><label><input type="radio" name="${q.id}" value="Yes"> Yes</label><label><input type="radio" name="${q.id}" value="NA"> NA</label></div>${q.d?`<input name="${q.d}" placeholder="Permit No..." class="mt-1">`:''}</div>`); document.getElementById("hazards-container").innerHTML=hazards.map(h=>`<label class="flex items-center gap-1 border p-1 rounded bg-white"><input type="checkbox" name="${h}" value="Y"> ${h.replace('H_','')}</label>`).join(''); document.getElementById("ppe-container").innerHTML=ppe.map(p=>`<label class="flex items-center gap-1 border p-1 rounded bg-white"><input type="checkbox" name="${p}" value="Y"> ${p.replace('P_','')}</label>`).join(''); }
+      
+      function buildUI() { 
+          const c=document.getElementById("checklist-container"); c.innerHTML=""; 
+          questions.forEach(q=>{
+              if(q.gas) {
+                  c.innerHTML+=`<div class="border p-2 rounded bg-white col-span-1 md:col-span-2 shadow-sm"><label class="font-bold text-indigo-700">${q.t}</label><div class="grid grid-cols-3 gap-1 mt-1"><input id="${q.id}_ToxicGas" name="${q.id}_ToxicGas" placeholder="Tox"><input id="${q.id}_HC" name="${q.id}_HC" placeholder="HC"><input id="${q.id}_Oxygen" name="${q.id}_Oxygen" placeholder="O2"></div></div>`;
+              } else {
+                  c.innerHTML+=`<div class="border p-2 rounded bg-white shadow-sm"><label class="font-bold text-gray-700">${q.t}</label><div class="flex gap-4 mt-1"><label class="flex items-center gap-1 cursor-pointer"><input type="radio" name="${q.id}" value="Yes" class="cursor-pointer"> Yes</label><label class="flex items-center gap-1 cursor-pointer"><input type="radio" name="${q.id}" value="NA" class="cursor-pointer"> NA</label></div>${q.d?`<input id="${q.d}" name="${q.d}" placeholder="Details..." class="mt-1 text-xs border-gray-200">`:''}</div>`;
+              }
+          });
+          
+          const sc=document.getElementById("specific-container"); sc.innerHTML=""; 
+          specific.forEach(q=>{
+              sc.innerHTML+=`<div class="border p-2 rounded bg-white shadow-sm"><label class="font-bold text-gray-700">${q.t}</label><div class="flex gap-4 mt-1"><label class="flex items-center gap-1"><input type="radio" name="${q.id}" value="Yes"> Yes</label><label class="flex items-center gap-1"><input type="radio" name="${q.id}" value="NA"> NA</label></div>${q.d?`<input id="${q.d}" name="${q.d}" placeholder="Permit No..." class="mt-1 text-xs border-gray-200">`:''}</div>`;
+          });
+
+          const hc = document.getElementById("hazards-container"); hc.innerHTML = "";
+          hazards.forEach(h => {
+              if (h.replace('H_','') === 'Other') {
+                  hc.innerHTML += `<div class="col-span-2 md:col-span-4 border p-2 rounded bg-white shadow-sm"><label class="flex items-center gap-2 cursor-pointer font-bold text-red-600"><input type="checkbox" id="${h}" name="${h}" value="Y" class="rounded text-red-600 focus:ring-red-500" onchange="toggleOtherHazard(this)"> Other Hazards</label><input id="H_Other_Detail" name="H_Other_Detail" class="mt-2 w-full hidden border p-1 rounded" placeholder="Specify hazards..."></div>`;
+              } else {
+                  hc.innerHTML += `<label class="flex items-center gap-2 border p-2 rounded bg-white shadow-sm cursor-pointer hover:bg-gray-50"><input type="checkbox" id="${h}" name="${h}" value="Y" class="rounded text-indigo-600 focus:ring-indigo-500"> ${h.replace('H_','')}</label>`;
+              }
+          });
+          
+          document.getElementById("ppe-container").innerHTML=ppe.map(p=>`<label class="flex items-center gap-2 border p-2 rounded bg-white shadow-sm cursor-pointer hover:bg-gray-50"><input type="checkbox" id="${p}" name="${p}" value="Y" class="rounded text-indigo-600 focus:ring-indigo-500"> ${p.replace('P_','')}</label>`).join(''); 
+      }
+      
       function showForm() { document.getElementById("view-dashboard").style.display='none'; document.getElementById("view-form").style.display='block'; window.scrollTo(0,0); }
       function showDashboard() { document.getElementById("view-dashboard").style.display='block'; document.getElementById("view-form").style.display='none'; document.getElementById("view-map-container").style.display='none'; loadDashboard(); }
       function showMap() { document.getElementById("view-dashboard").style.display='none'; document.getElementById("view-map-container").style.display='block'; }

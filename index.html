@@ -241,13 +241,16 @@
           window.users.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`);
           document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false);
           document.getElementById("OfficialName").disabled=true;
+          
           document.querySelectorAll('input[type="radio"][value="Yes"]').forEach(r => r.checked = true);
           document.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = true);
-          // HIDE ALL WORKFLOW SECTIONS
+
+          // Force hide sections for new permit
           document.getElementById("fs-reviewer-section").classList.add('hidden'); 
           document.getElementById("fs-approver-section").classList.add('hidden');
           document.getElementById("renewals-section").classList.add('hidden'); 
           document.getElementById("closure-section").classList.add('hidden');
+
           document.getElementById("action-buttons").innerHTML = `<button type="button" onclick="submitNewPermit()" class="bg-blue-600 text-white px-6 py-2 rounded font-bold shadow hover:bg-blue-700">Submit Permit</button>`;
           showForm();
       }
@@ -266,7 +269,9 @@
       async function openPermit(id) {
           const p = await apiCall('/permit-data', 'POST', {permitId:id});
           currentPermitId=id;
+          
           document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=true);
+          
           Object.keys(p).forEach(key=>{ 
               const el=document.getElementById(key); 
               if(el) { if(el.type==='checkbox')el.checked=(p[key]==='Y'); else el.value=p[key]; }
@@ -275,12 +280,14 @@
               const checks = document.querySelectorAll(`input[type="checkbox"][name="${key}"]`);
               if(checks.length>0) checks.forEach(c=>{ if(p[key]==='Y') c.checked=true; });
           });
+
           if(p.H_Other === 'Y') {
               document.getElementById("H_Other_Detail").classList.remove("hidden");
               document.getElementById("H_Other_Detail").value = p.H_Other_Detail || "";
           } else {
               document.getElementById("H_Other_Detail").classList.add("hidden");
           }
+
           document.getElementById("fs-reviewer-section").classList.add('hidden'); document.getElementById("fs-approver-section").classList.add('hidden');
           document.getElementById("renewals-section").classList.add('hidden'); document.getElementById("closure-section").classList.add('hidden');
           document.getElementById("btn-reject-renewal").classList.add('hidden');
@@ -305,6 +312,7 @@
           if(s==='Active' || s.includes('Renewal')) {
               document.getElementById("renewals-section").classList.remove('hidden'); document.getElementById("closure-section").classList.remove('hidden');
               let html = `<a href="${API}/download-pdf/${currentPermitId}" target="_blank" class="bg-gray-800 text-white px-4 py-2 rounded font-bold">Download PDF</a>`;
+              
               if(r==='Requester' && s === 'Active') {
                   document.getElementById("form-renewal").classList.remove('hidden');
                   document.querySelectorAll("#form-renewal input").forEach(e=>e.disabled=false);
@@ -312,8 +320,10 @@
                   html += `<button onclick="upd('initiate_closure')" class="bg-amber-500 text-white px-4 py-2 rounded font-bold ml-2">Job Complete</button>`;
               }
               btns.innerHTML = html;
+              
               const rens=JSON.parse(p.RenewalsJSON||"[]"); const tbody=document.getElementById("renewals-table-body"); tbody.innerHTML=""; 
               const lastRen = rens[rens.length - 1];
+
               if(s === 'Renewal Pending Review' && r === 'Reviewer' && lastRen) {
                   document.getElementById("form-renewal").classList.remove('hidden');
                   populateRenewalForm(lastRen);
@@ -327,13 +337,23 @@
                   document.getElementById("btn-submit-renewal").innerText = "Approve Renewal";
                   document.getElementById("btn-reject-renewal").classList.remove('hidden');
               }
+
               rens.forEach(x=>{
-                  tbody.innerHTML+=`<tr class="border-b"><td>${x.valid_from.replace('T',' ')}<br>${x.valid_till.replace('T',' ')}</td><td>HC:${x.hc} Tox:${x.toxic} O2:${x.oxygen}</td><td class="font-bold text-blue-600 uppercase">${x.status}</td><td>${x.req_name}<br><span class="text-[9px]">${x.req_at}</span></td><td>${x.rev_name||'-'}<br><span class="text-[9px]">${x.rev_at||''}</span></td><td>${x.app_name||'-'}<br><span class="text-[9px]">${x.app_at||''}</span></td></tr>`;
+                  tbody.innerHTML+=`
+                  <tr class="border-b">
+                      <td>${x.valid_from.replace('T',' ')}<br>${x.valid_till.replace('T',' ')}</td>
+                      <td>HC:${x.hc} Tox:${x.toxic} O2:${x.oxygen}</td>
+                      <td class="font-bold text-blue-600 uppercase">${x.status}</td>
+                      <td>${x.req_name}<br><span class="text-[9px]">${x.req_at}</span></td>
+                      <td>${x.rev_name||'-'}<br><span class="text-[9px]">${x.rev_at||''}</span></td>
+                      <td>${x.app_name||'-'}<br><span class="text-[9px]">${x.app_at||''}</span></td>
+                  </tr>`;
               });
           }
           if(s.includes('Closure')) {
               document.getElementById("closure-section").classList.remove('hidden');
               document.getElementById("Site_Restored_Check").checked = (p.Site_Restored_Check === 'Yes');
+              
               if(s === 'Closure Pending Review' && r === 'Reviewer') {
                   document.getElementById("Reviewer_Remarks").disabled = false;
                   btns.innerHTML = `<button onclick="upd('reject_closure')" class="bg-red-500 text-white px-4 py-2 rounded font-bold">Reject</button><button onclick="upd('approve')" class="bg-emerald-600 text-white px-4 py-2 rounded font-bold">Verify Closure</button>`;
@@ -425,21 +445,17 @@
       // MAP LOGIC
       function showMap() { document.getElementById("view-dashboard").style.display='none'; document.getElementById("view-map-container").classList.remove('hidden'); loadMapData(); }
       async function loadMapData() {
-          const points = await apiCall('/api/map-data', 'POST');
+          const points = await apiCall('/map-data', 'POST');
           if(!mapInstance) mapInstance = new google.maps.Map(document.getElementById("map"), {center: {lat:26.11, lng:85.39}, zoom:8});
           
-          // Clear old markers (simple way: re-init map or store array. re-init is safer for small sets)
-          // For sidebar list:
           const list = document.getElementById("active-permit-list"); list.innerHTML = "";
           points.forEach(pt => {
-              // Add to sidebar
               const item = document.createElement("div");
               item.className = "permit-item p-2 cursor-pointer bg-white rounded shadow-sm hover:shadow-md";
               item.innerHTML = `<div class="font-bold text-indigo-600">${pt.PermitID}</div><div class="text-xs text-gray-600">${pt.WorkType}</div><div class="text-[10px] text-gray-400">${pt.ExactLocation}</div>`;
               item.onclick = () => flyToPermit(pt);
               list.appendChild(item);
 
-              // Add Marker
               const marker = new google.maps.Marker({
                   position: {lat: pt.lat, lng: pt.lng},
                   map: mapInstance,
@@ -468,11 +484,11 @@
               mapInstance.panTo(mData.marker.getPosition());
               mData.infoWindow.open(mapInstance, mData.marker);
               mData.marker.setAnimation(google.maps.Animation.BOUNCE);
-              setTimeout(() => mData.marker.setAnimation(null), 3000); // Stop bouncing after 3s
+              setTimeout(() => mData.marker.setAnimation(null), 3000); 
           }
       }
       
-      // SHOW FORM FUNCTION - CRITICAL
+      // SHOW FORM FUNCTION
       function showForm() { 
           document.getElementById("view-dashboard").style.display='none'; 
           document.getElementById("view-form").style.display='block'; 
@@ -481,7 +497,7 @@
       function showDashboard() { 
           document.getElementById("view-dashboard").style.display='block'; 
           document.getElementById("view-form").style.display='none'; 
-          document.getElementById("view-map-container").classList.add('hidden'); // Fix classList
+          document.getElementById("view-map-container").classList.add('hidden'); 
           loadDashboard(); 
       }
     </script>

@@ -287,7 +287,13 @@
           if(diff <= 0) return alert("Error: End time must be after Start time.");
           const fd=new FormData(document.getElementById("permit-form")); document.querySelectorAll('input[type="checkbox"]').forEach(c=>fd.set(c.name, c.checked?"Y":"N")); fd.append("RequesterEmail", currentUser.Email); 
           if(document.getElementById("H_Other").checked) fd.append("H_Other_Detail", document.getElementById("H_Other_Detail").value);
-          const res=await fetch(API+'/save-permit', {method:'POST', body:fd}); const json=await res.json(); if(json.success){alert("Created: "+json.permitId); showDashboard();} else alert(json.error); 
+          
+          // IF EDITING EXISTING PENDING PERMIT, PASS ID
+          if(currentPermitId && (document.getElementById("Status").value === 'Pending Review' || document.getElementById("Status").value === 'New')) {
+              fd.append("PermitID", currentPermitId);
+          }
+          
+          const res=await fetch(API+'/save-permit', {method:'POST', body:fd}); const json=await res.json(); if(json.success){alert("Saved: "+json.permitId); showDashboard();} else alert(json.error); 
       }
 
       async function openPermit(id) {
@@ -297,12 +303,16 @@
           // Lock Everything by default
           document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=true);
           
-          // Populate Data
+          // Populate Data and Checkboxes/Radios Persistence
           Object.keys(p).forEach(key=>{ 
               const el=document.getElementById(key); 
               if(el) { if(el.type==='checkbox')el.checked=(p[key]==='Y'); else el.value=p[key]; }
+              
+              // Persist Radio Buttons
               const radios = document.querySelectorAll(`input[name="${key}"]`);
               if(radios.length>0) radios.forEach(r=>{ if(r.value===p[key]) r.checked=true; });
+              
+              // Persist Checkboxes (Hazards/PPE)
               const checks = document.querySelectorAll(`input[type="checkbox"][name="${key}"]`);
               if(checks.length>0) checks.forEach(c=>{ if(p[key]==='Y') c.checked=true; });
           });
@@ -354,14 +364,23 @@
           }
 
           // 2. PENDING APPROVAL (Reviewer Read-Only / Approver Edit)
-          if(s.includes('Pending Approval') && r==='Approver') {
-              document.getElementById("fs-reviewer-section").classList.remove('hidden'); document.getElementById("fs-approver-section").classList.remove('hidden');
-              document.getElementById("Approver_Remarks").disabled=false; document.getElementById("ForceBackgroundColor").disabled=false;
-              btns.innerHTML = `<button onclick="upd('reject')" class="bg-red-500 text-white px-4 py-2 rounded font-bold">Reject</button><button onclick="upd('approve')" class="bg-emerald-600 text-white px-4 py-2 rounded font-bold">Approve</button>`;
+          if(s.includes('Pending Approval')) {
+              // Ensure Reviewer fields are visible but read-only for Approver
+              document.getElementById("fs-reviewer-section").classList.remove('hidden');
+              
+              if(r==='Approver') {
+                  document.getElementById("fs-approver-section").classList.remove('hidden');
+                  document.getElementById("Approver_Remarks").disabled=false; 
+                  document.getElementById("ForceBackgroundColor").disabled=false;
+                  btns.innerHTML = `<button onclick="upd('reject')" class="bg-red-500 text-white px-4 py-2 rounded font-bold">Reject</button><button onclick="upd('approve')" class="bg-emerald-600 text-white px-4 py-2 rounded font-bold">Approve</button>`;
+              }
           }
 
           // 3. ACTIVE / RENEWAL
           if(s==='Active' || s.includes('Renewal')) {
+              document.getElementById("fs-reviewer-section").classList.remove('hidden'); // Show reviewer choices
+              document.getElementById("fs-approver-section").classList.remove('hidden'); // Show approver choices
+              
               document.getElementById("renewals-section").classList.remove('hidden'); document.getElementById("closure-section").classList.remove('hidden');
               let html = `<a href="${API}/download-pdf/${currentPermitId}" target="_blank" class="bg-gray-800 text-white px-4 py-2 rounded font-bold">Download PDF</a>`;
               
@@ -408,6 +427,8 @@
 
           // 4. CLOSURE WORKFLOW
           if(s.includes('Closure') || s === 'Closed') {
+              document.getElementById("fs-reviewer-section").classList.remove('hidden');
+              document.getElementById("fs-approver-section").classList.remove('hidden');
               document.getElementById("closure-section").classList.remove('hidden');
               document.getElementById("Site_Restored_Check").checked = (p.Site_Restored_Check === 'Yes');
               

@@ -1,23 +1,27 @@
 {
   "name": "azuregithubworkper",
   "version": "1.0.0",
-  "description": "",
+  "description": "Work Permit System for Azure Deployment",
   "main": "server.js",
   "scripts": {
-  "start": "node server.js",
-  "test": "echo \"No tests yet\""
-},
+    "start": "node server.js",
+    "test": "echo \"No tests yet\""
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@azure/storage-blob": "^12.29.1",
-    "body-parser": "^2.2.2",
+    "@azure/storage-blob": "^12.24.0",
+    "body-parser": "^1.20.3",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
-    "express": "^5.2.1",
-    "mssql": "^12.2.0",
-    "multer": "^2.0.2"
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "mssql": "^11.0.1",
+    "multer": "^1.4.5-lts.1",
+    "pdfkit": "^0.15.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

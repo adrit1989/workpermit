@@ -15,6 +15,11 @@ app.use(bodyParser.json({ limit: '50mb' }));
 // Serve Static Frontend
 app.use(express.static(path.join(__dirname, '.')));
 
+// --- FORCE INDEX.HTML ON ROOT ---
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 // --- AZURE BLOB SETUP ---
 const blobServiceClient = BlobServiceClient.fromConnectionString(process.env.AZURE_STORAGE_CONNECTION_STRING);
 const containerClient = blobServiceClient.getContainerClient("permit-attachments");

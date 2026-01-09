@@ -4,115 +4,150 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Work Permit System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyADwuqMDCwNSaZKBnWURDCYdqlMxfiWBnU"></script>
     <style>
-      body { background: linear-gradient(135deg, #0f172a 0%, #312e81 50%, #4c1d95 100%); color: #1e293b; font-family: sans-serif; font-size: 0.85rem; }
-      .glass-panel { background: rgba(255,255,255,0.9); padding: 1rem; border-radius: 0.5rem; }
-      input, select, textarea { width: 100%; border: 1px solid #ccc; padding: 4px; border-radius: 4px; }
-      .status-badge { padding: 2px 8px; border-radius: 99px; font-weight: bold; font-size: 0.7rem; text-transform: uppercase; }
-      #map { height: 500px; width: 100%; border-radius: 0.5rem; }
+      body { background: linear-gradient(135deg, #0f172a 0%, #312e81 50%, #4c1d95 100%); color: #1e293b; font-family: 'Inter', sans-serif; font-size: 0.85rem; }
+      .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); border-radius: 0.75rem; padding: 1.25rem; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+      input, select, textarea { border: 1px solid #cbd5e1; padding: 0.4rem; border-radius: 0.375rem; width: 100%; font-size: 0.85rem; }
+      label { font-size: 0.75rem; font-weight: 600; color: #475569; display: block; margin-bottom: 0.2rem; }
+      #map { height: 500px; width: 100%; border-radius: 0.75rem; }
     </style>
   </head>
-  <body>
-    <div id="loader" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); color:white; display:flex; align-items:center; justify-content:center; z-index:50;">Processing...</div>
-
-    <div id="view-login" class="flex items-center justify-center min-h-screen">
-      <div class="glass-panel w-96">
-        <h2 class="text-2xl font-bold text-center mb-4">Permit System</h2>
-        <form onsubmit="event.preventDefault(); handleLogin();" class="space-y-3">
-          <select id="login-role"><option>Loading...</option></select>
-          <select id="login-name" disabled><option>Select Role</option></select>
+  <body class="antialiased min-h-screen">
+    
+    <div id="view-login" class="flex items-center justify-center min-h-screen p-4">
+      <div class="w-full max-w-sm glass-panel">
+        <h2 class="text-2xl font-bold text-center mb-6 text-slate-800">Permit System</h2>
+        <form class="space-y-4" onsubmit="event.preventDefault(); handleLogin();">
+          <select id="login-role" class="w-full"><option>Loading...</option></select>
+          <select id="login-name" disabled class="w-full"><option>Select Role First</option></select>
           <input type="password" id="login-password" placeholder="Password">
-          <button class="w-full bg-blue-600 text-white py-2 rounded">Sign In</button>
+          <button type="submit" class="w-full py-2 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700">Sign In</button>
         </form>
       </div>
     </div>
 
-    <div id="app-container" style="display:none;">
-      <nav class="bg-gray-900 text-white p-3 flex justify-between items-center fixed w-full z-40">
-        <div class="font-bold">🛡️ Permit System</div>
-        <div class="flex gap-4 items-center">
-           <span id="user-info" class="text-xs"></span>
-           <button onclick="location.reload()" class="bg-gray-700 px-3 py-1 rounded text-xs">Logout</button>
+    <div id="app-container" style="display: none;">
+      <nav class="fixed w-full z-50 bg-slate-900 text-white h-14 flex items-center px-4 justify-between shadow-lg">
+        <div class="font-bold text-lg">🛡️ Permit System</div>
+        <div class="flex items-center gap-4 text-xs">
+          <div class="text-right"><span id="user-info"></span><br><span id="user-role-badge" class="text-indigo-300"></span></div>
+          <button onclick="location.reload()" class="bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded">Logout</button>
         </div>
       </nav>
-
-      <main class="pt-16 px-4 pb-12 max-w-7xl mx-auto">
+      
+      <main class="max-w-7xl mx-auto px-2 pt-20 pb-12">
         <div id="view-dashboard">
-           <div class="flex justify-between mb-4">
-              <h1 class="text-xl font-bold text-white">Dashboard</h1>
-              <div class="flex gap-2">
-                 <button id="btn-view-map" onclick="showMap()" class="bg-amber-500 text-white px-3 py-1 rounded hidden">Map</button>
-                 <button id="btn-new-permit" onclick="showNewPermit()" class="bg-green-600 text-white px-3 py-1 rounded hidden">+ New Permit</button>
-              </div>
-           </div>
-           <div class="glass-panel overflow-x-auto">
-              <table class="w-full text-xs text-left"><thead class="bg-gray-100"><tr><th class="p-2">ID</th><th>Work</th><th>Requester</th><th>Status</th><th>Action</th></tr></thead><tbody id="permit-list-body"></tbody></table>
-           </div>
+          <div class="flex justify-between items-center mb-4">
+            <h1 class="text-2xl font-bold text-white">Dashboard</h1>
+            <div class="flex gap-2">
+              <button id="btn-view-map" onclick="showMap()" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold text-xs hidden shadow">Map View</button>
+              <button id="btn-new-permit" onclick="showNewPermit()" class="bg-emerald-600 text-white px-4 py-1.5 rounded font-bold text-xs hidden shadow">+ New Permit</button>
+            </div>
+          </div>
+          <div class="glass-panel overflow-x-auto">
+             <table class="w-full text-xs text-left"><thead class="bg-slate-100"><tr><th class="p-2">ID</th><th>Work</th><th>Vendor</th><th>Req</th><th>Status</th><th>Action</th></tr></thead><tbody id="permit-list-body" class="divide-y"></tbody></table>
+          </div>
         </div>
 
-        <div id="view-map-container" style="display:none;">
-           <button onclick="showDashboard()" class="bg-white px-3 py-1 rounded mb-2">Back</button>
+        <div id="view-map-container" style="display: none;">
+           <button onclick="showDashboard()" class="bg-white px-3 py-1 rounded mb-2 shadow font-bold text-xs">← Back</button>
            <div id="map"></div>
         </div>
 
-        <div id="view-form" style="display:none;">
-           <button onclick="showDashboard()" class="bg-white/20 text-white px-3 py-1 rounded mb-3">← Back</button>
+        <div id="view-form" style="display: none;">
+           <button onclick="showDashboard()" class="bg-white/20 text-white px-3 py-1 rounded mb-3 font-bold text-xs">← Back</button>
            <form id="permit-form" class="space-y-3">
               <input type="hidden" id="PermitID"><input type="hidden" id="Status">
               
               <div class="glass-panel">
-                 <h3 class="font-bold text-blue-700 mb-2">1. Main Details</h3>
-                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                    <div><label>Type</label><select id="WorkType"><option>Hot</option><option>Cold</option><option>Confined Space</option><option>Height Work</option><option>Excavation</option><option>Other</option></select></div>
-                    <div><label>Requester</label><input id="RequesterName"></div>
-                    <div><label>Applicant</label><input id="OfficialName"></div>
-                    <div class="col-span-2"><label>Description</label><input id="Desc"></div>
-                    <div class="col-span-2"><label>Exact Location</label><input id="ExactLocation"></div>
-                    <div><label>Unit</label><input id="LocationUnit" value="Pipeline"></div>
-                    <div><label>Dept</label><input id="IssuedToDept"></div>
-                    <div><label>Vendor</label><input id="Vendor"></div>
+                 <h3 class="font-bold text-indigo-700 mb-3 border-b pb-1">1. Main Permit Details</h3>
+                 <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                    <div class="col-span-2"><label>Work Type</label><select id="WorkType"><option>Hot</option><option>Cold</option><option>Confined Space</option><option>Height Work</option><option>Excavation Work</option><option>Vehicle Entry</option><option>Any Other</option></select></div>
+                    <div class="col-span-2"><label>Specify Other</label><input id="WorkTypeOther"></div>
+                    <div class="col-span-2"><label>Requester Name</label><input id="RequesterName"></div>
+                    <div class="col-span-2"><label>Applicant (Official)</label><input id="OfficialName" readonly class="bg-gray-100"></div>
                     
-                    <div><label>Loc Permit #</label><input id="LocationPermitSno"></div>
+                    <div class="col-span-6"><label>Description</label><textarea id="Desc" rows="1"></textarea></div>
+                    
+                    <div class="col-span-2"><label>Location</label><input id="ExactLocation"></div>
+                    <div><label>Unit</label><input id="LocationUnit" value="Pipeline"></div>
+                    <div><label>Issued Dept</label><input id="IssuedToDept"></div>
+                    <div class="col-span-2"><label>Vendor</label><input id="Vendor"></div>
+                    
+                    <div><label>Loc Permit S/N</label><input id="LocationPermitSno"></div>
                     <div><label>Isolation Cert</label><input id="RefIsolationCert"></div>
                     <div><label>Cross Ref</label><input id="CrossRefPermits"></div>
                     <div><label>JSA Ref</label><input id="JsaRef"></div>
                     <div><label>MOC Req</label><select id="MocRequired"><option>No</option><option>Yes</option></select></div>
                     <div><label>MOC Ref</label><input id="MocRef"></div>
-                    <div><label>CCTV</label><select id="CctvAvailable"><option>No</option><option>Yes</option></select></div>
+                    <div><label>CCTV Avail</label><select id="CctvAvailable"><option>No</option><option>Yes</option></select></div>
                     <div><label>CCTV Detail</label><input id="CctvDetail"></div>
 
                     <div><label>Valid From</label><input type="datetime-local" id="ValidFrom"></div>
                     <div><label>Valid To</label><input type="datetime-local" id="ValidTo"></div>
-                    <div><label>Lat</label><input id="Latitude"></div>
-                    <div><label>Long</label><div class="flex gap-1"><input id="Longitude"><button type="button" onclick="getGeo()" class="bg-blue-600 text-white px-2">📍</button></div></div>
                     
-                    <div><label>Reviewer</label><select id="ReviewerEmail"></select></div>
-                    <div><label>Approver</label><select id="ApproverEmail"></select></div>
+                    <div class="col-span-2 border p-1 rounded flex gap-2 items-center bg-slate-50">
+                        <div class="flex-1"><label>Lat</label><input id="Latitude"></div>
+                        <div class="flex-1"><label>Long</label><input id="Longitude"></div>
+                        <button type="button" onclick="getGeo()" class="bg-indigo-600 text-white px-2 py-1 rounded text-xs mt-4">📍</button>
+                    </div>
+                    
+                    <div class="col-span-2"><label>Assign Reviewer</label><select id="ReviewerEmail"></select></div>
+                    <div class="col-span-2"><label>Assign Approver</label><select id="ApproverEmail"></select></div>
                  </div>
               </div>
 
               <div class="glass-panel">
-                 <h3 class="font-bold text-blue-700 mb-2">2. Checklists</h3>
-                 <div class="grid grid-cols-2 gap-2 text-xs" id="checklist-container"></div>
-                 <div class="grid grid-cols-4 gap-2 mt-2 text-xs" id="hazards-container"></div>
-                 <div class="grid grid-cols-4 gap-2 mt-2 text-xs" id="ppe-container"></div>
+                  <h3 class="font-bold text-indigo-700 mb-3 border-b pb-1">2. Safety Checklists</h3>
+                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs" id="checklist-container"></div>
+                  
+                  <h4 class="font-bold text-indigo-700 mt-4 mb-2">Specific Checks (Height / Vehicle / Excavation)</h4>
+                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-xs" id="specific-container"></div>
+              </div>
+              
+              <div id="fs-reviewer-section" class="glass-panel border-l-4 border-yellow-500 hidden">
+                 <h3 class="font-bold text-yellow-700 mb-2">3. Reviewer Assessment</h3>
+                 <div class="mb-2"><span class="font-bold text-xs block mb-1">Hazards:</span><div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs" id="hazards-container"></div></div>
+                 <div class="mb-2"><span class="font-bold text-xs block mb-1">PPE:</span><div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs" id="ppe-container"></div></div>
+                 <div class="grid grid-cols-1 gap-2 mt-2">
+                    <textarea id="AdditionalPrecautions" placeholder="Additional Precautions" rows="1"></textarea>
+                    <textarea id="Reviewer_Remarks" placeholder="Reviewer Remarks" rows="1" class="bg-yellow-50"></textarea>
+                 </div>
               </div>
 
-              <div id="fs-reviewer-section" class="glass-panel hidden">
-                 <h3 class="font-bold text-yellow-700 mb-2">3. Reviewer</h3>
-                 <textarea id="Reviewer_Remarks" placeholder="Remarks" class="bg-yellow-50"></textarea>
+              <div id="fs-approver-section" class="glass-panel border-l-4 border-green-500 hidden">
+                 <h3 class="font-bold text-green-700 mb-2">4. Final Approval</h3>
+                 <select id="ForceBackgroundColor" class="mb-2 w-48"><option value="">Auto Color</option><option value="Red">Red</option><option value="Green">Green</option><option value="Yellow">Yellow</option></select>
+                 <textarea id="Approver_Remarks" placeholder="Approver Remarks" rows="1" class="bg-green-50"></textarea>
               </div>
 
-              <div id="fs-approver-section" class="glass-panel hidden">
-                 <h3 class="font-bold text-green-700 mb-2">4. Approval</h3>
-                 <select id="ForceBackgroundColor" class="mb-1"><option value="">Auto Color</option><option value="Red">Red</option><option value="Green">Green</option></select>
-                 <textarea id="Approver_Remarks" placeholder="Remarks" class="bg-green-50"></textarea>
+              <div id="renewals-section" class="glass-panel hidden">
+                 <h3 class="font-bold text-slate-700 mb-2">Renewals</h3>
+                 <table class="w-full text-xs text-left mb-2"><thead class="bg-gray-100"><tr><th>From</th><th>To</th><th>HC%</th><th>Status</th></tr></thead><tbody id="renewals-table-body"></tbody></table>
+                 <div id="form-renewal" class="hidden bg-indigo-50 p-2 rounded">
+                    <div class="grid grid-cols-4 gap-2 mb-2">
+                       <input type="datetime-local" id="RenewalValidFrom"><input type="datetime-local" id="RenewalValidTill">
+                       <input id="RenewalHC" placeholder="HC%"><input id="RenewalToxic" placeholder="Tox"><input id="RenewalOxygen" placeholder="O2%">
+                       <input id="RenewalPrecautions" placeholder="Precautions" class="col-span-3">
+                    </div>
+                    <button type="button" onclick="submitRenewal('approve')" class="bg-indigo-600 text-white px-3 py-1 rounded text-xs font-bold">Submit</button>
+                 </div>
               </div>
 
-              <div id="action-buttons" class="fixed bottom-0 left-0 w-full bg-white p-3 shadow-xl flex justify-end gap-2"></div>
+              <div id="closure-section" class="glass-panel hidden">
+                 <h3 class="font-bold text-slate-700 mb-2">Closure</h3>
+                 <div class="grid grid-cols-3 gap-2 text-xs">
+                    <div class="border p-2 rounded"><strong>Receiver:</strong> <span id="Closure_Receiver_Sig"></span></div>
+                    <div class="border p-2 rounded"><strong>Reviewer:</strong> <span id="Closure_Reviewer_Display"></span></div>
+                    <div class="border p-2 rounded"><strong>Issuer:</strong> <span id="Closure_Issuer_Sig"></span><br><textarea id="Closure_Issuer_Remarks" placeholder="Final Remarks" class="mt-1"></textarea></div>
+                 </div>
+              </div>
+
+              <div id="action-buttons" class="fixed bottom-0 left-0 w-full bg-white/95 backdrop-blur p-3 shadow-top z-40 flex justify-end gap-2 border-t"></div>
               <div class="h-16"></div>
            </form>
         </div>
@@ -124,22 +159,30 @@
       let currentUser = null, currentPermitId = null;
       
       const questions = [
-          {id:"GP_Q1", text:"Equipment Inspected"}, {id:"GP_Q2", text:"Area Cleaned"}, {id:"GP_Q3", text:"Sewers Covered"}, 
-          {id:"GP_Q4", text:"Hazards Considered"}, {id:"GP_Q5", text:"Blinded"}, {id:"GP_Q6", text:"Depressurized"}, 
-          {id:"GP_Q12", text:"Gas Test", isGas:true}, {id:"HW_Q1", text:"Ventilation"}, {id:"HW_Q2", text:"Exit Means"}
+          {id:"GP_Q1", t:"Equip Inspected"}, {id:"GP_Q2", t:"Area Cleaned"}, {id:"GP_Q3", t:"Sewers Covered"}, 
+          {id:"GP_Q4", t:"Hazards Considered"}, {id:"GP_Q5", t:"Blinded", d:"GP_Q5_Detail"}, 
+          {id:"GP_Q6", t:"Depressurized"}, {id:"GP_Q7", t:"Steamed"}, {id:"GP_Q8", t:"Water Flushed"},
+          {id:"GP_Q9", t:"Fire Access"}, {id:"GP_Q10", t:"FeS Removed"}, 
+          {id:"GP_Q11", t:"Elec Isolated", d:"GP_Q11_Detail"}, {id:"GP_Q12", t:"Gas Test", gas:true}, 
+          {id:"GP_Q13", t:"Fire Extinguisher"}, {id:"GP_Q14", t:"Cordoned"}
       ];
-      const hazards = ["H_H2S", "H_LackOxygen", "H_Corrosive", "H_ToxicGas", "H_Combustible", "H_Height", "H_HighNoise"];
-      const ppe = ["P_FaceShield", "P_FreshAirMask", "P_CompressedBA", "P_Goggles", "P_SafetyHarness"];
+      const specific = [
+          {id:"HW_Q1", t:"Ventilation"}, {id:"HW_Q2", t:"Exit Means"}, {id:"HW_Q3", t:"Standby"},
+          {id:"HW_Q4", t:"Trapped Gas"}, {id:"HW_Q5", t:"Spark Shield"}, {id:"HW_Q6", t:"Grounded"},
+          {id:"HW_Q16", t:"Height Permit", d:"HW_Q16_Detail"}, {id:"VE_Q1", t:"Spark Arrestor (Veh)"}, {id:"EX_Q1", t:"Excavation Clear"}
+      ];
+      const hazards = ["H_H2S", "H_LackOxygen", "H_Corrosive", "H_ToxicGas", "H_Combustible", "H_Steam", "H_PyroIron", "H_N2Gas", "H_Height", "H_LooseEarth", "H_HighNoise", "H_Radiation", "H_Other"];
+      const ppe = ["P_FaceShield", "P_FreshAirMask", "P_CompressedBA", "P_Goggles", "P_DustRespirator", "P_Earmuff", "P_LifeLine", "P_Apron", "P_SafetyHarness", "P_SafetyNet", "P_Airline", "P_GasResponder", "P_CottonCoverall"];
 
       document.addEventListener("DOMContentLoaded", () => {
           loadUsers();
-          buildChecklist();
+          buildUI();
       });
 
-      async function apiCall(endpoint, method="GET", body=null) {
-          const opts = { method, headers: {'Content-Type':'application/json'} };
+      async function apiCall(ep, meth="GET", body=null) {
+          const opts = { method:meth, headers:{'Content-Type':'application/json'} };
           if(body) opts.body = JSON.stringify(body);
-          const res = await fetch(API+endpoint, opts);
+          const res = await fetch(API+ep, opts);
           return await res.json();
       }
 
@@ -160,7 +203,7 @@
           const name = document.getElementById("login-name").selectedOptions[0].text;
           const email = document.getElementById("login-name").value;
           const pass = document.getElementById("login-password").value;
-          const res = await apiCall('/login', 'POST', {role, name: email, password: pass});
+          const res = await apiCall('/login', 'POST', {role, name:email, password:pass});
           if(res.success) {
               currentUser = { ...res.user, name };
               document.getElementById("view-login").style.display='none';
@@ -173,112 +216,134 @@
 
       function updateRoleUI() {
           const r = currentUser.Role;
-          if(r === 'Requester') document.getElementById("btn-new-permit").classList.remove('hidden');
-          if(r === 'Reviewer' || r === 'Approver') document.getElementById("btn-view-map").classList.remove('hidden');
+          if(r==='Requester') document.getElementById("btn-new-permit").classList.remove('hidden');
+          if(r==='Reviewer'||r==='Approver') document.getElementById("btn-view-map").classList.remove('hidden');
       }
 
       async function loadDashboard() {
-          const res = await apiCall('/dashboard', 'POST', {role: currentUser.Role, email: currentUser.Email});
+          const res = await apiCall('/dashboard', 'POST', {role:currentUser.Role, email:currentUser.Email});
           const list = document.getElementById("permit-list-body"); list.innerHTML = "";
           res.forEach(p => {
-              list.innerHTML += `<tr class="hover:bg-gray-200 cursor-pointer border-b" onclick="openPermit('${p.PermitID}')">
-                  <td class="p-2 font-bold text-blue-600">${p.PermitID}</td>
-                  <td class="p-2">${p.WorkType}</td>
-                  <td class="p-2">${p.RequesterName}</td>
-                  <td class="p-2"><span class="bg-blue-100 text-blue-800 px-2 rounded">${p.Status}</span></td>
-                  <td class="p-2">Open</td>
+              list.innerHTML += `<tr class="hover:bg-slate-50 cursor-pointer border-b" onclick="openPermit('${p.PermitID}')">
+                  <td class="p-2 font-bold text-indigo-600">${p.PermitID}</td><td class="p-2">${p.WorkType}</td><td class="p-2">${p.Vendor||'-'}</td>
+                  <td class="p-2">${p.RequesterName}</td><td class="p-2"><span class="bg-indigo-100 text-indigo-800 px-2 rounded font-bold">${p.Status}</span></td><td class="p-2 text-blue-600 font-bold">Open</td>
               </tr>`;
           });
       }
 
       function showNewPermit() {
           document.getElementById("permit-form").reset();
-          currentPermitId = null;
-          document.getElementById("PermitID").value = "";
-          document.getElementById("Status").value = "New";
+          currentPermitId=null; document.getElementById("Status").value="New";
           document.getElementById("RequesterName").value = currentUser.name;
           document.getElementById("OfficialName").value = currentUser.name;
-          
-          const revS=document.getElementById("ReviewerEmail"), appS=document.getElementById("ApproverEmail");
-          revS.innerHTML=""; appS.innerHTML="";
-          window.users.Reviewers.forEach(u=>revS.innerHTML+=`<option value="${u.email}">${u.name}</option>`);
-          window.users.Approvers.forEach(u=>appS.innerHTML+=`<option value="${u.email}">${u.name}</option>`);
-          
-          document.getElementById("action-buttons").innerHTML = `<button type="button" onclick="submitNewPermit()" class="bg-blue-600 text-white px-6 py-2 rounded font-bold shadow">Submit Permit</button>`;
+          const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); rS.innerHTML=""; aS.innerHTML="";
+          window.users.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`);
+          window.users.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`);
+          document.getElementById("action-buttons").innerHTML = `<button type="button" onclick="submitNewPermit()" class="bg-blue-600 text-white px-6 py-2 rounded font-bold shadow hover:bg-blue-700">Submit Permit</button>`;
           showForm();
       }
 
       async function submitNewPermit() {
           const fd = new FormData(document.getElementById("permit-form"));
-          document.querySelectorAll('input[type="checkbox"]').forEach(c => fd.set(c.name, c.checked ? "Y" : "N"));
+          document.querySelectorAll('input[type="checkbox"]').forEach(c => fd.set(c.name, c.checked?"Y":"N"));
           fd.append("RequesterEmail", currentUser.Email);
-          
           const res = await fetch(API+'/save-permit', {method:'POST', body:fd});
           const json = await res.json();
-          if(json.success) { alert("Created: " + json.permitId); showDashboard(); } else alert(json.error);
+          if(json.success) { alert("Created: "+json.permitId); showDashboard(); } else alert(json.error);
       }
 
       async function openPermit(id) {
-          const p = await apiCall('/permit-data', 'POST', {permitId: id});
+          const p = await apiCall('/permit-data', 'POST', {permitId:id});
           currentPermitId = id;
           Object.keys(p).forEach(k => {
               const el = document.getElementById(k);
-              if(el) { if(el.type==='checkbox') el.checked = p[k]==='Y'; else el.value = p[k]; }
+              if(el) { if(el.type==='checkbox') el.checked=(p[k]==='Y'); else el.value=p[k]; }
           });
-          updateFormView(p.Status);
+          
+          // Populate Arrays
+          document.querySelectorAll('input[type="checkbox"]').forEach(c => { if(p[c.name]==='Y') c.checked=true; });
+          
+          document.getElementById("fs-reviewer-section").classList.add('hidden');
+          document.getElementById("fs-approver-section").classList.add('hidden');
+          document.getElementById("renewals-section").classList.add('hidden');
+          document.getElementById("closure-section").classList.add('hidden');
+          
+          const btns = document.getElementById("action-buttons"); btns.innerHTML="";
+          const r = currentUser.Role; const s = p.Status;
+
+          if(s==='Pending Review' && r==='Reviewer') {
+              document.getElementById("fs-reviewer-section").classList.remove('hidden');
+              btns.innerHTML = `<button onclick="upd('reject')" class="bg-red-500 text-white px-4 py-2 rounded font-bold">Reject</button><button onclick="upd('review')" class="bg-emerald-600 text-white px-4 py-2 rounded font-bold">Submit Review</button>`;
+          }
+          if(s==='Pending Approval' && r==='Approver') {
+              document.getElementById("fs-reviewer-section").classList.remove('hidden');
+              document.getElementById("fs-approver-section").classList.remove('hidden');
+              btns.innerHTML = `<button onclick="upd('reject')" class="bg-red-500 text-white px-4 py-2 rounded font-bold">Reject</button><button onclick="upd('approve')" class="bg-emerald-600 text-white px-4 py-2 rounded font-bold">Approve</button>`;
+          }
+          if(s==='Active') {
+              document.getElementById("renewals-section").classList.remove('hidden');
+              document.getElementById("closure-section").classList.remove('hidden');
+              let html = `<a href="${API}/download-pdf/${currentPermitId}" target="_blank" class="bg-gray-800 text-white px-4 py-2 rounded font-bold">Download PDF</a>`;
+              if(r==='Requester') {
+                  document.getElementById("form-renewal").classList.remove('hidden');
+                  html += `<button onclick="upd('initiate_closure')" class="bg-amber-500 text-white px-4 py-2 rounded font-bold">Job Complete</button>`;
+              }
+              btns.innerHTML = html;
+              // Renewals Table
+              const rens = JSON.parse(p.RenewalsJSON||"[]");
+              const tbody = document.getElementById("renewals-table-body"); tbody.innerHTML="";
+              rens.forEach(x => tbody.innerHTML+=`<tr><td>${x.valid_from}</td><td>${x.valid_till}</td><td>${x.hc}</td><td>${x.status}</td></tr>`);
+          }
+          if(s.includes('Closure') && r==='Approver') {
+              document.getElementById("closure-section").classList.remove('hidden');
+              btns.innerHTML = `<button onclick="upd('approve')" class="bg-black text-white px-4 py-2 rounded font-bold">Final Close</button>`;
+          }
+          
           showForm();
       }
 
-      function updateFormView(status) {
-          const btns = document.getElementById("action-buttons"); btns.innerHTML="";
-          const r = currentUser.Role;
-          document.getElementById("fs-reviewer-section").classList.add('hidden');
-          document.getElementById("fs-approver-section").classList.add('hidden');
-          
-          if(status === 'Pending Review' && r === 'Reviewer') {
-              document.getElementById("fs-reviewer-section").classList.remove('hidden');
-              btns.innerHTML = `<button onclick="updateStatus('reject')" class="bg-red-500 text-white px-4 py-2 rounded">Reject</button>
-                                <button onclick="updateStatus('review')" class="bg-green-600 text-white px-4 py-2 rounded">Submit Review</button>`;
+      async function upd(act) {
+          const body = { PermitID:currentPermitId, action:act, role:currentUser.Role, user:currentUser.name, 
+              comment: currentUser.Role==='Reviewer'?document.getElementById("Reviewer_Remarks").value:document.getElementById("Approver_Remarks").value,
+              ForceBackgroundColor: document.getElementById("ForceBackgroundColor").value
+          };
+          if(currentUser.Role==='Reviewer') {
+              document.querySelectorAll('#hazards-container input, #ppe-container input').forEach(c => body[c.name] = c.checked?"Y":"N");
+              body.AdditionalPrecautions = document.getElementById("AdditionalPrecautions").value;
           }
-          if(status === 'Pending Approval' && r === 'Approver') {
-              document.getElementById("fs-reviewer-section").classList.remove('hidden');
-              document.getElementById("fs-approver-section").classList.remove('hidden');
-              btns.innerHTML = `<button onclick="updateStatus('reject')" class="bg-red-500 text-white px-4 py-2 rounded">Reject</button>
-                                <button onclick="updateStatus('approve')" class="bg-green-600 text-white px-4 py-2 rounded">Approve</button>`;
-          }
-          if(status === 'Active') {
-              btns.innerHTML = `<a href="${API}/download-pdf/${currentPermitId}" target="_blank" class="bg-gray-800 text-white px-4 py-2 rounded">Download PDF</a>`;
-          }
-      }
-
-      async function updateStatus(action) {
-          const comment = currentUser.Role === 'Reviewer' ? document.getElementById("Reviewer_Remarks").value : document.getElementById("Approver_Remarks").value;
-          const body = { PermitID: currentPermitId, action, role: currentUser.Role, user: currentUser.name, comment, ForceBackgroundColor: document.getElementById("ForceBackgroundColor").value };
           const res = await apiCall('/update-status', 'POST', body);
           if(res.success) showDashboard(); else alert(res.error);
       }
-
-      function getGeo() {
-          if(!navigator.geolocation) return alert("No Geo");
-          navigator.geolocation.getCurrentPosition(p => {
-              document.getElementById("Latitude").value = p.coords.latitude;
-              document.getElementById("Longitude").value = p.coords.longitude;
-          });
+      
+      async function submitRenewal(act) {
+          const body = {
+              PermitID: currentPermitId, action: act, userRole: currentUser.Role, userName: currentUser.name,
+              RenewalValidFrom: document.getElementById("RenewalValidFrom").value,
+              RenewalValidTill: document.getElementById("RenewalValidTill").value,
+              RenewalHC: document.getElementById("RenewalHC").value,
+              RenewalToxic: document.getElementById("RenewalToxic").value,
+              RenewalOxygen: document.getElementById("RenewalOxygen").value,
+              RenewalPrecautions: document.getElementById("RenewalPrecautions").value
+          };
+          const res = await apiCall('/renewal', 'POST', body);
+          if(res.success) { alert("Renewal Processed"); showDashboard(); } else alert(res.error);
       }
 
-      function buildChecklist() {
-          document.getElementById("checklist-container").innerHTML = questions.map(q => q.isGas ? 
-             `<div class="border p-2 rounded col-span-2 bg-gray-50"><label class="font-bold">${q.text}</label><div class="flex gap-2 mt-1"><input name="${q.id}_Toxic" placeholder="Toxic"><input name="${q.id}_HC" placeholder="HC"><input name="${q.id}_O2" placeholder="O2"></div></div>` :
-             `<div class="border p-2 rounded bg-gray-50 flex justify-between items-center"><label>${q.text}</label><div class="flex gap-2"><label><input type="radio" name="${q.id}" value="Yes"> Yes</label><label><input type="radio" name="${q.id}" value="NA"> NA</label></div></div>`
-          ).join('');
-          
-          document.getElementById("hazards-container").innerHTML = hazards.map(h => `<label class="flex items-center gap-1 border p-1 rounded"><input type="checkbox" name="${h}" value="Y"> ${h.replace('H_','')}</label>`).join('');
-          document.getElementById("ppe-container").innerHTML = ppe.map(p => `<label class="flex items-center gap-1 border p-1 rounded"><input type="checkbox" name="${p}" value="Y"> ${p.replace('P_','')}</label>`).join('');
+      function getGeo() { navigator.geolocation.getCurrentPosition(p=>{document.getElementById("Latitude").value=p.coords.latitude;document.getElementById("Longitude").value=p.coords.longitude;}); }
+
+      function buildUI() {
+          const c = document.getElementById("checklist-container"); c.innerHTML="";
+          questions.forEach(q => c.innerHTML += q.gas ? 
+             `<div class="border p-2 rounded bg-white col-span-1 md:col-span-2"><label class="font-bold">${q.t}</label><div class="grid grid-cols-3 gap-1 mt-1"><input name="${q.id}_ToxicGas" placeholder="Tox"><input name="${q.id}_HC" placeholder="HC"><input name="${q.id}_Oxygen" placeholder="O2"></div></div>` :
+             `<div class="border p-2 rounded bg-white"><label class="font-bold">${q.t}</label><div class="flex gap-2 mt-1"><label><input type="radio" name="${q.id}" value="Yes"> Yes</label><label><input type="radio" name="${q.id}" value="NA"> NA</label></div>${q.d?`<input name="${q.d}" placeholder="Details..." class="mt-1">`:''}</div>`);
+          specific.forEach(q => document.getElementById("specific-container").innerHTML += `<div class="border p-2 rounded bg-white"><label class="font-bold">${q.t}</label><div class="flex gap-2 mt-1"><label><input type="radio" name="${q.id}" value="Yes"> Yes</label><label><input type="radio" name="${q.id}" value="NA"> NA</label></div>${q.d?`<input name="${q.d}" placeholder="Permit No..." class="mt-1">`:''}</div>`);
+          document.getElementById("hazards-container").innerHTML = hazards.map(h => `<label class="flex items-center gap-1 border p-1 rounded bg-white"><input type="checkbox" name="${h}" value="Y"> ${h.replace('H_','')}</label>`).join('');
+          document.getElementById("ppe-container").innerHTML = ppe.map(p => `<label class="flex items-center gap-1 border p-1 rounded bg-white"><input type="checkbox" name="${p}" value="Y"> ${p.replace('P_','')}</label>`).join('');
       }
 
-      function showForm() { document.getElementById("view-dashboard").style.display='none'; document.getElementById("view-form").style.display='block'; }
+      function showForm() { document.getElementById("view-dashboard").style.display='none'; document.getElementById("view-form").style.display='block'; window.scrollTo(0,0); }
       function showDashboard() { document.getElementById("view-dashboard").style.display='block'; document.getElementById("view-form").style.display='none'; document.getElementById("view-map-container").style.display='none'; loadDashboard(); }
-      function showMap() { document.getElementById("view-dashboard").style.display='none'; document.getElementById("view-map-container").style.display='block'; /* Init map logic here if needed */ }
+      function showMap() { document.getElementById("view-dashboard").style.display='none'; document.getElementById("view-map-container").style.display='block'; }
     </script>
   </body>
 </html>

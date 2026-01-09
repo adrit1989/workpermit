@@ -11,7 +11,7 @@
       body { background: linear-gradient(135deg, #0f172a 0%, #312e81 50%, #4c1d95 100%); color: #1e293b; font-family: sans-serif; font-size: 0.85rem; }
       .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); border-radius: 0.75rem; padding: 1.25rem; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
       input, select, textarea { width: 100%; border: 1px solid #cbd5e1; padding: 0.4rem; border-radius: 0.375rem; font-size: 0.85rem; }
-      input:disabled, select:disabled, textarea:disabled { background-color: #e2e8f0; color: #475569; cursor: not-allowed; border-color: #cbd5e1; font-weight: 500; }
+      input:disabled, select:disabled, textarea:disabled { background-color: #e2e8f0; color: #64748b; cursor: not-allowed; }
       .status-badge { padding: 2px 8px; border-radius: 99px; font-weight: bold; font-size: 0.7rem; text-transform: uppercase; }
       #map { height: 500px; width: 100%; border-radius: 0.75rem; }
     </style>
@@ -136,8 +136,8 @@
                      </table>
                  </div>
                  
-                 <div id="form-renewal" class="hidden bg-indigo-50 p-2 rounded">
-                    <h4 class="font-bold text-indigo-800 text-xs mb-2">Request New Renewal (Max 8 Hrs)</h4>
+                 <div id="form-renewal" class="hidden bg-indigo-50 p-3 rounded border border-indigo-100">
+                    <h4 class="font-bold text-indigo-800 text-xs mb-2">Renewal Details</h4>
                     <div class="grid grid-cols-2 md:grid-cols-5 gap-2 mb-2">
                        <div><label>Valid From</label><input type="datetime-local" id="RenewalValidFrom"></div>
                        <div><label>Valid To</label><input type="datetime-local" id="RenewalValidTill"></div>
@@ -146,7 +146,7 @@
                        <div><label>Oxygen %</label><input id="RenewalOxygen"></div>
                        <div class="col-span-2 md:col-span-5"><label>Precautions</label><input id="RenewalPrecautions"></div>
                     </div>
-                    <button type="button" onclick="submitRenewal('approve')" class="bg-indigo-600 text-white px-3 py-1 rounded text-xs font-bold">Submit</button>
+                    <button type="button" id="btn-submit-renewal" onclick="submitRenewal('approve')" class="bg-indigo-600 text-white px-3 py-1 rounded text-xs font-bold">Submit</button>
                  </div>
               </div>
 
@@ -209,8 +209,10 @@
           window.users.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`);
           document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false);
           document.getElementById("OfficialName").disabled=true;
+          
           document.querySelectorAll('input[type="radio"][value="Yes"]').forEach(r => r.checked = true);
           document.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = true);
+
           document.getElementById("action-buttons").innerHTML = `<button type="button" onclick="submitNewPermit()" class="bg-blue-600 text-white px-6 py-2 rounded font-bold shadow hover:bg-blue-700">Submit Permit</button>`;
           showForm();
       }
@@ -228,10 +230,7 @@
       async function openPermit(id) {
           const p = await apiCall('/permit-data', 'POST', {permitId:id});
           currentPermitId=id;
-          
-          // DEFAULT: Lock all
           document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=true);
-          
           Object.keys(p).forEach(k=>{ const el=document.getElementById(k); if(el){if(el.type==='checkbox')el.checked=(p[k]==='Y'); else el.value=p[k];} });
           document.querySelectorAll('input[type="checkbox"]').forEach(c=>{ if(p[c.name]==='Y') c.checked=true; });
 
@@ -254,27 +253,54 @@
               document.getElementById("Approver_Remarks").disabled=false; document.getElementById("ForceBackgroundColor").disabled=false;
               btns.innerHTML = `<button onclick="upd('reject')" class="bg-red-500 text-white px-4 py-2 rounded font-bold">Reject</button><button onclick="upd('approve')" class="bg-emerald-600 text-white px-4 py-2 rounded font-bold">Approve</button>`;
           }
-          if(s==='Active') {
+          if(s==='Active' || s.includes('Renewal')) {
               document.getElementById("renewals-section").classList.remove('hidden'); document.getElementById("closure-section").classList.remove('hidden');
               let html = `<a href="${API}/download-pdf/${currentPermitId}" target="_blank" class="bg-gray-800 text-white px-4 py-2 rounded font-bold">Download PDF</a>`;
-              if(r==='Requester') {
+              
+              if(r==='Requester' && s === 'Active') {
                   document.getElementById("form-renewal").classList.remove('hidden');
                   document.querySelectorAll("#form-renewal input").forEach(e=>e.disabled=false);
+                  document.getElementById("btn-submit-renewal").innerText = "Submit Renewal";
                   html += `<button onclick="upd('initiate_closure')" class="bg-amber-500 text-white px-4 py-2 rounded font-bold ml-2">Job Complete</button>`;
               }
               btns.innerHTML = html;
               
               const rens=JSON.parse(p.RenewalsJSON||"[]"); const tbody=document.getElementById("renewals-table-body"); tbody.innerHTML=""; 
-              rens.forEach(x=>{
-                  let act = "";
-                  if(x.status==='pending_review' && r==='Reviewer') act = `<button onclick="submitRenewal('approve')" class="bg-green-500 text-white px-2 py-0.5 rounded text-[10px]">Verify</button>`;
-                  if(x.status==='pending_approval' && r==='Approver') act = `<button onclick="submitRenewal('approve')" class="bg-green-500 text-white px-2 py-0.5 rounded text-[10px]">Approve</button>`;
+              const lastRen = rens[rens.length - 1];
+
+              // Check if pending renewal exists for Reviewer/Approver to see details
+              if(s === 'Renewal Pending Review' && r === 'Reviewer' && lastRen) {
+                  document.getElementById("form-renewal").classList.remove('hidden');
+                  document.getElementById("RenewalValidFrom").value = lastRen.valid_from;
+                  document.getElementById("RenewalValidTill").value = lastRen.valid_till;
+                  document.getElementById("RenewalHC").value = lastRen.hc;
+                  document.getElementById("RenewalToxic").value = lastRen.toxic;
+                  document.getElementById("RenewalOxygen").value = lastRen.oxygen;
+                  document.getElementById("RenewalPrecautions").value = lastRen.precautions;
                   
+                  // Allow reviewer to edit
+                  document.querySelectorAll("#form-renewal input").forEach(e=>e.disabled=false);
+                  document.getElementById("btn-submit-renewal").innerText = "Verify & Forward";
+              }
+              
+              if(s === 'Renewal Pending Approval' && r === 'Approver' && lastRen) {
+                  document.getElementById("form-renewal").classList.remove('hidden');
+                  document.getElementById("RenewalValidFrom").value = lastRen.valid_from;
+                  document.getElementById("RenewalValidTill").value = lastRen.valid_till;
+                  document.getElementById("RenewalHC").value = lastRen.hc;
+                  document.getElementById("RenewalToxic").value = lastRen.toxic;
+                  document.getElementById("RenewalOxygen").value = lastRen.oxygen;
+                  document.getElementById("RenewalPrecautions").value = lastRen.precautions;
+                  // Approver just views
+                  document.getElementById("btn-submit-renewal").innerText = "Approve Renewal";
+              }
+
+              rens.forEach(x=>{
                   tbody.innerHTML+=`
                   <tr class="border-b">
                       <td>${x.valid_from.replace('T',' ')}<br>${x.valid_till.replace('T',' ')}</td>
                       <td>HC:${x.hc} Tox:${x.toxic} O2:${x.oxygen}</td>
-                      <td class="font-bold text-blue-600 uppercase">${x.status} ${act}</td>
+                      <td class="font-bold text-blue-600 uppercase">${x.status}</td>
                       <td>${x.req_name}<br><span class="text-[9px]">${x.req_at}</span></td>
                       <td>${x.rev_name||'-'}<br><span class="text-[9px]">${x.rev_at||''}</span></td>
                       <td>${x.app_name||'-'}<br><span class="text-[9px]">${x.app_at||''}</span></td>

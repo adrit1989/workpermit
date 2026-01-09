@@ -64,6 +64,28 @@ app.get('/api/users', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// 2.5 ADD NEW USER (NEW FEATURE)
+app.post('/api/add-user', async (req, res) => {
+    try {
+        const { name, email, role, password } = req.body;
+        if (!name || !email || !role || !password) return res.status(400).json({ error: "All fields required" });
+
+        const pool = await getConnection();
+        // Check if email already exists
+        const check = await pool.request().input('e', sql.NVarChar, email).query("SELECT * FROM Users WHERE Email = @e");
+        if(check.recordset.length > 0) return res.status(400).json({ error: "User with this email already exists." });
+
+        await pool.request()
+            .input('n', sql.NVarChar, name)
+            .input('e', sql.NVarChar, email)
+            .input('r', sql.NVarChar, role)
+            .input('p', sql.NVarChar, password)
+            .query("INSERT INTO Users (Name, Email, Role, Password) VALUES (@n, @e, @r, @p)");
+            
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // 3. DASHBOARD
 app.post('/api/dashboard', async (req, res) => {
     try {

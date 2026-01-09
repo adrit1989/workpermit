@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Work Permit System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: { sans: ['Inter', 'sans-serif'], display: ['Poppins', 'sans-serif'] },
+            colors: { glass: "rgba(255, 255, 255, 0.95)" }
+          }
+        }
+      }
+    </script>
+    
+    <style>
+      /* --- VIBRANT STYLING --- */
+      body { 
+        background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); 
+        background-attachment: fixed; 
+        color: #1e293b; 
+        font-size: 0.85rem; 
+      }
+      .glass-panel { 
+        background: rgba(255, 255, 255, 0.95); 
+        backdrop-filter: blur(12px); 
+        border: 1px solid rgba(255, 255, 255, 0.5); 
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2); 
+        padding: 1.5rem !important; 
+        border-radius: 16px; 
+      }
+      .glass-nav { 
+        background: rgba(255, 255, 255, 0.1); 
+        backdrop-filter: blur(10px); 
+        border-bottom: 1px solid rgba(255,255,255,0.2); 
+        height: 4rem; 
+      }
+      
+      /* Inputs */
+      input, select, textarea { 
+        transition: all 0.2s ease; 
+        border: 1px solid #cbd5e1; 
+        background-color: #f8fafc; 
+        padding: 0.5rem; 
+        font-size: 0.85rem; 
+        border-radius: 0.5rem; 
+        width: 100%; 
+      }
+      input:focus, select:focus, textarea:focus { 
+        border-color: #2563eb; 
+        outline: none; 
+        background: white; 
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); 
+      }
+      input:disabled, select:disabled, textarea:disabled { 
+        background-color: #f1f5f9; 
+        color: #64748b; 
+        cursor: not-allowed; 
+      }
+
+      /* Badges */
+      .status-badge {QX padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
+      .status-Active { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; } 
+      .status-Pending-Review { background: #ffedd5; color: #c2410c; border: 1px solid #fed7aa; }
+      .status-Pending-Approval { background: #fef9c3; color: #a16207; border: 1px solid #fde047; }
+      .status-Closed { background: #e2e8f0; color: #475569; }
+      .status-Rejected { background: #fee2e2; color: #991b1b; }
+
+      /* Tabs & Map */
+      .tab-btn.active { background-color: #4f46e5; color: white; }
+      #map { height: 100%; width: 100%; border-radius: 12px; }
+    </style>
+  </head>
+  <body class="antialiased min-h-screen">
+
+    <div id="loader" style="display:none;" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 text-white font-bold text-xl backdrop-blur-sm flex-col">
+        <div class="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mb-4"></div>
+        <span id="loader-text">Processing...</span>
+    </div>
+
+    <div id="view-login" class="flex items-center justify-center min-h-screen p-4">
+      <div class="w-full max-w-sm glass-panel text-center">
+        <div class="text-5xl mb-4">🛡️</div>
+        <h2 class="text-2xl font-display font-bold mb-6 text-indigo-900">Work Permit System</h2>
+        <form class="space-y-4" onsubmit="event.preventDefault(); handleLogin();">
+          <select id="login-role" class="w-full font-medium text-slate-700"></select>
+          <select id="login-name" class="w-full font-medium text-slate-700" disabled><option>Select Role First</option></select>
+          <input type="password" id="login-password" class="w-full" placeholder="Password">
+          <button type="submit" class="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-lg font-bold shadow-lg hover:shadow-xl transition transform hover:-translate-y-0.5">Sign In</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="app-container" style="display: none;">
+      <nav class="glass-nav fixed w-full z-50 flex items-center px-6 justify-between text-white shadow-lg">
+        <div class="text-xl font-bold flex items-center gap-2 font-display">🛡️ Mainline Permit System</div>
+        <div class="flex items-center gap-4 text-xs">
+          <div class="text-right">
+            <span id="user-info" class="font-bold block text-sm"></span>
+            <span id="user-role-badge" class="opacity-90 bg-white/20 px-2 py-0.5 rounded uppercase tracking-wider"></span>
+          </div>
+          <button onclick="location.reload()" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg font-bold transition border border-white/30">Logout</button>
+        </div>
+      </nav>
+      
+      <main class="max-w-7xl mx-auto px-4 pt-24 pb-12">
+        
+        <div id="view-dashboard">
+          <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+            <h1 class="text-3xl font-display font-bold text-white drop-shadow-md">Dashboard</h1>
+            
+            <div class="flex bg-white/20 p-1 rounded-xl backdrop-blur-md border border-white/20 shadow-inner">
+                <button onclick="switchTab('list')" id="tab-list" class="tab-btn active px-6 py-2 rounded-lg text-xs font-bold transition text-white">Permits</button>
+                <button onclick="switchTab('analytics')" id="tab-analytics" class="tab-btn px-6 py-2 rounded-lg text-xs font-bold transition text-indigo-100 hidden">Analytics</button>
+            </div>
+
+            <button id="btn-new" onclick="showNewPermit()" class="bg-emerald-500 text-white py-2 px-6 rounded-lg text-xs font-bold shadow-lg hover:bg-emerald-600 hover:scale-105 transition flex items-center gap-2">
+                <span class="text-lg">+</span> New Permit
+            </button>
+          </div>
+          
+          <div id="content-list" class="glass-panel p-0!important overflow-hidden">
+             <div class="overflow-x-auto">
+               <table class="w-full text-left text-xs">
+                  <thead class="bg-indigo-50/50 border-b border-indigo-100 text-indigo-900">
+                      <tr><th class="p-4 font-bold">ID</th><th>Work Type</th><th>Vendor</th><th>Requester</th><th>Validity</th><th>Status</th><th>Action</th></tr>
+                  </thead>
+                  <tbody id="permit-list" class="divide-y divide-gray-100 bg-white/80"></tbody>
+               </table>
+             </div>
+             <div id="no-permits" class="text-center p-12 text-slate-400 font-medium hidden">No permits found.</div>
+          </div>
+
+          <div id="content-analytics" class="hidden grid grid-cols-1 md:grid-cols-2 gap-6">
+             <div class="glass-panel"><h3 class="font-bold mb-4 text-indigo-900 border-b pb-2">Status Distribution</h3><canvas id="chart1"></canvas></div>
+             <div class="glass-panel"><h3 class="font-bold mb-4 text-indigo-900 border-b pb-2">Total Volume</h3><canvas id="chart2"></canvas></div>
+          </div>
+        </div>
+
+        <div id="view-form" class="hidden">
+           <div class="flex justify-between items-center mb-4">
+              <button onclick="showDashboard()" class="text-white bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2">← Back</button>
+              <div class="flex gap-3 bg-white/20 px-4 py-2 rounded-lg backdrop-blur-sm border border-white/20">
+                  <sn id="form-permit-id" class="text-lg font-display font-bold text-white"></span>
+                  <span id="form-status-badge" class="status-badge bg-white text-slate-800 shadow-sm"></span>
+              </div>
+           </div>
+           
+           <form id="permit-form" class="space-y-4">
+              <input type="hidden" id="PermitID"><input type="hidden" id="Status">
+              
+              <div class="glass-panel">
+                  <h3 class="text-sm font-bold text-indigo-700 mb-4 border-b border-indigo-100 pb-2 flex items-center gap-2">📄 1. Main Details</h3>
+                  <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                     <div class="col-span-2"><label>Work Type</label><select id="WorkType"><option>Hot</option><option>Cold</option><option>Confined Space</option><option>Height Work</option><option>Excavation Work</option><option>Vehicle Entry</option><option>Any Other</option></select></div>
+                     <div class="col-span-2"><label>Requester</label><input id="RequesterName"></div>
+                     <div class="col-span-2"><label>Applicant</label><input id="OfficialName" readonly class="bg-gray-100"></div>
+                     <div class="col-span-6"><label>Description</label><textarea id="Desc" rows="1"></textarea></div>
+                     <div class="col-span-2"><label>Location</label><input id="ExactLocation"></div>
+                     <div><label>Valid From</label><input type="datetime-local" id="ValidFrom"></div>
+                     <div><label>Valid To</label><input type="datetime-local" id="ValidTo"></div>
+                     <div class="col-span-2"><label>Vendor</label><input id="Vendor"></div>
+
+                     <div id="assign-group" class="col-span-6 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                        <div><label>Assign Reviewer</label><select id="ReviewerEmail"></select></div>
+                        <div><label>Assign Approver</label><select id="ApproverEmail"></select></div>
+                     </div>
+                  </div>
+              </div>
+
+              <div id="fs-reviewer-section" class="glass-panel border-l-4 border-yellow-500 hidden">
+                  <h3 class="text-sm font-bold text-yellow-700 mb-2">4. Reviewer Assessment</h3>
+                  <textarea id="Reviewer_Remarks" placeholder="Reviewer Remarks" class="w-full bg-yellow-50 border-yellow-200"></textarea>
+              </div>
+
+              <div id="fs-approver-section" class="glass-panel border-l-4 border-green-500 hidden">
+                  <h3 class="text-sm font-bold text-green-700 mb-2">5. Final Approval</h3>
+                  <textarea id="Approver_Remarks" placeholder="Approver Remarks" class="w-full bg-green-50 border-green-200"></textarea>
+              </div>
+
+              <div id="action-buttons" class="fixed bottom-0 left-0 w-full bg-white/95 p-4 shadow-[0_-5px_15px_rgba(0,0,0,0.1)] z-40 flex justify-end gap-3 border-t border-gray-200 backdrop-blur-md"></div>
+              <div class="h-24"></div>
+           </form>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      // Automatically point to your Azure backend
+      const API = "/api"; 
+      
+      let currentUser = null, currentPermitId = null;
+
+      document.addEventListener("DOMContentLoaded", () => {
+          loadUsers();
+          const bind = (id, fn) => { const el = document.getElementById(id); if(el) el.onclick = fn; };
+          bind("btn-login-submit", handleLogin);
+      });
+
+      function toggleLoader(show, text="Processing...") { 
+          const l = document.getElementById("loader");
+          document.getElementById("loader-text").innerText = text;
+          l.style.display = show ? "flex" : "none"; 
+      }
+
+      function showWorkDone() {
+          toggleLoader(true, "Work Done! ✅");
+          setTimeout(() => { toggleLoader(false); showDashboard(); }, 1500);
+      }
+
+      function switchTab(tab) {
+          ['list','analytics'].forEach(t => {
+              document.getElementById(`content-${t}`).classList.add('hidden');
+              document.getElementById(`tab-${t}`).classList.remove('active', 'bg-indigo-600', 'text-white');
+              document.getElementById(`tab-${t}`).classList.add('text-indigo-100');
+          });
+          document.getElementById(`content-${tab}`).classList.remove('hidden');
+          document.getElementById(`tab-${tab}`).classList.add('active', 'bg-indigo-600', 'text-white');
+          if(tab==='analytics') loadCharts();
+      }
+
+      // --- AUTH ---
+      async function loadUsers() {
+          try {
+            const res = await fetch(API+'/users'); 
+            const data = await res.json(); 
+            window.users=data;
+            const sel = document.getElementById("login-role");
+            sel.innerHTML = '<option value="">Select Role</option><option>Requester</option><option>Reviewer</option><option>Approver</option>';
+            sel.onchange = () => {
+                const list = sel.value==='Requester'?data.Requesters:sel.value==='Reviewer'?data.Reviewers:data.Approvers;
+                const n = document.getElementById("login-name"); n.disabled=false; n.innerHTML="";
+                list.forEach(u => n.innerHTML += `<option>${u.name}</option>`); // Assuming backend sends 'name'
+            }
+          } catch(e) { console.log("Backend not ready yet"); }
+      }
+
+      async function handleLogin() {
+          toggleLoader(true);
+          const role=document.getElementById("login-role").value;
+          // IMPORTANT: Your backend expects 'name' (which is the email in the select)
+          const emailName=document.getElementById("login-name").value; 
+          const pass=document.getElementById("login-password").value;
+          
+          try {
+              const res = await fetch(API+'/login', {
+                  method:'POST', 
+                  headers:{'Content-Type':'application/json'}, 
+                  body:JSON.stringify({role, name: emailName, password:pass})
+              });
+              const json = await res.json();
+              toggleLoader(false);
+              if(json.success) { 
+                  currentUser=json.user; 
+                  // Ensure email is set for logic
+                  if(!currentUser.email) currentUser.email = emailName; 
+                  
+                  document.getElementById("view-login").style.display='none'; 
+                  document.getElementById("app-container").style.display='block'; 
+                  document.getElementById("user-info").innerText=currentUser.Name || currentUser.name; 
+                  document.getElementById("user-role-badge").innerText=currentUser.Role || currentUser.role; 
+                  updateRoleUI(); 
+                  loadDashboard(); 
+              } else alert(json.message);
+          } catch(e) { toggleLoader(false); alert("Connection Failed: " + e.message); }
+      }
+
+      function updateRoleUI() {
+          const r = currentUser.Role || currentUser.role;
+          const isReq = r === 'Requester';
+          document.getElementById("btn-new").style.display = isReq ? 'block' : 'none';
+          document.getElementById("tab-analytics").style.display = isReq ? 'none' : 'block';
+          if(isReq) switchTab('list');
+      }
+
+      // --- DASHBOARD ---
+      async function loadDashboard() {
+          const res = await fetch(API+'/dashboard', {
+              method:'POST', 
+              headers:{'Content-Type':'application/json'}, 
+              body:JSON.stringify({role: currentUser.Role || currentUser.role, email: currentUser.Email || currentUser.email})
+          });
+          const data = await res.json();
+          const list = document.getElementById("permit-list"); list.innerHTML="";
+          if(data.length===0) document.getElementById("no-permits").classList.remove('hidden'); 
+          else {
+              document.getElementById("no-permits").classList.add('hidden');
+              data.forEach(p => {
+                  const badge = `<span class="status-badge status-${(p.Status||'').split(' ')[0]}">${p.Status}</span>`;
+                  list.innerHTML+=`<tr class="hover:bg-indigo-50 cursor-pointer transition" onclick="openPermit('${p.PermitID}')"><td class="p-4 font-bold text-indigo-600">${p.PermitID}</td><td>${p.WorkType}</td><td>${p.Vendor||'-'}</td><td>${p.RequesterName||'-'}</td><td class="text-[10px] text-slate-500">${p.ValidFrom}<br>${p.ValidTo}</td><td>${badge}</td><td class="text-blue-600 font-bold">Open</td></tr>`;
+              });
+          }
+      }
+
+      // --- FORM & ACTIONS ---
+      function showNewPermit() {
+          document.getElementById("permit-form").reset();
+          document.getElementById("PermitID").value=""; document.getElementById("Status").value="New";
+          document.getElementById("RequesterName").value=currentUser.Name || currentUser.name; 
+          document.getElementById("OfficialName").value=currentUser.Name || currentUser.name;
+          
+          const rs=document.getElementById("ReviewerEmail"), as=document.getElementById("ApproverEmail"); rs.innerHTML=""; as.innerHTML="";
+          if(window.users) {
+              window.users.Reviewers.forEach(u=>rs.innerHTML+=`<option value="${u.email}">${u.name}</option>`);
+              window.users.Approvers.forEach(u=>as.innerHTML+=`<option value="${u.email}">${u.name}</option>`);
+          }
+          updateFormView("New");
+          document.getElementById("view-dashboard").style.display='none'; document.getElementById("view-form").style.display='block';
+      }
+
+      async function savePermit() {
+          toggleLoader(true);
+          const fd = new FormData();
+          // Simplified ID list for basic check
+          const ids = ["WorkType","OfficialName","RequesterName","Desc","ExactLocation","Vendor","ValidFrom","ValidTo","ReviewerEmail","ApproverEmail"];
+          ids.forEach(id => { const el=document.getElementById(id); if(el) fd.append(id, el.value); });
+          
+          fd.append("RequesterEmail", currentUser.Email || currentUser.email);
+
+          const res = await fetch(API+'/save-permit', {method:'POST', body:fd});
+          constHP json = await res.json();
+          if(json.success) showWorkDone(); else { toggleLoader(false); alert(json.error); }
+      }
+
+      async function openPermit(id) {
+          toggleLoader(true);
+          const res = await fetch(API+'/permit-data', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({permitId:id})});
+          const p = await res.json();
+          toggleLoader(false);
+          currentPermitId=id;
+          
+          // Populate fields
+          Object.keys(p).forEach(k => {
+              const el = document.getElementById(k);
+              if(el) el.value=p[k];
+          });
+          
+          document.getElementById("form-permit-id").innerText=p.PermitID;
+          document.getElementById("form-status-badge").innerText=p.Status;
+          document.getElementById("form-status-badge").className=`status-badge status-${(p.Status||'').split(' ')[0]}`;
+
+          updateFormView(p.Status);
+          document.getElementById("view-dashboard").style.display='none'; document.getElementById("view-form").style.display='block';
+      }
+
+      function updateFormView(status) {
+          document.querySelectorAll("#permit-form input, #permit-form select, #permit-form textarea").forEach(e => e.disabled=true);
+          const btns = document.getElementById("action-buttons"); btns.innerHTML="";
+          const role = currentUser.Role || currentUser.role;
+          
+          const revSec = document.getElementById("fs-reviewer-section");
+          const appSec = document.getElementById("fs-approver-section");
+
+          revSec.classList.add('hidden'); appSec.classList.add('hidden');
+
+          if(status==='New' && role==='Requester') {
+              document.querySelectorAll("#permit-form input, #permit-form select, #permit-form textarea").forEach(e => e.disabled=false);
+              btns.innerHTML = `<button onclick="savePermit()" class="bg-blue-600 text-white px-6 py-2 rounded-full font-bold shadow-lg hover:scale-105 transition">Submit</button>`;
+          }
+          else if(status==='Pending Review' && role==='Reviewer') {
+              revSec.classList.remove('hidden');
+              document.getElementById("Reviewer_Remarks").disabled=false;
+              btns.innerHTML = `<button onclick="updateStatus('reject')" class="bg-red-500 text-white px-4 py-2 rounded font-bold">Reject</button><button onclick="updateStatus('review')" class="bg-emerald-600 text-white px-6 py-2 rounded font-bold shadow">Verify & Forward</button>`;
+          }
+          else if(status==='Pending Approval' && role==='Approver') {
+              revSec.classList.remove('hidden'); appSec.classList.remove('hidden');
+              document.getElementById("Approver_Remarks").disabled=false;
+              btns.innerHTML = `<button onclick="updateStatus('reject')" class="bg-red-500 text-white px-4 py-2 rounded font-bold">Reject</button><button onclick="updateStatus('approve')" class="bg-emerald-600 text-white px-6 py-2 rounded font-bold shadow">Approve</button>`;
+          }
+          else if(status==='Active') {
+              btns.innerHTML = `<a href="${API}/download-pdf/${document.getElementById("form-permit-id").innerText}" target="_blank" class="bg-slate-700 text-white px-4 py-2 rounded text-xs font-bold mr-2">Download PDF</a>`;
+          }
+      }
+
+      function showDashboard() { document.getElementById("view-dashboard").style.display='block'; document.getElementById("view-form").style.display='none'; loadDashboard(); }
+
+      async function updateStatus(action) {
+          toggleLoader(true);
+          const body = {
+              PermitID: document.getElementById("form-permit-id").innerText,
+              action, role: currentUser.Role || currentUser.role, user: currentUser.Name || currentUser.name,
+              comment: (currentUser.Role||currentUser.role)==='Reviewer'?document.getElementById("Reviewer_Remarks").value:document.getElementById("Approver_Remarks").value,
+          };
+          const res = await fetch(API+'/update-status', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+          const json = await res.json();
+          if(json.success) showWorkDone(); else { toggleLoader(false); alert(json.error); }
+      }
+    </script>
+  </body>
+</html>

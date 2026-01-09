@@ -146,7 +146,7 @@
            <div class="flex justify-between items-center mb-4">
               <button onclick="showDashboard()" class="text-white bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2">← Back</button>
               <div class="flex gap-3 bg-white/20 px-4 py-2 rounded-lg backdrop-blur-sm border border-white/20">
-                  <sn id="form-permit-id" class="text-lg font-display font-bold text-white"></span>
+                  <span id="form-permit-id" class="text-lg font-display font-bold text-white"></span>
                   <span id="form-status-badge" class="status-badge bg-white text-slate-800 shadow-sm"></span>
               </div>
            </div>
@@ -323,7 +323,7 @@
           fd.append("RequesterEmail", currentUser.Email || currentUser.email);
 
           const res = await fetch(API+'/save-permit', {method:'POST', body:fd});
-          constHP json = await res.json();
+          const json = await res.json();
           if(json.success) showWorkDone(); else { toggleLoader(false); alert(json.error); }
       }
 
@@ -393,3 +393,4 @@
     </script>
   </body>
 </html>
+

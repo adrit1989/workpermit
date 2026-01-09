@@ -188,7 +188,7 @@
                      </label>
                  </div>
                  
-                 <div class="border p-3 rounded mb-2 bg-gray-50">
+                 <div id="div-closure-req" class="border p-3 rounded mb-2 bg-gray-50 hidden">
                      <span class="text-xs font-bold text-gray-500 uppercase">1. Requestor Remarks</span>
                      <div class="flex justify-between items-center mb-1">
                          <span class="text-xs text-blue-600" id="Closure_Requestor_Date"></span>
@@ -196,7 +196,7 @@
                      <textarea id="Closure_Requestor_Remarks" class="w-full text-xs p-2 border rounded" placeholder="Enter remarks..."></textarea>
                  </div>
 
-                 <div class="border p-3 rounded mb-2 bg-gray-50">
+                 <div id="div-closure-rev" class="border p-3 rounded mb-2 bg-gray-50 hidden">
                      <span class="text-xs font-bold text-gray-500 uppercase">2. Reviewer Remarks</span>
                      <div class="flex justify-between items-center mb-1">
                          <span class="text-xs text-blue-600" id="Closure_Reviewer_Date"></span>
@@ -204,7 +204,7 @@
                      <textarea id="Closure_Reviewer_Remarks" class="w-full text-xs p-2 border rounded" placeholder="Enter remarks..."></textarea>
                  </div>
 
-                 <div class="border p-3 rounded mb-2 bg-gray-50">
+                 <div id="div-closure-app" class="border p-3 rounded mb-2 bg-gray-50 hidden">
                      <span class="text-xs font-bold text-gray-500 uppercase">3. Approver Remarks</span>
                      <div class="flex justify-between items-center mb-1">
                          <span class="text-xs text-blue-600" id="Closure_Approver_Date"></span>
@@ -327,6 +327,11 @@
           if(p.Closure_Approver_Remarks) document.getElementById("Closure_Approver_Remarks").value = p.Closure_Approver_Remarks;
           if(p.Closure_Approver_Date) document.getElementById("Closure_Approver_Date").innerText = p.Closure_Approver_Date;
 
+          // Init all hidden
+          document.getElementById("div-closure-req").classList.add('hidden');
+          document.getElementById("div-closure-rev").classList.add('hidden');
+          document.getElementById("div-closure-app").classList.add('hidden');
+
           if(s.includes('Pending Review') && r==='Reviewer') {
               document.getElementById("fs-reviewer-section").classList.remove('hidden');
               document.getElementById("WorkType").disabled=false;
@@ -349,7 +354,12 @@
                   document.getElementById("form-renewal").classList.remove('hidden');
                   document.querySelectorAll("#form-renewal input").forEach(e=>e.disabled=false);
                   document.getElementById("btn-submit-renewal").innerText = "Submit Renewal";
+                  // Show closure initiate button
                   html += `<button onclick="upd('initiate_closure')" class="bg-amber-500 text-white px-4 py-2 rounded font-bold ml-2">Job Complete</button>`;
+                  
+                  // Show only req box editable
+                  document.getElementById("div-closure-req").classList.remove('hidden');
+                  document.getElementById("Closure_Requestor_Remarks").disabled = false;
               }
               btns.innerHTML = html;
               
@@ -382,27 +392,30 @@
                   </tr>`;
               });
           }
-          if(s.includes('Closure')) {
+          if(s.includes('Closure') || s === 'Closed') {
               document.getElementById("closure-section").classList.remove('hidden');
               document.getElementById("Site_Restored_Check").checked = (p.Site_Restored_Check === 'Yes');
               
-              // 1. Requestor Logic
-              if(r === 'Requester' && s === 'Active') {
-                  document.getElementById("Closure_Requestor_Remarks").disabled = false;
-              }
-              
-              // 2. Reviewer Logic
               if(s === 'Closure Pending Review' && r === 'Reviewer') {
-                  document.getElementById("Closure_Reviewer_Remarks").disabled = false;
-                  // Reviewer sees requestor's input but can't edit it
+                  document.getElementById("div-closure-req").classList.remove('hidden'); // See req
+                  document.getElementById("div-closure-rev").classList.remove('hidden'); // See rev
+                  document.getElementById("Closure_Reviewer_Remarks").disabled = false; // Edit rev
                   btns.innerHTML = `<button onclick="upd('reject_closure')" class="bg-red-500 text-white px-4 py-2 rounded font-bold">Reject</button><button onclick="upd('approve')" class="bg-emerald-600 text-white px-4 py-2 rounded font-bold">Verify Closure</button>`;
               }
-              
-              // 3. Approver Logic
-              if(s === 'Closure Pending Approval' && r === 'Approver') {
-                  document.getElementById("Closure_Approver_Remarks").disabled = false;
-                  // Approver sees previous inputs
+              else if(s === 'Closure Pending Approval' && r === 'Approver') {
+                  document.getElementById("div-closure-req").classList.remove('hidden');
+                  document.getElementById("div-closure-rev").classList.remove('hidden');
+                  document.getElementById("div-closure-app").classList.remove('hidden');
+                  document.getElementById("Closure_Approver_Remarks").disabled = false; // Edit app
                   btns.innerHTML = `<button onclick="upd('reject_closure')" class="bg-red-500 text-white px-4 py-2 rounded font-bold">Reject</button><button onclick="upd('approve')" class="bg-black text-white px-4 py-2 rounded font-bold">Final Close</button>`;
+              } 
+              else if (s === 'Closed') {
+                  // View All
+                  document.getElementById("div-closure-req").classList.remove('hidden');
+                  document.getElementById("div-closure-rev").classList.remove('hidden');
+                  document.getElementById("div-closure-app").classList.remove('hidden');
+                  // Download Button
+                   btns.innerHTML = `<a href="${API}/download-pdf/${currentPermitId}" target="_blank" class="bg-gray-800 text-white px-4 py-2 rounded font-bold">Download Closed Permit</a>`;
               }
           }
           showForm();

@@ -199,7 +199,7 @@ app.post('/api/permit-data', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 7. RENEWALS (With 8-Hour Logic & History)
+// 7. RENEWALS
 app.post('/api/renewal', async (req, res) => {
     try {
         const { PermitID, userRole, userName, action, ...data } = req.body;
@@ -216,20 +216,14 @@ app.post('/api/renewal', async (req, res) => {
              const reqStart = new Date(data.RenewalValidFrom);
              const reqEnd = new Date(data.RenewalValidTill);
 
-             // 1. Within Permit Period
              if (reqStart < permitStart || reqEnd > permitEnd) return res.status(400).json({ error: "Renewal must be within original Permit Validity." });
-             
-             // 2. Start < End
              if (reqStart >= reqEnd) return res.status(400).json({ error: "Invalid Time Range." });
-
-             // 3. Max 8 Hours
+             
              const duration = (reqEnd - reqStart) / (1000 * 60 * 60);
              if (duration > 8) return res.status(400).json({ error: "Renewal cannot exceed 8 Hours." });
 
-             // 4. Sequential
              if (renewals.length > 0) {
                  const lastRen = renewals[renewals.length - 1];
-                 // Allow new renewal only if previous one is approved/rejected/completed
                  const lastEnd = new Date(lastRen.valid_till);
                  if (reqStart < lastEnd) return res.status(400).json({ error: "Renewal must start after the previous renewal ends." });
              }
@@ -258,15 +252,6 @@ app.post('/api/renewal', async (req, res) => {
                 last.status = 'pending_approval'; 
                 last.rev_name = userName; 
                 last.rev_at = now;
-                // Update technical fields if changed by reviewer
-                Object.assign(last, { 
-                    valid_from: data.RenewalValidFrom, 
-                    valid_till: data.RenewalValidTill, 
-                    hc: data.RenewalHC, 
-                    toxic: data.RenewalToxic, 
-                    oxygen: data.RenewalOxygen, 
-                    precautions: data.RenewalPrecautions 
-                });
                 status = "Renewal Pending Approval"; 
             }
         }
@@ -329,7 +314,6 @@ app.get('/api/download-excel', async (req, res) => {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Permits Summary');
 
-        // Headers
         worksheet.columns = [
             { header: 'Permit ID', key: 'id', width: 15 },
             { header: 'Status', key: 'status', width: 20 },
@@ -369,7 +353,7 @@ app.get('/api/download-excel', async (req, res) => {
     } catch (e) { res.status(500).send(e.message); }
 });
 
-// 12. PDF DOWNLOAD (Format & Watermark)
+// 12. PDF DOWNLOAD (Matching Work Permit System.pdf)
 app.get('/api/download-pdf/:id', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -384,86 +368,103 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         res.setHeader('Content-Disposition', `attachment; filename=${p.PermitID}.pdf`);
         doc.pipe(res);
 
-        // WATERMARK
-        const addWatermark = () => {
-            const watermarkText = p.Status.includes('Closed') ? 'CLOSED' : 'ACTIVE';
-            const color = p.Status.includes('Closed') ? '#ef4444' : '#22c55e'; 
-            doc.save();
-            doc.rotate(-45, { origin: [300, 400] });
-            doc.fontSize(80).fillColor(color).opacity(0.15).text(watermarkText, 100, 350, { align: 'center', width: 400 });
-            doc.restore();
-        };
-
         // --- PAGE 1 ---
-        addWatermark();
-        doc.font('Helvetica-Bold').fontSize(14).text('INDIAN OIL CORPORATION LIMITED', { align: 'center' });
+        // Header
+        doc.fontSize(14).font('Helvetica-Bold').text('Indian Oil Corporation Limited', { align: 'center' });
         doc.fontSize(10).text('Pipeline Division', { align: 'center' });
-        doc.text('COMPOSITE WORK PERMIT', { align: 'center', underline:true });
+        doc.fontSize(12).text('COMPOSITE WORK PERMIT (Cold/Hot/Confined Space/Height/Excavation)', { align: 'center', underline:true });
         doc.moveDown();
 
+        // Details Block
         doc.fontSize(9).font('Helvetica');
-        const row = (l, r, y) => { doc.text(l, 50, y); doc.text(r, 320, y); };
-        
-        doc.font('Helvetica-Bold').text(`Type of Work: ${d.WorkType}`, 50, doc.y); doc.moveDown(0.5);
-        row(`Permit No: ${p.PermitID}`, `Plant: Pipeline`, doc.y); doc.moveDown(0.5);
-        row(`Applicant: ${d.OfficialName}`, `Dept: ${d.IssuedToDept}`, doc.y); doc.moveDown(0.5);
-        doc.text(`Description: ${d.Desc}`); doc.moveDown(0.5);
-        doc.text(`Exact Location: ${d.ExactLocation} (${d.LocationUnit})`); doc.moveDown(0.5);
-        row(`Valid From: ${new Date(p.ValidFrom).toLocaleString()}`, `Valid To: ${new Date(p.ValidTo).toLocaleString()}`, doc.y); doc.moveDown();
+        const col1 = 40, col2 = 300;
+        let y = doc.y;
 
-        doc.rect(40, doc.y, 520, 20).fill('#eee').stroke();
-        doc.fillColor('black').font('Helvetica-Bold').text('OTHER PERMIT DETAILS', 50, doc.y - 15);
-        doc.moveDown(0.5);
+        doc.text(`Type of Work: ${d.WorkType}`, col1, y); 
+        doc.text(`Work Permit Request No: ${p.PermitID}`, col2, y); y += 15;
         
-        row(`Vendor: ${d.Vendor || '-'}`, `Loc Permit No: ${d.LocationPermitSno || '-'}`, doc.y); doc.moveDown(0.5);
-        row(`Ref Isolation: ${d.RefIsolationCert || '-'}`, `Cross Ref: ${d.CrossRefPermits || '-'}`, doc.y); doc.moveDown(0.5);
-        row(`JSA Ref: ${d.JsaRef || '-'}`, `MOC: ${d.MocRequired} (Ref: ${d.MocRef || '-'})`, doc.y); doc.moveDown(0.5);
-        doc.text(`CCTV Available: ${d.CctvAvailable} | Details: ${d.CctvDetail || '-'}`);
-        doc.moveDown();
+        doc.text(`Applicant Name: ${d.RequesterName}`, col1, y);
+        doc.text(`Description: ${d.Desc}`, col2, y); y += 15;
 
-        doc.font('Helvetica-Bold').text('SAFETY CHECKLIST (GENERAL POINTS)', {underline:true});
-        doc.font('Helvetica').fontSize(9);
+        doc.text(`Exact Location: ${d.ExactLocation} (${d.LocationUnit})`, col1, y);
+        doc.text(`Valid From: ${new Date(p.ValidFrom).toLocaleString()}`, col2, y); y += 15;
+
+        // Other Details Box
+        doc.rect(col1, y, 520, 70).stroke();
+        doc.font('Helvetica-Bold').text('OTHER PERMIT DETAILS', col1+5, y+5);
+        doc.font('Helvetica');
+        let boxY = y + 20;
+        doc.text(`Vendor: ${d.Vendor || '-'}`, col1+5, boxY); doc.text(`Plant: Pipeline`, col2, boxY); boxY += 12;
+        doc.text(`Ref Isolation: ${d.RefIsolationCert || '-'}`, col1+5, boxY); doc.text(`Issued to Dept: ${d.IssuedToDept}`, col2, boxY); boxY += 12;
+        doc.text(`JSA Ref No: ${d.JsaRef || '-'}`, col1+5, boxY); doc.text(`Valid To: ${new Date(p.ValidTo).toLocaleString()}`, col2, boxY); boxY += 12;
+        doc.text(`CCTV: ${d.CctvAvailable}`, col1+5, boxY); doc.text(`Cross Ref: ${d.CrossRefPermits || '-'}`, col2, boxY);
+        
+        doc.y = y + 80; 
+        
+        // General Checklist Table
+        doc.font('Helvetica-Bold').text('GENERAL CHECKLIST');
+        doc.font('Helvetica');
+        
         const gpQs = [
-            {id:"GP_Q1", t:"Equipment/Area Inspected"}, {id:"GP_Q2", t:"Surrounding Area Cleaned"}, {id:"GP_Q3", t:"Sewers Covered"}, 
-            {id:"GP_Q4", t:"Hazards Considered"}, {id:"GP_Q5", t:"Equipment Blinded", d:"GP_Q5_Detail"}, 
-            {id:"GP_Q6", t:"Drained & Depressurized"}, {id:"GP_Q7", t:"Steamed/Purged"}, {id:"GP_Q8", t:"Water Flushed"},
-            {id:"GP_Q9", t:"Fire Tender Access"}, {id:"GP_Q10", t:"Iron Sulfide Removed"},
-            {id:"GP_Q11", t:"Electrically Isolated", d:"GP_Q11_Detail"}, {id:"GP_Q12", t:"Gas Test (Toxic/HC/O2)"}, 
-            {id:"GP_Q13", t:"Fire Extinguisher"}, {id:"GP_Q14", t:"Area Cordoned Off"}
+            {id:"GP_Q1", t:"1. Equipment/Work Area Inspected"}, 
+            {id:"GP_Q2", t:"2. Surrounding Area Cleaned/Covered"}, 
+            {id:"GP_Q3", t:"3. Sewer Manhole Covered"}, 
+            {id:"GP_Q4", t:"4. Hazards Considered"}, 
+            {id:"GP_Q5", t:"5. Equipment Blinded/Isolated", d:"GP_Q5_Detail"}, 
+            {id:"GP_Q6", t:"6. Drained & Depressurized"}, 
+            {id:"GP_Q7", t:"7. Steamed/Purged"}, 
+            {id:"GP_Q8", t:"8. Water Flushed"},
+            {id:"GP_Q9", t:"9. Fire Tender Access"}, 
+            {id:"GP_Q10", t:"10. Iron Sulfide Removed"}, 
+            {id:"GP_Q11", t:"11. Electrically Isolated", d:"GP_Q11_Detail"}, 
+            {id:"GP_Q12", t:"12. Gas Test"}, 
+            {id:"GP_Q13", t:"13. Fire Extinguisher Provided"}, 
+            {id:"GP_Q14", t:"14. Area Cordoned Off"}
         ];
-        
-        gpQs.forEach((q, i) => {
+
+        gpQs.forEach(q => {
             let val = d[q.id] === 'Yes' ? '[YES]' : '[NA]';
-            if(q.id === "GP_Q12") val = `Tox:${d.GP_Q12_ToxicGas||'-'} HC:${d.GP_Q12_HC||'-'} O2:${d.GP_Q12_Oxygen||'-'}`;
-            doc.text(`${i+1}. ${q.t}`);
+            if(q.id === 'GP_Q12') val = `Tox:${d.GP_Q12_ToxicGas} HC:${d.GP_Q12_HC} O2:${d.GP_Q12_Oxygen}`;
+            doc.text(`${q.t}`);
             doc.text(val, 450, doc.y - 10);
-            if(q.d && d[q.d]) doc.text(`   Details: ${d[q.d]}`, {indent: 20});
+            if(q.d && d[q.d]) doc.text(`   Details: ${d[q.d]}`);
         });
 
         // --- PAGE 2 ---
         doc.addPage();
-        addWatermark();
         doc.font('Helvetica-Bold').text('SPECIFIC WORK CHECKLIST');
         doc.font('Helvetica');
+        
         const spQs = [
-            {id:"HW_Q1", t:"Ventilation"}, {id:"HW_Q2", t:"Exit Means"}, {id:"HW_Q3", t:"Standby Person"},
-            {id:"HW_Q16", t:"Height Permit Taken", d:"HW_Q16_Detail"}, {id:"VE_Q1", t:"Spark Arrestor (Veh)"}, {id:"EX_Q1", t:"Excavation Clear"}
+            {id:"HW_Q1", t:"1. Ventilation/Lighting"}, 
+            {id:"HW_Q2", t:"2. Means of Exit"}, 
+            {id:"HW_Q3", t:"3. Standby Person"},
+            {id:"HW_Q4", t:"4. Trapped Oil/Gas Check"}, 
+            {id:"HW_Q5", t:"5. Shield Against Spark"}, 
+            {id:"HW_Q6", t:"6. Equipment Grounded"},
+            {id:"HW_Q7", t:"7. Attendant at Manway"},
+            {id:"HW_Q8", t:"8. Communication"},
+            {id:"HW_Q9", t:"9. Rescue Equipment"},
+            {id:"HW_Q16", t:"16. Height Permit Taken", d:"HW_Q16_Detail"}, 
+            {id:"VE_Q1", t:"17. Spark Arrestor Vehicle"}, 
+            {id:"EX_Q1", t:"18. Excavation Clearance"}
         ];
-        spQs.forEach((q, i) => {
-            const val = d[q.id] === 'Yes' ? '[YES]' : '[NA]';
-            doc.text(`${String.fromCharCode(65+i)}. ${q.t}`);
+
+        spQs.forEach(q => {
+            let val = d[q.id] === 'Yes' ? '[YES]' : '[NA]';
+            doc.text(`${q.t}`);
             doc.text(val, 450, doc.y - 10);
         });
 
         doc.moveDown();
-        doc.font('Helvetica-Bold').text('REMARKS / HAZARDS IDENTIFIED:');
+        doc.font('Helvetica-Bold').text('Remarks: Residual Hazards');
         const hazards = ["H_H2S", "H_LackOxygen", "H_Corrosive", "H_ToxicGas", "H_Combustible", "H_Steam", "H_PyroIron", "H_N2Gas", "H_Height", "H_LooseEarth", "H_HighNoise", "H_Radiation"];
         let hText = "";
         hazards.forEach(h => { if(d[h] === 'Y') hText += `[X] ${h.replace('H_','')}  `; });
         doc.font('Helvetica').text(hText || "None");
 
         doc.moveDown();
-        doc.font('Helvetica-Bold').text('PPE REQUIRED:');
+        doc.font('Helvetica-Bold').text('PPE Used:');
         const ppe = ["P_FaceShield", "P_FreshAirMask", "P_CompressedBA", "P_Goggles", "P_DustRespirator", "P_Earmuff", "P_LifeLine", "P_Apron", "P_SafetyHarness", "P_SafetyNet", "P_Airline"];
         let pText = "";
         ppe.forEach(p => { if(d[p] === 'Y') pText += `[X] ${p.replace('P_','')}  `; });
@@ -471,29 +472,29 @@ app.get('/api/download-pdf/:id', async (req, res) => {
 
         doc.moveDown();
         doc.text(`Additional Precautions: ${d.AdditionalPrecautions || '-'}`);
+        
         doc.moveDown();
-        doc.font('Helvetica-Bold').text('DIGITAL SIGNATURES', {underline:true});
+        doc.font('Helvetica-Bold').text('DIGITAL SIGNATURES');
         doc.font('Helvetica');
-        doc.text(`Requested By: ${d.RequesterName} (${d.RequesterEmail})`);
+        doc.text(`Requested By: ${d.RequesterName}`);
         doc.text(`Reviewed By: ${d.Reviewer_Sig || 'Pending'} (${d.Reviewer_Remarks || '-'})`);
         doc.text(`Approved By: ${d.Approver_Sig || 'Pending'} (${d.Approver_Remarks || '-'})`);
 
         // --- PAGE 3 ---
         doc.addPage();
-        addWatermark();
-        doc.font('Helvetica-Bold').text('CLEARANCE RENEWAL HISTORY');
+        doc.font('Helvetica-Bold').text('CLEARANCE RENEWAL');
         doc.font('Helvetica');
+        
         const rens = JSON.parse(p.RenewalsJSON || "[]");
         if(rens.length === 0) doc.text("No renewals recorded.");
         else {
+            // Renewal Table Header
+            let rY = doc.y;
+            doc.text("Valid From | Valid To | HC% | Tox | O2% | Status", 40, rY);
+            doc.moveDown();
             rens.forEach(r => {
-                doc.text(`Period: ${r.valid_from.replace('T',' ')} to ${r.valid_till.replace('T',' ')}`);
-                doc.text(`Status: ${r.status.toUpperCase()} | HC: ${r.hc}% | Tox: ${r.toxic} | O2: ${r.oxygen}%`);
-                doc.text(`Req By: ${r.req_name} (${r.req_at})`);
-                if(r.rev_name) doc.text(`Rev By: ${r.rev_name} (${r.rev_at})`);
-                if(r.app_name) doc.text(`App By: ${r.app_name} (${r.app_at})`);
-                doc.moveDown(0.5);
-                doc.text('------------------------------------------------');
+                doc.text(`${r.valid_from.replace('T',' ')} | ${r.valid_till.replace('T',' ')} | ${r.hc} | ${r.toxic} | ${r.oxygen} | ${r.status}`);
+                doc.text(`   (Req: ${r.req_name}, App: ${r.app_name || '-'})`);
                 doc.moveDown(0.5);
             });
         }
@@ -501,8 +502,27 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.moveDown(2);
         doc.font('Helvetica-Bold').text('CLOSING OF WORK PERMIT');
         doc.font('Helvetica');
-        doc.text(`Receiver Sig: ${d.Closure_Receiver_Sig || 'Not Signed'}`);
-        doc.text(`Issuer Sig: ${d.Closure_Issuer_Sig || 'Not Signed'} (Remarks: ${d.Closure_Issuer_Remarks || '-'})`);
+        doc.text(`Receiver (Job Completed): ${d.Closure_Receiver_Sig || 'Not Signed'}`);
+        doc.text(`Reviewer (Verified): ${d.Reviewer_Sig.includes('Closure') ? 'Verified' : 'Pending'}`);
+        doc.text(`Issuer (Verified Safe): ${d.Closure_Issuer_Sig || 'Not Signed'} (Remarks: ${d.Closure_Issuer_Remarks || '-'})`);
+
+        doc.moveDown();
+        doc.font('Helvetica-Bold').text('GENERAL INSTRUCTIONS / DO\'S & DON\'TS');
+        doc.font('Helvetica').fontSize(8);
+        doc.text("1. Work Permit shall be filled up carefully and no column shall be left blank.");
+        doc.text("2. In case of fire alarm all work must immediately be stopped.");
+        doc.text("3. Gas test is mandatory for Hot Work.");
+        doc.text("4. Ensure availability of valid work permit before start of work.");
+        doc.text("5. Never stand or work under suspended loads.");
+        doc.text("6. EMERGENCY PHONE NOS: FIRE: 101, AMBULANCE: 102");
+
+        // WATERMARK (Active/Closed)
+        const watermarkText = p.Status.includes('Closed') ? 'CLOSED' : 'ACTIVE';
+        const color = p.Status.includes('Closed') ? '#ef4444' : '#22c55e';
+        doc.save();
+        doc.rotate(-45, { origin: [300, 400] });
+        doc.fontSize(80).fillColor(color).opacity(0.15).text(watermarkText, 100, 350, { align: 'center', width: 400 });
+        doc.restore();
 
         doc.end();
     } catch (e) { res.status(500).send(e.message); }

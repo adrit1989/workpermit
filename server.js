@@ -358,7 +358,7 @@ app.get('/api/download-excel', async (req, res) => {
     } catch (e) { res.status(500).send(e.message); }
 });
 
-// 12. PDF DOWNLOAD (With bufferPages FIX)
+// 12. PDF DOWNLOAD
 app.get('/api/download-pdf/:id', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -367,8 +367,6 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         
         const p = result.recordset[0];
         const d = JSON.parse(p.FullDataJSON);
-        
-        // --- FIX: bufferPages: true IS CRITICAL FOR WATERMARKS ---
         const doc = new PDFDocument({ margin: 30, size: 'A4', bufferPages: true });
         
         res.setHeader('Content-Type', 'application/pdf');

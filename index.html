@@ -11,7 +11,20 @@
       body { background: linear-gradient(135deg, #0f172a 0%, #312e81 50%, #4c1d95 100%); color: #1e293b; font-family: sans-serif; font-size: 0.85rem; }
       .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); border-radius: 0.75rem; padding: 1.25rem; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
       input, select, textarea { width: 100%; border: 1px solid #cbd5e1; padding: 0.4rem; border-radius: 0.375rem; font-size: 0.85rem; }
-      input:disabled, select:disabled, textarea:disabled { background-color: #e2e8f0; color: #64748b; cursor: not-allowed; }
+      /* Locked Fields are Read-Only but Clear */
+      input:disabled, select:disabled, textarea:disabled { 
+          background-color: #f8fafc; 
+          color: #0f172a; 
+          border-color: #cbd5e1; 
+          cursor: not-allowed; 
+          opacity: 1; 
+          font-weight: 500;
+      }
+      /* Radio/Checkbox disabled state */
+      input[type="radio"]:disabled, input[type="checkbox"]:disabled {
+          accent-color: #4f46e5;
+          opacity: 0.8;
+      }
       .status-badge { padding: 2px 8px; border-radius: 99px; font-weight: bold; font-size: 0.7rem; text-transform: uppercase; }
       #map { height: 500px; width: 100%; border-radius: 0.75rem; }
     </style>
@@ -246,13 +259,41 @@
           const p = await apiCall('/permit-data', 'POST', {permitId:id});
           currentPermitId=id;
           
-          document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=true);
+          // --- FIX: Robust Population of ALL fields including Radios/Checkboxes ---
+          // 1. Lock all fields initially
+          document.querySelectorAll('input, textarea, select').forEach(e => e.disabled = true);
           
-          Object.keys(p).forEach(k=>{ const el=document.getElementById(k); if(el){if(el.type==='checkbox')el.checked=(p[k]==='Y'); else el.value=p[k];} });
-          document.querySelectorAll('input[type="checkbox"]').forEach(c=>{ if(p[c.name]==='Y') c.checked=true; });
+          // 2. Iterate through JSON data
+          Object.keys(p).forEach(key => {
+              // Try finding element by ID (Text, Select, Textarea)
+              const el = document.getElementById(key);
+              if(el) {
+                  if(el.type === 'checkbox') el.checked = (p[key] === 'Y');
+                  else el.value = p[key];
+              }
+              
+              // Try finding Radio Buttons by Name (Checklists)
+              const radios = document.querySelectorAll(`input[name="${key}"]`);
+              if(radios.length > 0) {
+                  radios.forEach(r => {
+                      if(r.value === p[key]) r.checked = true;
+                  });
+              }
+              
+              // Try finding Checkboxes by Name (Hazards)
+              const checkboxes = document.querySelectorAll(`input[type="checkbox"][name="${key}"]`);
+              if(checkboxes.length > 0) {
+                  checkboxes.forEach(c => {
+                      if(p[key] === 'Y') c.checked = true;
+                  });
+              }
+          });
 
-          document.getElementById("fs-reviewer-section").classList.add('hidden'); document.getElementById("fs-approver-section").classList.add('hidden');
-          document.getElementById("renewals-section").classList.add('hidden'); document.getElementById("closure-section").classList.add('hidden');
+          // 3. UI State Management
+          document.getElementById("fs-reviewer-section").classList.add('hidden'); 
+          document.getElementById("fs-approver-section").classList.add('hidden');
+          document.getElementById("renewals-section").classList.add('hidden'); 
+          document.getElementById("closure-section").classList.add('hidden');
           document.getElementById("btn-reject-renewal").classList.add('hidden');
           
           const btns = document.getElementById("action-buttons"); btns.innerHTML="";

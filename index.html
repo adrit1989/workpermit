@@ -58,6 +58,7 @@
           <div class="flex justify-between items-center mb-4">
             <h1 class="text-2xl font-bold text-white">Dashboard</h1>
             <div class="flex gap-2">
+              <button id="btn-add-user" onclick="showAddUser()" class="bg-purple-600 text-white px-4 py-1.5 rounded font-bold text-xs hidden shadow">Add User</button>
               <button id="btn-view-map" onclick="showMap()" class="bg-amber-500 text-white px-4 py-1.5 rounded font-bold text-xs hidden shadow">Map View</button>
               <button id="btn-download-excel" onclick="window.open('/api/download-excel')" class="bg-blue-600 text-white px-4 py-1.5 rounded font-bold text-xs hidden shadow">Download Excel</button>
               <button id="btn-new-permit" onclick="showNewPermit()" class="bg-emerald-600 text-white px-4 py-1.5 rounded font-bold text-xs hidden shadow">+ New Permit</button>
@@ -72,6 +73,20 @@
           <div class="glass-panel overflow-x-auto">
              <table class="w-full text-xs text-left"><thead class="bg-slate-100"><tr><th class="p-2">ID</th><th>Work</th><th>Vendor</th><th>Req</th><th>Status</th><th>Action</th></tr></thead><tbody id="permit-list-body" class="divide-y"></tbody></table>
           </div>
+        </div>
+
+        <div id="view-add-user" class="hidden flex items-center justify-center h-full">
+            <div class="glass-panel w-96 relative">
+                <button onclick="showDashboard()" class="absolute top-2 right-2 text-gray-500 hover:text-gray-800 font-bold">✕</button>
+                <h3 class="font-bold text-indigo-700 mb-4 text-lg">Add New User</h3>
+                <form onsubmit="event.preventDefault(); submitNewUser();" class="space-y-3">
+                    <div><label>Full Name</label><input id="new-user-name" required></div>
+                    <div><label>Email (Login ID)</label><input id="new-user-email" type="email" required></div>
+                    <div><label>Role</label><select id="new-user-role"><option>Requester</option><option>Reviewer</option><option>Approver</option></select></div>
+                    <div><label>Password</label><input id="new-user-pass" type="password" required></div>
+                    <button class="w-full bg-purple-600 text-white py-2 rounded font-bold mt-2">Create User</button>
+                </form>
+            </div>
         </div>
 
         <div id="view-map-container" class="hidden h-full flex flex-col pt-4">
@@ -220,6 +235,7 @@
               document.getElementById("btn-view-map").classList.remove('hidden');
               document.getElementById("btn-download-excel").classList.remove('hidden');
               document.getElementById("charts-container").classList.remove('hidden');
+              document.getElementById("btn-add-user").classList.remove('hidden'); // Show Add User button
               loadStats();
           }
       }
@@ -241,16 +257,12 @@
           window.users.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`);
           document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false);
           document.getElementById("OfficialName").disabled=true;
-          
           document.querySelectorAll('input[type="radio"][value="Yes"]').forEach(r => r.checked = true);
           document.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = true);
-
-          // Force hide sections for new permit
           document.getElementById("fs-reviewer-section").classList.add('hidden'); 
           document.getElementById("fs-approver-section").classList.add('hidden');
           document.getElementById("renewals-section").classList.add('hidden'); 
           document.getElementById("closure-section").classList.add('hidden');
-
           document.getElementById("action-buttons").innerHTML = `<button type="button" onclick="submitNewPermit()" class="bg-blue-600 text-white px-6 py-2 rounded font-bold shadow hover:bg-blue-700">Submit Permit</button>`;
           showForm();
       }
@@ -269,9 +281,7 @@
       async function openPermit(id) {
           const p = await apiCall('/permit-data', 'POST', {permitId:id});
           currentPermitId=id;
-          
           document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=true);
-          
           Object.keys(p).forEach(key=>{ 
               const el=document.getElementById(key); 
               if(el) { if(el.type==='checkbox')el.checked=(p[key]==='Y'); else el.value=p[key]; }
@@ -280,18 +290,15 @@
               const checks = document.querySelectorAll(`input[type="checkbox"][name="${key}"]`);
               if(checks.length>0) checks.forEach(c=>{ if(p[key]==='Y') c.checked=true; });
           });
-
           if(p.H_Other === 'Y') {
               document.getElementById("H_Other_Detail").classList.remove("hidden");
               document.getElementById("H_Other_Detail").value = p.H_Other_Detail || "";
           } else {
               document.getElementById("H_Other_Detail").classList.add("hidden");
           }
-
           document.getElementById("fs-reviewer-section").classList.add('hidden'); document.getElementById("fs-approver-section").classList.add('hidden');
           document.getElementById("renewals-section").classList.add('hidden'); document.getElementById("closure-section").classList.add('hidden');
           document.getElementById("btn-reject-renewal").classList.add('hidden');
-          
           const btns = document.getElementById("action-buttons"); btns.innerHTML="";
           const r=currentUser.Role; const s=p.Status;
 
@@ -312,7 +319,6 @@
           if(s==='Active' || s.includes('Renewal')) {
               document.getElementById("renewals-section").classList.remove('hidden'); document.getElementById("closure-section").classList.remove('hidden');
               let html = `<a href="${API}/download-pdf/${currentPermitId}" target="_blank" class="bg-gray-800 text-white px-4 py-2 rounded font-bold">Download PDF</a>`;
-              
               if(r==='Requester' && s === 'Active') {
                   document.getElementById("form-renewal").classList.remove('hidden');
                   document.querySelectorAll("#form-renewal input").forEach(e=>e.disabled=false);
@@ -320,10 +326,8 @@
                   html += `<button onclick="upd('initiate_closure')" class="bg-amber-500 text-white px-4 py-2 rounded font-bold ml-2">Job Complete</button>`;
               }
               btns.innerHTML = html;
-              
               const rens=JSON.parse(p.RenewalsJSON||"[]"); const tbody=document.getElementById("renewals-table-body"); tbody.innerHTML=""; 
               const lastRen = rens[rens.length - 1];
-
               if(s === 'Renewal Pending Review' && r === 'Reviewer' && lastRen) {
                   document.getElementById("form-renewal").classList.remove('hidden');
                   populateRenewalForm(lastRen);
@@ -337,23 +341,13 @@
                   document.getElementById("btn-submit-renewal").innerText = "Approve Renewal";
                   document.getElementById("btn-reject-renewal").classList.remove('hidden');
               }
-
               rens.forEach(x=>{
-                  tbody.innerHTML+=`
-                  <tr class="border-b">
-                      <td>${x.valid_from.replace('T',' ')}<br>${x.valid_till.replace('T',' ')}</td>
-                      <td>HC:${x.hc} Tox:${x.toxic} O2:${x.oxygen}</td>
-                      <td class="font-bold text-blue-600 uppercase">${x.status}</td>
-                      <td>${x.req_name}<br><span class="text-[9px]">${x.req_at}</span></td>
-                      <td>${x.rev_name||'-'}<br><span class="text-[9px]">${x.rev_at||''}</span></td>
-                      <td>${x.app_name||'-'}<br><span class="text-[9px]">${x.app_at||''}</span></td>
-                  </tr>`;
+                  tbody.innerHTML+=`<tr class="border-b"><td>${x.valid_from.replace('T',' ')}<br>${x.valid_till.replace('T',' ')}</td><td>HC:${x.hc} Tox:${x.toxic} O2:${x.oxygen}</td><td class="font-bold text-blue-600 uppercase">${x.status}</td><td>${x.req_name}<br><span class="text-[9px]">${x.req_at}</span></td><td>${x.rev_name||'-'}<br><span class="text-[9px]">${x.rev_at||''}</span></td><td>${x.app_name||'-'}<br><span class="text-[9px]">${x.app_at||''}</span></td></tr>`;
               });
           }
           if(s.includes('Closure')) {
               document.getElementById("closure-section").classList.remove('hidden');
               document.getElementById("Site_Restored_Check").checked = (p.Site_Restored_Check === 'Yes');
-              
               if(s === 'Closure Pending Review' && r === 'Reviewer') {
                   document.getElementById("Reviewer_Remarks").disabled = false;
                   btns.innerHTML = `<button onclick="upd('reject_closure')" class="bg-red-500 text-white px-4 py-2 rounded font-bold">Reject</button><button onclick="upd('approve')" class="bg-emerald-600 text-white px-4 py-2 rounded font-bold">Verify Closure</button>`;
@@ -488,7 +482,21 @@
           }
       }
       
-      // SHOW FORM FUNCTION
+      // USER MANAGEMENT LOGIC
+      function showAddUser() {
+          document.getElementById("view-dashboard").style.display='none';
+          document.getElementById("view-add-user").classList.remove("hidden");
+      }
+      async function submitNewUser() {
+          const n=document.getElementById("new-user-name").value;
+          const e=document.getElementById("new-user-email").value;
+          const r=document.getElementById("new-user-role").value;
+          const p=document.getElementById("new-user-pass").value;
+          const res = await apiCall('/add-user', 'POST', {name:n, email:e, role:r, password:p});
+          if(res.success) { alert("User Created!"); showDashboard(); }
+          else alert(res.error);
+      }
+
       function showForm() { 
           document.getElementById("view-dashboard").style.display='none'; 
           document.getElementById("view-form").style.display='block'; 
@@ -498,6 +506,7 @@
           document.getElementById("view-dashboard").style.display='block'; 
           document.getElementById("view-form").style.display='none'; 
           document.getElementById("view-map-container").classList.add('hidden'); 
+          document.getElementById("view-add-user").classList.add('hidden');
           loadDashboard(); 
       }
     </script>

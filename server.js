@@ -311,7 +311,7 @@ app.post('/api/renewal', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 8. MAP DATA & EXCEL
+// 8. MAP DATA
 app.post('/api/map-data', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -324,6 +324,11 @@ app.post('/api/map-data', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.get('/api/kml', async (req, res) => { if(!kmlContainerClient) return res.json([]); let b=[]; for await(const x of kmlContainerClient.listBlobsFlat()) b.push({name:x.name,url:kmlContainerClient.getBlockBlobClient(x.name).url}); res.json(b); });
+app.post('/api/kml', upload.single('file'), async (req, res) => { if(!kmlContainerClient) return; const b = kmlContainerClient.getBlockBlobClient(`${Date.now()}-${req.file.originalname}`); await b.uploadData(req.file.buffer, {blobHTTPHeaders:{blobContentType:"application/vnd.google-earth.kml+xml"}}); res.json({success:true, url:b.url}); });
+app.delete('/api/kml/:name', async (req, res) => { if(!kmlContainerClient) return; await kmlContainerClient.getBlockBlobClient(req.params.name).delete(); res.json({success:true}); });
+
+// 10. STATISTICS API
 app.post('/api/stats', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -335,6 +340,7 @@ app.post('/api/stats', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// 11. EXCEL DOWNLOAD
 app.get('/api/download-excel', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -352,7 +358,7 @@ app.get('/api/download-excel', async (req, res) => {
     } catch (e) { res.status(500).send(e.message); }
 });
 
-// 12. PDF DOWNLOAD (TABLE FORMAT)
+// 12. PDF DOWNLOAD
 app.get('/api/download-pdf/:id', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -439,8 +445,12 @@ app.get('/api/download-pdf/:id', async (req, res) => {
 
         const hazards = ["H_H2S", "H_LackOxygen", "H_Corrosive", "H_ToxicGas", "H_Combustible", "H_Steam", "H_PyroIron", "H_N2Gas", "H_Height", "H_LooseEarth", "H_HighNoise", "H_Radiation"];
         let hList = hazards.filter(h => d[h] === 'Y').map(h => h.replace('H_','')).join(', ');
+        const ppe = ["P_FaceShield", "P_FreshAirMask", "P_CompressedBA", "P_Goggles", "P_DustRespirator", "P_Earmuff", "P_LifeLine", "P_Apron", "P_SafetyHarness", "P_SafetyNet", "P_Airline"];
+        let pList = ppe.filter(p => d[p] === 'Y').map(p => p.replace('P_','')).join(', ');
+
         doc.rect(40, doc.y, 515, 60).stroke();
         doc.text(`HAZARDS IDENTIFIED: ${hList || 'None'}`, 45, doc.y + 5, {width: 505});
+        doc.text(`PPE REQUIRED: ${pList || 'Standard'}`, 45, doc.y + 30, {width: 505});
         doc.y += 70;
 
         doc.font('Helvetica-Bold').text('DIGITAL SIGNATURES');

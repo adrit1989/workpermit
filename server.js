@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
+const PDFDocument = require('pdfkit'); 
 const { BlobServiceClient } = require('@azure/storage-blob');
 const { getConnection, sql } = require('./db');
 
@@ -12,8 +13,7 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, '.')));
 
-// --- AZURE BLOB SETUP (For KML & Attachments) ---
-// If variable is missing, app will start but Maps won't work
+// --- AZURE BLOB SETUP ---
 const AZURE_CONN_STR = process.env.AZURE_STORAGE_CONNECTION_STRING;
 let containerClient, kmlContainerClient;
 
@@ -22,10 +22,9 @@ if (AZURE_CONN_STR) {
         const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_CONN_STR);
         containerClient = blobServiceClient.getContainerClient("permit-attachments");
         kmlContainerClient = blobServiceClient.getContainerClient("map-layers");
-        // Create containers if they don't exist
         (async () => {
             await containerClient.createIfNotExists();
-            await kmlContainerClient.createIfNotExists({ access: 'blob' }); // Public for Google Maps
+            await kmlContainerClient.createIfNotExists({ access: 'blob' });
         })();
     } catch (err) { console.error("Blob Storage Error:", err.message); }
 }
@@ -37,22 +36,18 @@ function getNowIST() { return new Date().toLocaleString("en-IN", { timeZone: "As
 
 // --- API ROUTES ---
 
-// 1. LOGIN (FIXED: Checks Email column now)
+// 1. LOGIN
 app.post('/api/login', async (req, res) => {
     try {
         const pool = await getConnection();
-        // req.body.name contains the EMAIL from the dropdown value
         const result = await pool.request()
             .input('role', sql.NVarChar, req.body.role)
             .input('email', sql.NVarChar, req.body.name) 
             .input('pass', sql.NVarChar, req.body.password)
             .query('SELECT * FROM Users WHERE Role = @role AND Email = @email AND Password = @pass');
         
-        if (result.recordset.length > 0) {
-            res.json({ success: true, user: result.recordset[0] });
-        } else {
-            res.json({ success: false, message: "Invalid Credentials" });
-        }
+        if (result.recordset.length > 0) res.json({ success: true, user: result.recordset[0] });
+        else res.json({ success: false, message: "Invalid Credentials" });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -69,7 +64,7 @@ app.get('/api/users', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 3. DASHBOARD (Mimics GAS Logic)
+// 3. DASHBOARD
 app.post('/api/dashboard', async (req, res) => {
     try {
         const { role, email } = req.body;
@@ -97,7 +92,6 @@ app.post('/api/dashboard', async (req, res) => {
 app.post('/api/save-permit', upload.single('file'), async (req, res) => {
     try {
         const pool = await getConnection();
-        // Generate ID
         const idRes = await pool.request().query("SELECT TOP 1 PermitID FROM Permits ORDER BY Id DESC");
         const lastId = idRes.recordset.length > 0 ? idRes.recordset[0].PermitID : "WP-1000";
         const newId = `WP-${parseInt(lastId.split('-')[1]) + 1}`;
@@ -115,20 +109,38 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
             .input('vt', sql.DateTime, new Date(req.body.ValidTo))
             .input('lat', sql.NVarChar, req.body.Latitude || null)
             .input('lng', sql.NVarChar, req.body.Longitude || null)
+            
+            // Map Specific Columns
+            .input('locSno', sql.NVarChar, req.body.LocationPermitSno)
+            .input('iso', sql.NVarChar, req.body.RefIsolationCert)
+            .input('cross', sql.NVarChar, req.body.CrossRefPermits)
+            .input('jsa', sql.NVarChar, req.body.JsaRef)
+            .input('mocReq', sql.NVarChar, req.body.MocRequired)
+            .input('mocRef', sql.NVarChar, req.body.MocRef)
+            .input('cctv', sql.NVarChar, req.body.CctvAvailable)
+            .input('cctvDet', sql.NVarChar, req.body.CctvDetail)
+            .input('vendor', sql.NVarChar, req.body.Vendor)
+            .input('dept', sql.NVarChar, req.body.IssuedToDept)
+            .input('locUnit', sql.NVarChar, req.body.LocationUnit)
+            .input('exactLoc', sql.NVarChar, req.body.ExactLocation)
+            .input('desc', sql.NVarChar, req.body.Desc)
+            .input('offName', sql.NVarChar, req.body.OfficialName)
+
             .input('json', sql.NVarChar, JSON.stringify(fullData))
-            .query(`INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, RenewalsJSON, FullDataJSON) 
-                    VALUES (@pid, @status, @wt, @req, @rev, @app, @vf, @vt, @lat, @lng, '[]', @json)`);
+            .query(`INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, 
+                    LocationPermitSno, RefIsolationCert, CrossRefPermits, JsaRef, MocRequired, MocRef, CctvAvailable, CctvDetail, Vendor, IssuedToDept, LocationUnit, ExactLocation, [Desc], OfficialName, RenewalsJSON, FullDataJSON) 
+                    VALUES (@pid, @status, @wt, @req, @rev, @app, @vf, @vt, @lat, @lng, 
+                    @locSno, @iso, @cross, @jsa, @mocReq, @mocRef, @cctv, @cctvDet, @vendor, @dept, @locUnit, @exactLoc, @desc, @offName, '[]', @json)`);
 
         res.json({ success: true, permitId: newId });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 5. UPDATE STATUS (Review/Approve/Closure/Reject)
+// 5. UPDATE STATUS
 app.post('/api/update-status', async (req, res) => {
     try {
         const { PermitID, action, role, user, comment, ...extras } = req.body;
         const pool = await getConnection();
-        
         const current = await pool.request().input('pid', sql.NVarChar, PermitID).query("SELECT * FROM Permits WHERE PermitID = @pid");
         if(current.recordset.length === 0) return res.json({ error: "Not found" });
         
@@ -152,8 +164,17 @@ app.post('/api/update-status', async (req, res) => {
             status = 'Closure Pending Review'; data.Closure_Receiver_Sig = sig;
         }
 
-        await pool.request().input('pid', sql.NVarChar, PermitID).input('status', sql.NVarChar, status).input('json', sql.NVarChar, JSON.stringify(data))
-            .query("UPDATE Permits SET Status = @status, FullDataJSON = @json WHERE PermitID = @pid");
+        let q = pool.request()
+            .input('pid', sql.NVarChar, PermitID)
+            .input('status', sql.NVarChar, status)
+            .input('json', sql.NVarChar, JSON.stringify(data));
+            
+        if(extras.ForceBackgroundColor) {
+             q.input('bg', sql.NVarChar, extras.ForceBackgroundColor)
+              .query("UPDATE Permits SET Status = @status, FullDataJSON = @json, ForceBackgroundColor = @bg WHERE PermitID = @pid");
+        } else {
+             q.query("UPDATE Permits SET Status = @status, FullDataJSON = @json WHERE PermitID = @pid");
+        }
 
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -170,7 +191,7 @@ app.post('/api/permit-data', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 7. RENEWALS (Strict GAS Logic)
+// 7. RENEWALS
 app.post('/api/renewal', async (req, res) => {
     try {
         const { PermitID, userRole, userName, action, ...data } = req.body;
@@ -182,7 +203,6 @@ app.post('/api/renewal', async (req, res) => {
         const now = getNowIST();
 
         if (userRole === 'Requester') {
-             // Basic Check (Strict checks are also in frontend)
              renewals.push({ status: 'pending_review', valid_from: data.RenewalValidFrom, valid_till: data.RenewalValidTill, hc: data.RenewalHC, toxic: data.RenewalToxic, oxygen: data.RenewalOxygen, precautions: data.RenewalPrecautions, req_sig: `${userName} on ${now}` });
              status = "Renewal Pending Review";
         } 
@@ -273,6 +293,86 @@ app.post('/api/stats', async (req, res) => {
         result.recordset.forEach(r => { stats.total++; stats.counts[r.Status] = (stats.counts[r.Status] || 0) + 1; });
         res.json({ success: true, stats });
     } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 11. PDF DOWNLOAD (FULL FORMAT)
+app.get('/api/download-pdf/:id', async (req, res) => {
+    try {
+        const pool = await getConnection();
+        const result = await pool.request().input('pid', sql.NVarChar, req.params.id).query("SELECT * FROM Permits WHERE PermitID = @pid");
+        if(result.recordset.length === 0) return res.status(404).send('Not Found');
+        
+        const p = result.recordset[0];
+        const d = JSON.parse(p.FullDataJSON);
+        const doc = new PDFDocument({ margin: 30 });
+        
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=${p.PermitID}.pdf`);
+        doc.pipe(res);
+
+        // Header
+        doc.font('Helvetica-Bold').fontSize(16).text('INDIAN OIL CORPORATION LIMITED', { align: 'center' });
+        doc.fontSize(12).text('Pipeline Division - WORK PERMIT', { align: 'center' });
+        doc.moveDown();
+
+        // Main Details
+        const startY = doc.y;
+        doc.font('Helvetica').fontSize(10);
+        doc.text(`Permit ID: ${p.PermitID}`, 50, startY);
+        doc.text(`Status: ${p.Status}`, 300, startY);
+        doc.text(`Work Type: ${d.WorkType}`, 50, startY + 15);
+        doc.text(`Location: ${d.ExactLocation} (${d.LocationUnit})`, 300, startY + 15);
+        doc.text(`Valid From: ${new Date(p.ValidFrom).toLocaleString()}`, 50, startY + 30);
+        doc.text(`Valid To: ${new Date(p.ValidTo).toLocaleString()}`, 300, startY + 30);
+        
+        doc.moveDown(3);
+        doc.text(`Description: ${d.Desc || '-'}`);
+        doc.text(`Vendor: ${d.Vendor || '-'} | Dept: ${d.IssuedToDept || '-'}`);
+        doc.text(`Location Permit S/N: ${d.LocationPermitSno || '-'} | Isolation Cert: ${d.RefIsolationCert || '-'}`);
+        doc.text(`JSA Ref: ${d.JsaRef || '-'} | Cross Ref: ${d.CrossRefPermits || '-'}`);
+        doc.text(`MOC Req: ${d.MocRequired || 'No'} | Ref: ${d.MocRef || '-'} | CCTV: ${d.CctvAvailable || 'No'}`);
+        doc.moveDown();
+
+        // Checklists
+        doc.font('Helvetica-Bold').text('SAFETY CHECKLISTS', {underline:true});
+        doc.font('Helvetica').fontSize(9);
+        
+        const drawChecklist = (items) => {
+            items.forEach(key => {
+                if(d[key] === 'Y') doc.text(`[X] ${key}`);
+            });
+        };
+        
+        // General Points & Hazards
+        doc.text('Hazards Considered:');
+        const hazards = ["H_H2S", "H_LackOxygen", "H_Corrosive", "H_ToxicGas", "H_Combustible", "H_Steam", "H_PyroIron", "H_N2Gas", "H_Height", "H_LooseEarth", "H_HighNoise", "H_Radiation", "H_Other"];
+        hazards.forEach(h => { if(d[h] === 'Y') doc.text(` - ${h.replace('H_', '')}`); });
+        
+        doc.moveDown();
+        doc.text('PPE Required:');
+        const ppe = ["P_FaceShield", "P_FreshAirMask", "P_CompressedBA", "P_Goggles", "P_DustRespirator", "P_Earmuff", "P_LifeLine", "P_Apron", "P_SafetyHarness", "P_SafetyNet", "P_Airline", "P_GasResponder", "P_CottonCoverall"];
+        ppe.forEach(item => { if(d[item] === 'Y') doc.text(` - ${item.replace('P_', '')}`); });
+
+        doc.moveDown();
+        doc.font('Helvetica-Bold').text('SIGNATURES');
+        doc.font('Helvetica');
+        doc.text(`Requester: ${d.RequesterName} (${d.RequesterEmail})`);
+        doc.text(`Reviewer: ${d.Reviewer_Sig || 'Pending'} | Remarks: ${d.Reviewer_Remarks || '-'}`);
+        doc.text(`Approver: ${d.Approver_Sig || 'Pending'} | Remarks: ${d.Approver_Remarks || '-'}`);
+        
+        doc.moveDown();
+        doc.font('Helvetica-Bold').text('RENEWALS & CLOSURE');
+        doc.font('Helvetica');
+        if (p.RenewalsJSON) {
+            const rens = JSON.parse(p.RenewalsJSON);
+            rens.forEach(r => doc.text(`Renewal: ${r.valid_from} to ${r.valid_till} (${r.status})`));
+        }
+        
+        doc.text(`Closure Receiver: ${d.Closure_Receiver_Sig || 'Not Signed'}`);
+        doc.text(`Closure Issuer: ${d.Closure_Issuer_Sig || 'Not Signed'}`);
+        
+        doc.end();
+    } catch (e) { res.status(500).send(e.message); }
 });
 
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });

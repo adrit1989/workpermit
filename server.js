@@ -88,7 +88,7 @@ app.post('/api/dashboard', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 4. SAVE PERMIT
+// 4. SAVE PERMIT (Updated with all new fields)
 app.post('/api/save-permit', upload.single('file'), async (req, res) => {
     try {
         const pool = await getConnection();
@@ -96,6 +96,7 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
         const lastId = idRes.recordset.length > 0 ? idRes.recordset[0].PermitID : "WP-1000";
         const newId = `WP-${parseInt(lastId.split('-')[1]) + 1}`;
 
+        // Store all incoming fields (checklists, etc) in JSON
         const fullData = { ...req.body, PermitID: newId };
         
         await pool.request()
@@ -107,30 +108,29 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
             .input('app', sql.NVarChar, req.body.ApproverEmail)
             .input('vf', sql.DateTime, new Date(req.body.ValidFrom))
             .input('vt', sql.DateTime, new Date(req.body.ValidTo))
+            // New Columns
             .input('lat', sql.NVarChar, req.body.Latitude || null)
             .input('lng', sql.NVarChar, req.body.Longitude || null)
-            
-            // Map Specific Columns
-            .input('locSno', sql.NVarChar, req.body.LocationPermitSno)
-            .input('iso', sql.NVarChar, req.body.RefIsolationCert)
-            .input('cross', sql.NVarChar, req.body.CrossRefPermits)
-            .input('jsa', sql.NVarChar, req.body.JsaRef)
-            .input('mocReq', sql.NVarChar, req.body.MocRequired)
-            .input('mocRef', sql.NVarChar, req.body.MocRef)
-            .input('cctv', sql.NVarChar, req.body.CctvAvailable)
-            .input('cctvDet', sql.NVarChar, req.body.CctvDetail)
-            .input('vendor', sql.NVarChar, req.body.Vendor)
-            .input('dept', sql.NVarChar, req.body.IssuedToDept)
-            .input('locUnit', sql.NVarChar, req.body.LocationUnit)
-            .input('exactLoc', sql.NVarChar, req.body.ExactLocation)
-            .input('desc', sql.NVarChar, req.body.Desc)
-            .input('offName', sql.NVarChar, req.body.OfficialName)
-
+            .input('locSno', sql.NVarChar, req.body.LocationPermitSno || null)
+            .input('isoCert', sql.NVarChar, req.body.RefIsolationCert || null)
+            .input('crossRef', sql.NVarChar, req.body.CrossRefPermits || null)
+            .input('jsa', sql.NVarChar, req.body.JsaRef || null)
+            .input('mocReq', sql.NVarChar, req.body.MocRequired || null)
+            .input('mocRef', sql.NVarChar, req.body.MocRef || null)
+            .input('cctv', sql.NVarChar, req.body.CctvAvailable || null)
+            .input('cctvDet', sql.NVarChar, req.body.CctvDetail || null)
+            .input('vendor', sql.NVarChar, req.body.Vendor || null)
+            .input('dept', sql.NVarChar, req.body.IssuedToDept || null)
+            .input('locUnit', sql.NVarChar, req.body.LocationUnit || null)
+            .input('exactLoc', sql.NVarChar, req.body.ExactLocation || null)
+            .input('desc', sql.NVarChar, req.body.Desc || null)
+            .input('offName', sql.NVarChar, req.body.OfficialName || null)
+            // JSON Blob
             .input('json', sql.NVarChar, JSON.stringify(fullData))
             .query(`INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, 
                     LocationPermitSno, RefIsolationCert, CrossRefPermits, JsaRef, MocRequired, MocRef, CctvAvailable, CctvDetail, Vendor, IssuedToDept, LocationUnit, ExactLocation, [Desc], OfficialName, RenewalsJSON, FullDataJSON) 
                     VALUES (@pid, @status, @wt, @req, @rev, @app, @vf, @vt, @lat, @lng, 
-                    @locSno, @iso, @cross, @jsa, @mocReq, @mocRef, @cctv, @cctvDet, @vendor, @dept, @locUnit, @exactLoc, @desc, @offName, '[]', @json)`);
+                    @locSno, @isoCert, @crossRef, @jsa, @mocReq, @mocRef, @cctv, @cctvDet, @vendor, @dept, @locUnit, @exactLoc, @desc, @offName, '[]', @json)`);
 
         res.json({ success: true, permitId: newId });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -304,73 +304,97 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         
         const p = result.recordset[0];
         const d = JSON.parse(p.FullDataJSON);
-        const doc = new PDFDocument({ margin: 30 });
+        const doc = new PDFDocument({ margin: 30, size: 'A4' });
         
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=${p.PermitID}.pdf`);
         doc.pipe(res);
 
-        // Header
-        doc.font('Helvetica-Bold').fontSize(16).text('INDIAN OIL CORPORATION LIMITED', { align: 'center' });
-        doc.fontSize(12).text('Pipeline Division - WORK PERMIT', { align: 'center' });
+        // --- PAGE 1: DETAILS ---
+        doc.font('Helvetica-Bold').fontSize(14).text('INDIAN OIL CORPORATION LIMITED', { align: 'center' });
+        doc.fontSize(10).text('Pipeline Division', { align: 'center' });
+        doc.text('COMPOSITE WORK PERMIT', { align: 'center', underline:true });
         doc.moveDown();
 
-        // Main Details
-        const startY = doc.y;
-        doc.font('Helvetica').fontSize(10);
-        doc.text(`Permit ID: ${p.PermitID}`, 50, startY);
-        doc.text(`Status: ${p.Status}`, 300, startY);
-        doc.text(`Work Type: ${d.WorkType}`, 50, startY + 15);
-        doc.text(`Location: ${d.ExactLocation} (${d.LocationUnit})`, 300, startY + 15);
-        doc.text(`Valid From: ${new Date(p.ValidFrom).toLocaleString()}`, 50, startY + 30);
-        doc.text(`Valid To: ${new Date(p.ValidTo).toLocaleString()}`, 300, startY + 30);
-        
-        doc.moveDown(3);
-        doc.text(`Description: ${d.Desc || '-'}`);
-        doc.text(`Vendor: ${d.Vendor || '-'} | Dept: ${d.IssuedToDept || '-'}`);
-        doc.text(`Location Permit S/N: ${d.LocationPermitSno || '-'} | Isolation Cert: ${d.RefIsolationCert || '-'}`);
-        doc.text(`JSA Ref: ${d.JsaRef || '-'} | Cross Ref: ${d.CrossRefPermits || '-'}`);
-        doc.text(`MOC Req: ${d.MocRequired || 'No'} | Ref: ${d.MocRef || '-'} | CCTV: ${d.CctvAvailable || 'No'}`);
-        doc.moveDown();
-
-        // Checklists
-        doc.font('Helvetica-Bold').text('SAFETY CHECKLISTS', {underline:true});
+        const tableTop = doc.y;
+        const col1 = 50; const col2 = 300;
         doc.font('Helvetica').fontSize(9);
         
-        const drawChecklist = (items) => {
-            items.forEach(key => {
-                if(d[key] === 'Y') doc.text(`[X] ${key}`);
-            });
-        };
+        doc.text(`Permit No: ${p.PermitID}`, col1, doc.y); doc.text(`Plant: Pipeline`, col2, doc.y); doc.moveDown();
+        doc.text(`Type of Work: ${d.WorkType}`, col1, doc.y); doc.text(`Status: ${p.Status}`, col2, doc.y); doc.moveDown();
+        doc.text(`Applicant: ${d.OfficialName}`, col1, doc.y); doc.text(`Dept: ${d.IssuedToDept}`, col2, doc.y); doc.moveDown();
+        doc.text(`Valid From: ${new Date(p.ValidFrom).toLocaleString()}`, col1, doc.y); doc.text(`Valid To: ${new Date(p.ValidTo).toLocaleString()}`, col2, doc.y); doc.moveDown();
         
-        // General Points & Hazards
-        doc.text('Hazards Considered:');
-        const hazards = ["H_H2S", "H_LackOxygen", "H_Corrosive", "H_ToxicGas", "H_Combustible", "H_Steam", "H_PyroIron", "H_N2Gas", "H_Height", "H_LooseEarth", "H_HighNoise", "H_Radiation", "H_Other"];
-        hazards.forEach(h => { if(d[h] === 'Y') doc.text(` - ${h.replace('H_', '')}`); });
+        doc.moveDown();
+        doc.font('Helvetica-Bold').text('DESCRIPTION & LOCATION:');
+        doc.font('Helvetica').text(`Desc: ${d.Desc}`);
+        doc.text(`Exact Location: ${d.ExactLocation} (${d.LocationUnit})`);
+        
+        doc.moveDown();
+        doc.font('Helvetica-Bold').text('OTHER DETAILS:');
+        doc.font('Helvetica');
+        doc.text(`Vendor: ${d.Vendor || '-'} | Location Permit S/No: ${d.LocationPermitSno || '-'}`);
+        doc.text(`Ref Isolation: ${d.RefIsolationCert || '-'} | Cross Ref: ${d.CrossRefPermits || '-'}`);
+        doc.text(`JSA Ref: ${d.JsaRef || '-'} | MOC: ${d.MocRequired} (Ref: ${d.MocRef || '-'})`);
+        doc.text(`CCTV: ${d.CctvAvailable} | Details: ${d.CctvDetail || '-'}`);
+        
+        doc.moveDown();
+        doc.font('Helvetica-Bold').text('SAFETY CHECKLIST (General):');
+        doc.font('Helvetica');
+        const gpQs = [
+            {id:"GP_Q1", t:"Equipment Inspected"}, {id:"GP_Q2", t:"Area Cleaned"}, {id:"GP_Q3", t:"Sewers Covered"}, 
+            {id:"GP_Q4", t:"Hazards Considered"}, {id:"GP_Q5", t:"Blinded"}, {id:"GP_Q6", t:"Drained"}, {id:"GP_Q7", t:"Steamed"}, 
+            {id:"GP_Q8", t:"Water Flushed"}, {id:"GP_Q9", t:"Fire Tender Access"}, {id:"GP_Q10", t:"Iron Sulfide Removed"},
+            {id:"GP_Q11", t:"Elec Isolated"}, {id:"GP_Q13", t:"Fire Extinguisher"}, {id:"GP_Q14", t:"Cordoned"}
+        ];
+        gpQs.forEach((q, i) => {
+            const val = d[q.id] === 'Yes' ? '[X]' : '[ ]';
+            doc.text(`${i+1}. ${val} ${q.t}`);
+        });
+        
+        // Gas Test
+        doc.moveDown();
+        doc.text(`Gas Test: Toxic: ${d.GP_Q12_ToxicGas || '-'} | HC: ${d.GP_Q12_HC || '-'} | O2: ${d.GP_Q12_Oxygen || '-'}`);
+
+        // --- PAGE 2: SPECIFIC & SIGS ---
+        doc.addPage();
+        doc.font('Helvetica-Bold').text('SPECIFIC CHECKS & ASSESSMENT');
+        doc.font('Helvetica');
+        
+        doc.text('Hazards Identified:');
+        const hazards = ["H_H2S", "H_LackOxygen", "H_Corrosive", "H_ToxicGas", "H_Combustible", "H_Steam", "H_PyroIron", "H_N2Gas", "H_Height", "H_LooseEarth", "H_HighNoise", "H_Radiation"];
+        hazards.forEach(h => { if(d[h] === 'Y') doc.text(` - ${h.replace('H_','')}`); });
         
         doc.moveDown();
         doc.text('PPE Required:');
-        const ppe = ["P_FaceShield", "P_FreshAirMask", "P_CompressedBA", "P_Goggles", "P_DustRespirator", "P_Earmuff", "P_LifeLine", "P_Apron", "P_SafetyHarness", "P_SafetyNet", "P_Airline", "P_GasResponder", "P_CottonCoverall"];
-        ppe.forEach(item => { if(d[item] === 'Y') doc.text(` - ${item.replace('P_', '')}`); });
-
+        const ppe = ["P_FaceShield", "P_FreshAirMask", "P_CompressedBA", "P_Goggles", "P_DustRespirator", "P_Earmuff", "P_LifeLine", "P_Apron", "P_SafetyHarness", "P_SafetyNet", "P_Airline"];
+        ppe.forEach(p => { if(d[p] === 'Y') doc.text(` - ${p.replace('P_','')}`); });
+        
         doc.moveDown();
-        doc.font('Helvetica-Bold').text('SIGNATURES');
+        doc.text(`Additional Precautions: ${d.AdditionalPrecautions || '-'}`);
+        doc.text(`Reviewer Remarks: ${d.Reviewer_Remarks || '-'}`);
+        doc.text(`Approver Remarks: ${d.Approver_Remarks || '-'}`);
+
+        doc.moveDown(2);
+        doc.font('Helvetica-Bold').text('DIGITAL SIGNATURES');
         doc.font('Helvetica');
         doc.text(`Requester: ${d.RequesterName} (${d.RequesterEmail})`);
-        doc.text(`Reviewer: ${d.Reviewer_Sig || 'Pending'} | Remarks: ${d.Reviewer_Remarks || '-'}`);
-        doc.text(`Approver: ${d.Approver_Sig || 'Pending'} | Remarks: ${d.Approver_Remarks || '-'}`);
-        
+        doc.text(`Reviewer: ${d.Reviewer_Sig || 'Pending'}`);
+        doc.text(`Approver: ${d.Approver_Sig || 'Pending'}`);
+
         doc.moveDown();
-        doc.font('Helvetica-Bold').text('RENEWALS & CLOSURE');
+        doc.font('Helvetica-Bold').text('RENEWALS');
         doc.font('Helvetica');
-        if (p.RenewalsJSON) {
-            const rens = JSON.parse(p.RenewalsJSON);
-            rens.forEach(r => doc.text(`Renewal: ${r.valid_from} to ${r.valid_till} (${r.status})`));
-        }
-        
-        doc.text(`Closure Receiver: ${d.Closure_Receiver_Sig || 'Not Signed'}`);
-        doc.text(`Closure Issuer: ${d.Closure_Issuer_Sig || 'Not Signed'}`);
-        
+        const rens = JSON.parse(p.RenewalsJSON || "[]");
+        if(rens.length === 0) doc.text("No renewals recorded.");
+        rens.forEach(r => doc.text(`${r.valid_from} to ${r.valid_till} | HC: ${r.hc}% | Status: ${r.status}`));
+
+        doc.moveDown();
+        doc.font('Helvetica-Bold').text('CLOSURE');
+        doc.font('Helvetica');
+        doc.text(`Receiver Sig: ${d.Closure_Receiver_Sig || 'Not Signed'}`);
+        doc.text(`Issuer Sig: ${d.Closure_Issuer_Sig || 'Not Signed'} (Remarks: ${d.Closure_Issuer_Remarks || '-'})`);
+
         doc.end();
     } catch (e) { res.status(500).send(e.message); }
 });

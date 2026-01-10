@@ -14,27 +14,19 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, '.')));
 
-// --- AZURE STORAGE SETUP ---
+// --- AZURE STORAGE ---
 const AZURE_CONN_STR = process.env.AZURE_STORAGE_CONNECTION_STRING;
-let containerClient, kmlContainerClient;
-
+let containerClient;
 if (AZURE_CONN_STR) {
     try {
         const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_CONN_STR);
         containerClient = blobServiceClient.getContainerClient("permit-attachments");
-        kmlContainerClient = blobServiceClient.getContainerClient("map-layers");
-        (async () => {
-            try { await containerClient.createIfNotExists(); } catch(e) {}
-            try { await kmlContainerClient.createIfNotExists({ access: 'blob' }); } catch(e) {}
-        })();
-    } catch (err) { 
-        console.error("Blob Storage Error:", err.message); 
-    }
+        (async () => { try { await containerClient.createIfNotExists(); } catch(e) {} })();
+    } catch (err) { console.error("Blob Storage Error:", err.message); }
 }
-
 const upload = multer({ storage: multer.memoryStorage() });
 
-// --- HELPER FUNCTIONS ---
+// --- HELPERS ---
 function getNowIST() { 
     return new Date().toLocaleString("en-GB", { 
         timeZone: "Asia/Kolkata", 
@@ -53,7 +45,7 @@ function formatDate(dateStr) {
     }).replace(',', '');
 }
 
-// --- CHECKLIST DATA (FULL OISD-105 TEXT) ---
+// --- CHECKLIST DATA (FULL OISD-105) ---
 const CHECKLIST_DATA = {
     A: [
         "1. Equipment / Work Area inspected.",
@@ -107,7 +99,7 @@ function drawHeader(doc) {
     doc.rect(startX,startY,535,95).stroke();
     doc.rect(startX,startY,80,95).stroke();
     doc.rect(startX+80,startY,320,95).stroke();
-    doc.font('Helvetica-Bold').fontSize(12).text('INDIAN OIL CORPORATION LIMITED', startX+80, startY+15, {width:320, align:'center'});
+    doc.font('Helvetica-Bold').fontSize(12).fillColor('black').text('INDIAN OIL CORPORATION LIMITED', startX+80, startY+15, {width:320, align:'center'});
     doc.fontSize(10).text('EASTERN REGION PIPELINES', startX+80, startY+30, {width:320, align:'center'});
     doc.text('HSE DEPT.', startX+80, startY+45, {width:320, align:'center'});
     doc.fontSize(9).text('COMPOSITE WORK PERMIT (OISD-105)', startX+80, startY+65, {width:320, align:'center'});
@@ -135,7 +127,7 @@ app.get('/api/users', async (req, res) => {
     try {
         const pool = await getConnection();
         const r = await pool.request().query('SELECT Name, Email, Role FROM Users');
-        const mapU = u => ({name: u.Name, email: u.Email, role: u.Role});
+        const mapU = u => ({name: u.Name||u.name, email: u.Email||u.email, role: u.Role||u.role});
         const all = r.recordset.map(mapU);
         res.json({
             Requesters: all.filter(u=>u.role==='Requester'),
@@ -173,16 +165,6 @@ app.post('/api/dashboard', async (req, res) => {
     } catch(e){res.status(500).json({error:e.message})} 
 });
 
-app.post('/api/stats', async (req, res) => {
-    try {
-        const pool = await getConnection();
-        const r = await pool.request().query("SELECT Status, WorkType FROM Permits");
-        const s={}, t={};
-        r.recordset.forEach(x => { s[x.Status] = (s[x.Status]||0)+1; t[x.WorkType] = (t[x.WorkType]||0)+1; });
-        res.json({success:true, statusCounts:s, typeCounts:t});
-    } catch(e) { res.status(500).json({error:e.message}); }
-});
-
 app.post('/api/save-permit', upload.single('file'), async (req, res) => {
     try {
         const vf = new Date(req.body.ValidFrom); const vt = new Date(req.body.ValidTo);
@@ -190,7 +172,7 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
 
         const pool = await getConnection();
         let pid = req.body.PermitID;
-        if (!pid || pid === 'undefined' || pid === 'null' || (typeof pid === 'string' && pid.trim() === '')) pid = null;
+        if (!pid || pid === 'undefined' || pid === 'null' || pid.trim() === '') pid = null;
         
         let isUpdate = false;
         if (pid) {
@@ -219,7 +201,6 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
         if (isUpdate) await q.query("UPDATE Permits SET FullDataJSON=@j, WorkType=@w, ReviewerEmail=@rv, ApproverEmail=@ap, ValidFrom=@vf, ValidTo=@vt, Latitude=@lat, Longitude=@lng WHERE PermitID=@p");
         else await q.query("INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, FullDataJSON, RenewalsJSON) VALUES (@p, @s, @w, @re, @rv, @ap, @vf, @vt, @lat, @lng, @j, '[]')");
         
-        if(req.file && containerClient) await containerClient.getBlockBlobClient(`${pid}_${req.file.originalname}`).uploadData(req.file.buffer);
         res.json({ success: true, permitId: pid });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -228,23 +209,24 @@ app.post('/api/update-status', async (req, res) => {
     try {
         const { PermitID, action, role, user, comment, rejectionReason, ...extras } = req.body;
         const pool = await getConnection();
-        const current = await pool.request().input('pid', sql.NVarChar, PermitID).query("SELECT * FROM Permits WHERE PermitID = @pid");
+        const current = await pool.request().input('p', sql.NVarChar, PermitID).query("SELECT * FROM Permits WHERE PermitID=@p");
         if(current.recordset.length === 0) return res.json({ error: "Not found" });
         
-        let d = JSON.parse(cur.recordset[0].FullDataJSON);
+        let d = JSON.parse(current.recordset[0].FullDataJSON);
         Object.assign(d, req.body);
-        let st = cur.recordset[0].Status;
+        let st = current.recordset[0].Status;
         const now = getNowIST();
 
         if(req.body.action==='reject') { st='Rejected'; }
         else if(req.body.role==='Reviewer' && req.body.action==='review') { st='Pending Approval'; d.Reviewer_Sig=`${user} on ${now}`; }
         else if(req.body.role==='Approver' && req.body.action==='approve') { 
             st = st.includes('Closure') ? 'Closed' : 'Active'; 
-            if(st==='Closed') d.Closure_Issuer_Sig=`${user} on ${now}`; else d.Approver_Sig=`${user} on ${now}`;
+            if(st==='Closed') { d.Closure_Issuer_Sig=`${user} on ${now}`; d.Closure_Approver_Date=now; d.Closure_Approver_Remarks=comment; } 
+            else { d.Approver_Sig=`${user} on ${now}`; }
         }
         else if(req.body.action==='initiate_closure') { st='Closure Pending Review'; d.Closure_Requestor_Date=now; d.Closure_Receiver_Sig=`${user} on ${now}`; }
         else if(req.body.action==='reject_closure') { st='Active'; }
-        else if(req.body.action==='approve_closure') { st = 'Closure Pending Approval'; d.Closure_Reviewer_Sig=`${user} on ${now}`; }
+        else if(req.body.action==='approve_closure') { st = 'Closure Pending Approval'; d.Closure_Reviewer_Sig=`${user} on ${now}`; d.Closure_Reviewer_Date=now; }
         
         await pool.request().input('p', req.body.PermitID).input('s', st).input('j', JSON.stringify(d)).query("UPDATE Permits SET Status=@s, FullDataJSON=@j WHERE PermitID=@p");
         res.json({success:true});
@@ -267,8 +249,8 @@ app.post('/api/renewal', async (req, res) => {
              
              if(r.length > 0) {
                  const last = r[r.length-1];
-                 if(last.status === 'pending_review' || last.status === 'pending_approval') return res.status(400).json({error: "Previous renewal is still pending."});
-                 if(last.status !== 'rejected' && rs < new Date(last.valid_till)) return res.status(400).json({error: "New renewal cannot overlap with previous approved renewal."});
+                 if(last.status !== 'rejected' && last.status !== 'approved') return res.status(400).json({error: "Previous renewal pending"});
+                 if(last.status !== 'rejected' && rs < new Date(last.valid_till)) return res.status(400).json({error: "Overlap detected"});
              }
              
              r.push({ 
@@ -287,7 +269,7 @@ app.post('/api/renewal', async (req, res) => {
             }
         }
         
-        let newStatus = r[r.length-1].status==='approved'?'Active':(r[r.length-1].status==='rejected'?'Active':(r[r.length-1].status==='pending_approval'?'Renewal Pending Approval':'Renewal Pending Review'));
+        let newStatus = r[r.length-1].status==='approved'?'Active':(r[r.length-1].status==='rejected'?'Active':(userRole==='Requester'?'Renewal Pending Review':'Renewal Pending Approval'));
         await pool.request().input('p', PermitID).input('r', JSON.stringify(r)).input('s', newStatus).query("UPDATE Permits SET RenewalsJSON=@r, Status=@s WHERE PermitID=@p");
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -295,9 +277,10 @@ app.post('/api/renewal', async (req, res) => {
 
 app.post('/api/permit-data', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().input('p', sql.NVarChar, req.body.permitId).query("SELECT * FROM Permits WHERE PermitID=@p"); if(r.recordset.length) res.json({...JSON.parse(r.recordset[0].FullDataJSON), Status:r.recordset[0].Status, RenewalsJSON:r.recordset[0].RenewalsJSON, FullDataJSON:null}); else res.json({error:"404"}); } catch(e){res.status(500).json({error:e.message})} });
 app.post('/api/map-data', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().query("SELECT PermitID, FullDataJSON, Latitude, Longitude FROM Permits WHERE Status='Active'"); res.json(r.recordset.map(x=>({PermitID:x.PermitID, lat:parseFloat(x.Latitude), lng:parseFloat(x.Longitude), ...JSON.parse(x.FullDataJSON)}))); } catch(e){res.status(500).json({error:e.message})} });
+app.post('/api/stats', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().query("SELECT Status, WorkType FROM Permits"); const s={}, t={}; r.recordset.forEach(x=>{s[x.Status]=(s[x.Status]||0)+1; t[x.WorkType]=(t[x.WorkType]||0)+1;}); res.json({success:true, statusCounts:s, typeCounts:t}); } catch(e){res.status(500).json({error:e.message})} });
 app.get('/api/download-excel', async (req, res) => { try { const pool = await getConnection(); const result = await pool.request().query("SELECT * FROM Permits ORDER BY Id DESC"); const workbook = new ExcelJS.Workbook(); const sheet = workbook.addWorksheet('Permits Summary'); sheet.columns = [{header:'Permit ID',key:'id',width:15},{header:'Status',key:'status',width:20},{header:'Work Type',key:'wt',width:25},{header:'Requester',key:'req',width:25},{header:'Location',key:'loc',width:30},{header:'Vendor',key:'ven',width:20},{header:'Valid From',key:'vf',width:20},{header:'Valid To',key:'vt',width:20}]; sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 }; sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFED7D31' } }; result.recordset.forEach(r => { const d = JSON.parse(r.FullDataJSON || "{}"); sheet.addRow({ id: r.PermitID, status: r.Status, wt: d.WorkType, req: d.RequesterName, loc: d.ExactLocation, ven: d.Vendor, vf: formatDate(r.ValidFrom), vt: formatDate(r.ValidTo) }); }); res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); res.setHeader('Content-Disposition', 'attachment; filename=IndianOil_Permits.xlsx'); await workbook.xlsx.write(res); res.end(); } catch (e) { res.status(500).send(e.message); } });
 
-// 8. PDF GENERATION
+// 8. PDF GENERATION (EXACT OISD-105 FORMAT)
 app.get('/api/download-pdf/:id', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -316,10 +299,10 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.text(`Emergency: ${d.EmergencyContact||'-'}`, c1, infoY+75).text(`Fire Stn: ${d.FireStation||'-'}`, c2, infoY+75);
         doc.rect(30,infoY-5,535,95).stroke(); doc.y=infoY+100;
 
-        // Checklists
+        // Checklists (WITH HEADERS FIXED)
         const drawChecklist = (t,i,pr) => { 
             if(doc.y>650){doc.addPage(); drawHeader(doc); doc.y=135;} 
-            doc.font('Helvetica-Bold').text(t,30,doc.y+10); doc.y+=25; 
+            doc.font('Helvetica-Bold').fillColor('black').text(t,30,doc.y+10); doc.y+=25; 
             let y=doc.y; doc.rect(30,y,350,20).stroke().text("Item",35,y+5); doc.rect(380,y,60,20).stroke().text("Sts",385,y+5); doc.rect(440,y,125,20).stroke().text("Rem",445,y+5); y+=20;
             doc.font('Helvetica').fontSize(8);
             i.forEach((x,k)=>{
@@ -332,10 +315,10 @@ app.get('/api/download-pdf/:id', async (req, res) => {
                 }
             }); doc.y=y;
         };
-        drawChecklist("SECTION A", CHECKLIST_DATA.A,'A'); drawChecklist("SECTION B", CHECKLIST_DATA.B,'B'); drawChecklist("SECTION C", CHECKLIST_DATA.C,'C'); drawChecklist("SECTION D", CHECKLIST_DATA.D,'D');
+        drawChecklist("SECTION A: GENERAL", CHECKLIST_DATA.A,'A'); drawChecklist("SECTION B: HOT WORK", CHECKLIST_DATA.B,'B'); drawChecklist("SECTION C: VEHICLE", CHECKLIST_DATA.C,'C'); drawChecklist("SECTION D: EXCAVATION", CHECKLIST_DATA.D,'D');
 
         // Hazards
-        doc.addPage(); drawHeader(doc); doc.y=135;
+        if(doc.y>650){doc.addPage(); drawHeader(doc); doc.y=135;}
         doc.font('Helvetica-Bold').text("HAZARDS & PRECAUTIONS",30,doc.y); doc.y+=15; doc.rect(30,doc.y,535,60).stroke();
         const hazKeys = ["Lack of Oxygen", "H2S", "Toxic Gases", "Combustible gases", "Pyrophoric Iron", "Corrosive Chemicals", "cave in formation"];
         const foundHaz = hazKeys.filter(k => d[`H_${k.replace(/ /g,'')}`] === 'Y'); if(d.H_Others==='Y') foundHaz.push(`Others: ${d.H_Others_Detail}`);
@@ -368,7 +351,7 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         });
         doc.y = ry + 20;
 
-        // Closure Table
+        // Closure Table (FIXED & TABULAR)
         if(doc.y>650){doc.addPage(); drawHeader(doc); doc.y=135;}
         doc.font('Helvetica-Bold').text("CLOSURE OF WORK PERMIT",30,doc.y); doc.y+=15;
         let cy = doc.y;

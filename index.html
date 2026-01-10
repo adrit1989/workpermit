@@ -493,8 +493,10 @@
                  document.getElementById("closure-section").classList.remove('hidden');
                  document.getElementById("div-closure-req").classList.remove('hidden');
                  setText("ts-clos-req", p.Closure_Requestor_Date);
+                 
                  if(s!=='Closure Pending Review') { document.getElementById("div-closure-rev").classList.remove('hidden'); setText("ts-clos-rev", p.Closure_Reviewer_Date); }
                  if(s==='Closed') { document.getElementById("div-closure-app").classList.remove('hidden'); setText("ts-clos-app", p.Closure_Approver_Date); }
+
                  if(s==='Closure Pending Review' && r==='Reviewer') { 
                      document.getElementById("div-closure-rev").classList.remove('hidden'); 
                      document.getElementById("Closure_Reviewer_Remarks").disabled=false; 

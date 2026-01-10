@@ -146,7 +146,7 @@
 
                 <div id="closure-section" class="glass hidden">
                     <h3 class="section-title">Closure</h3>
-                    <label class="block mb-2 font-bold text-red-600"><input type="checkbox" id="Site_Restored_Check" name="Site_Restored_Check"> Site Restored & Cleared</label>
+                    <label class="flex items-center gap-2 mb-2 font-bold text-red-600"><input type="checkbox" id="Site_Restored_Check" name="Site_Restored_Check"> Site Restored & Cleared</label>
                     <div id="div-closure-req" class="hidden"><textarea id="Closure_Requestor_Remarks" placeholder="Requestor Closure Remarks" class="w-full"></textarea></div>
                     <div id="div-closure-rev" class="hidden mt-2"><textarea id="Closure_Reviewer_Remarks" placeholder="Reviewer Verification" class="w-full"></textarea></div>
                     <div id="div-closure-app" class="hidden mt-2"><textarea id="Closure_Approver_Remarks" placeholder="Approver Final Close" class="w-full"></textarea></div>
@@ -210,7 +210,7 @@
             const sel = document.getElementById("login-role");
             sel.innerHTML = '<option value="">Select Role</option><option>Requester</option><option>Reviewer</option><option>Approver</option>';
             sel.onchange = () => {
-                const list = u[sel.value+'s']; // e.g., Requesters
+                const list = u[sel.value+'s']; // Fixed Pluralization key check
                 const n = document.getElementById("login-name");
                 n.disabled = false; n.innerHTML = "";
                 if(list) list.forEach(x => n.innerHTML += `<option value="${x.email}">${x.name}</option>`);
@@ -228,8 +228,20 @@
                 document.getElementById("view-login").style.display = 'none';
                 document.getElementById("app-container").style.display = 'block';
                 document.getElementById("user-info").innerText = `${name} (${role})`;
+                updateRoleUI();
                 loadDashboard();
             } else alert(res.message);
+        }
+
+        function updateRoleUI() {
+            const r = currentUser.Role;
+            if(r==='Requester') document.getElementById("btn-new-permit").classList.remove('hidden');
+            if(r==='Reviewer'||r==='Approver') {
+                document.getElementById("btn-view-map").classList.remove('hidden');
+                document.getElementById("btn-download-excel").classList.remove('hidden');
+                document.getElementById("charts-container").classList.remove('hidden');
+                document.getElementById("btn-add-user").classList.remove('hidden');
+            }
         }
 
         async function loadDashboard() {
@@ -241,6 +253,15 @@
             ).join('');
         }
 
+        function checkDate() {
+            const vf = new Date(document.getElementById("ValidFrom").value);
+            const vt = new Date(document.getElementById("ValidTo").value);
+            if(vf && vt) {
+                const diff = (vt - vf) / (1000 * 60 * 60 * 24);
+                if(diff > 7) { alert("Max duration is 7 days!"); document.getElementById("ValidTo").value = ""; }
+            }
+        }
+
         // --- FORM LOGIC ---
         function showNewPermit() {
             document.getElementById("pf").reset();
@@ -250,7 +271,6 @@
             document.getElementById("RequesterName").value = currentUser.name;
             document.getElementById("OfficialName").value = currentUser.name;
             
-            // Populate Dropdowns
             const rS = document.getElementById("ReviewerEmail"), aS = document.getElementById("ApproverEmail");
             rS.innerHTML = ""; aS.innerHTML = "";
             window.users.Reviewers.forEach(u => rS.innerHTML += `<option value="${u.email}">${u.name}</option>`);
@@ -266,7 +286,6 @@
             document.getElementById("closure-section").classList.add('hidden');
 
             document.getElementById("actions").innerHTML = `<button type="button" onclick="savePermit()" class="bg-blue-600 text-white px-6 py-2 rounded font-bold">Submit</button>`;
-            
             document.getElementById("view-dashboard").classList.add('hidden');
             document.getElementById("view-form").classList.remove('hidden');
         }
@@ -287,21 +306,20 @@
             currentPermitId = id;
             document.getElementById("permit-header-display").innerText = `PERMIT: ${id} [${p.Status}]`;
             
-            // Populate Dropdowns FIRST
             const rS = document.getElementById("ReviewerEmail"), aS = document.getElementById("ApproverEmail");
             rS.innerHTML = ""; aS.innerHTML = "";
             window.users.Reviewers.forEach(u => rS.innerHTML += `<option value="${u.email}">${u.name}</option>`);
             window.users.Approvers.forEach(u => aS.innerHTML += `<option value="${u.email}">${u.name}</option>`);
 
-            // Fill Form
             document.querySelectorAll('input, textarea, select').forEach(e => {
                 if(e.type === 'radio') { if(e.value === p[e.name]) e.checked = true; }
                 else if(e.type === 'checkbox') { e.checked = (p[e.name] === 'Y'); }
                 else { e.value = p[e.name] || ''; }
-                e.disabled = true; // Lock all
+                e.disabled = true; 
             });
 
-            // Logic for Role
+            if(p.H_Others==='Y') document.getElementById('other-hazard-div').classList.remove('hidden');
+
             const r = currentUser.Role, s = p.Status;
             document.getElementById("fs-reviewer-section").classList.add('hidden');
             document.getElementById("fs-approver-section").classList.add('hidden');
@@ -309,7 +327,6 @@
             document.getElementById("closure-section").classList.add('hidden');
 
             let btns = "";
-            
             if(s.includes('Pending Review')) {
                 if(r === 'Requester') {
                     document.querySelectorAll('#pf input, #pf select, #pf textarea').forEach(e => e.disabled = false);
@@ -317,32 +334,26 @@
                 }
                 if(r === 'Reviewer') {
                     document.getElementById("fs-reviewer-section").classList.remove('hidden');
-                    // Enable Hazards edit
-                    document.querySelectorAll('#hazards-section input').forEach(e => e.disabled = false);
-                    document.querySelectorAll('#fs-reviewer-section *').forEach(e => e.disabled = false);
+                    document.querySelectorAll('#fs-reviewer-section *, #hazards-section input').forEach(e => e.disabled = false);
                     btns = `<button type="button" onclick="upd('reject')" class="bg-red-600 text-white px-4 py-2 rounded">Reject</button>
                             <button type="button" onclick="upd('review')" class="bg-green-600 text-white px-4 py-2 rounded">Submit Review</button>`;
                 }
             }
-
             if(s.includes('Pending Approval')) {
                 document.getElementById("fs-reviewer-section").classList.remove('hidden');
                 if(r === 'Approver') {
                     document.getElementById("fs-approver-section").classList.remove('hidden');
-                    document.querySelectorAll('#fs-approver-section *').forEach(e => e.disabled = false);
+                    document.getElementById("Approver_Remarks").disabled = false;
                     btns = `<button type="button" onclick="upd('reject')" class="bg-red-600 text-white px-4 py-2 rounded">Reject</button>
                             <button type="button" onclick="upd('approve')" class="bg-green-600 text-white px-4 py-2 rounded">Approve</button>`;
                 }
             }
-
             if(s === 'Active') {
                 document.getElementById("fs-reviewer-section").classList.remove('hidden');
                 document.getElementById("fs-approver-section").classList.remove('hidden');
                 document.getElementById("renewals-section").classList.remove('hidden');
                 document.getElementById("closure-section").classList.remove('hidden');
-                
                 btns = `<a href="${API}/download-pdf/${id}" target="_blank" class="bg-gray-600 text-white px-4 py-2 rounded">PDF</a>`;
-                
                 if(r === 'Requester') {
                      document.getElementById("div-closure-req").classList.remove('hidden');
                      document.getElementById("Closure_Requestor_Remarks").disabled = false;
@@ -351,7 +362,6 @@
                      btns += `<button type="button" onclick="upd('initiate_closure')" class="bg-red-600 text-white px-4 py-2 rounded ml-2">Job Complete</button>`;
                 }
             }
-            
             // Populate Renewals List
             const renList = document.getElementById("renewals-list");
             const rens = JSON.parse(p.RenewalsJSON || "[]");
@@ -363,19 +373,25 @@
         }
 
         async function upd(act) {
+            // SAFE ACCESS to elements that might be hidden/null for different roles
+            const revRem = document.getElementById("Reviewer_Remarks");
+            const appRem = document.getElementById("Approver_Remarks");
+            const closRem = document.getElementById("Closure_Requestor_Remarks");
+
             const body = { 
                 PermitID: currentPermitId, action: act, role: currentUser.Role, user: currentUser.name,
-                comment: (currentUser.Role==='Reviewer' ? document.getElementById("Reviewer_Remarks")?.value : document.getElementById("Approver_Remarks")?.value) || '',
-                Closure_Requestor_Remarks: document.getElementById("Closure_Requestor_Remarks")?.value
+                comment: (revRem ? revRem.value : (appRem ? appRem.value : "")),
+                Closure_Requestor_Remarks: closRem ? closRem.value : ""
             };
+            
             if(currentUser.Role === 'Reviewer') {
-                 // Save PPE & Hazards edits
-                 const fd = new FormData(document.getElementById("pf"));
-                 // Manually collect checked boxes because FormData might miss disabled ones if not handled carefully (though here they are enabled)
+                 // Collect checkboxes manually to ensure state is captured
                  document.querySelectorAll('#hazards-section input[type=checkbox]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
                  document.querySelectorAll('#ppe-container input[type=checkbox]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
-                 body.AdditionalPrecautions = document.getElementById("AdditionalPrecautions")?.value;
+                 const addPrec = document.getElementById("AdditionalPrecautions");
+                 if(addPrec) body.AdditionalPrecautions = addPrec.value;
             }
+
             const res = await apiCall('/update-status', 'POST', body);
             if(res.success) showDashboard(); else alert(res.error);
         }
@@ -392,21 +408,7 @@
             if(res.success) { alert("Renewal Submitted"); showDashboard(); }
         }
 
-        function showDashboard() {
-            document.getElementById("view-dashboard").classList.remove('hidden');
-            document.getElementById("view-form").classList.add('hidden');
-            loadDashboard();
-        }
-
-        function checkDate() {
-            const vf = new Date(document.getElementById("ValidFrom").value);
-            const vt = new Date(document.getElementById("ValidTo").value);
-            if(vf && vt) {
-                const diff = (vt - vf) / (1000 * 60 * 60 * 24);
-                if(diff > 7) { alert("Max duration is 7 days!"); document.getElementById("ValidTo").value = ""; }
-            }
-        }
-        
+        function showDashboard() { document.getElementById("view-dashboard").classList.remove('hidden'); document.getElementById("view-form").classList.add('hidden'); loadDashboard(); }
         function getGeo() { navigator.geolocation.getCurrentPosition(p=>{document.getElementById("Latitude").value=p.coords.latitude;document.getElementById("Longitude").value=p.coords.longitude;}); }
         function showAddUser() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-add-user").classList.remove('hidden'); }
         function showMap() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-map").classList.remove('hidden'); /* Call loadMapData() */ }

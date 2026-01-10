@@ -16,12 +16,16 @@ app.use(express.static(path.join(__dirname, '.')));
 
 // --- AZURE STORAGE ---
 const AZURE_CONN_STR = process.env.AZURE_STORAGE_CONNECTION_STRING;
-let containerClient;
+let containerClient, kmlContainerClient;
 if (AZURE_CONN_STR) {
     try {
         const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_CONN_STR);
         containerClient = blobServiceClient.getContainerClient("permit-attachments");
-        (async () => { try { await containerClient.createIfNotExists(); } catch(e) {} })();
+        kmlContainerClient = blobServiceClient.getContainerClient("map-layers");
+        (async () => {
+            try { await containerClient.createIfNotExists(); } catch(e) {}
+            try { await kmlContainerClient.createIfNotExists({ access: 'blob' }); } catch(e) {}
+        })();
     } catch (err) { console.error("Blob Storage Error:", err.message); }
 }
 const upload = multer({ storage: multer.memoryStorage() });
@@ -86,9 +90,9 @@ function drawHeader(doc) {
     // Main Box
     doc.rect(startX, startY, fullW, 95).stroke();
     
-    // Logo Area (Left)
+    // Logo Area (Left) - Placeholder for Indian Oil Logo
     doc.rect(startX, startY, 80, 95).stroke();
-    // doc.image('iocl_logo.png', startX + 15, startY + 25, {width: 50}); // Uncomment if logo exists
+    // doc.image('iocl_logo.png', startX + 15, startY + 25, {width: 50}); 
 
     // Title Area (Center)
     doc.rect(startX + 80, startY, 320, 95).stroke();
@@ -97,19 +101,19 @@ function drawHeader(doc) {
     doc.text('HSE DEPT.', startX + 80, startY + 45, {width: 320, align: 'center'});
     doc.fontSize(9).text('COMPOSITE WORK PERMIT (OISD-105)', startX + 80, startY + 65, {width: 320, align: 'center'});
 
-    // Doc Control Area (Right)
+    // Doc Control Area (Right) - Placeholder for Rhino Logo if needed or text
     const rightX = startX + 400;
     doc.rect(rightX, startY, 135, 95).stroke();
+    // doc.image('rhino_logo.png', rightX + 40, startY + 5, {width: 50});
     doc.fontSize(8).font('Helvetica');
-    doc.text('Doc No: ERPL/HS&E/25-26', rightX + 5, startY + 20);
-    doc.text('Issue No: 01', rightX + 5, startY + 35);
-    doc.text('Date: 01.09.2025', rightX + 5, startY + 50);
-    doc.text('Rev No: 00', rightX + 5, startY + 65);
+    doc.text('Doc No: ERPL/HS&E/25-26', rightX + 5, startY + 60);
+    doc.text('Issue No: 01', rightX + 5, startY + 70);
+    doc.text('Date: 01.09.2025', rightX + 5, startY + 80);
 }
 
 // --- API ROUTES ---
 
-// LOGIN & USERS (Standard - No Change)
+// LOGIN & USERS
 app.post('/api/login', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().input('r', sql.NVarChar, req.body.role).input('e', sql.NVarChar, req.body.name).input('p', sql.NVarChar, req.body.password).query('SELECT * FROM Users WHERE Role=@r AND Email=@e AND Password=@p'); if(r.recordset.length) res.json({success:true, user:r.recordset[0]}); else res.json({success:false}); } catch(e){res.status(500).json({error:e.message})} });
 app.get('/api/users', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().query('SELECT Name, Role, Email FROM Users'); res.json({ Requesters: r.recordset.filter(u=>u.Role==='Requester').map(u=>({name:u.Name,email:u.Email})), Reviewers: r.recordset.filter(u=>u.Role==='Reviewer').map(u=>({name:u.Name,email:u.Email})), Approvers: r.recordset.filter(u=>u.Role==='Approver').map(u=>({name:u.Name,email:u.Email})) }); } catch(e){res.status(500).json({error:e.message})} });
 app.post('/api/dashboard', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().query("SELECT PermitID, Status, ValidFrom, ValidTo, RequesterEmail, ReviewerEmail, ApproverEmail, FullDataJSON FROM Permits"); const p = r.recordset.map(x=>({...JSON.parse(x.FullDataJSON), PermitID:x.PermitID, Status:x.Status})); const f = p.filter(x => (req.body.role==='Requester'?x.RequesterEmail===req.body.email : (req.body.role==='Reviewer'?(x.ReviewerEmail===req.body.email && (x.Status.includes('Pending Review')||x.Status.includes('Closure')||x.Status.includes('Renewal'))) : (x.ApproverEmail===req.body.email)))); res.json(f.sort((a,b)=>b.PermitID.localeCompare(a.PermitID))); } catch(e){res.status(500).json({error:e.message})} });
@@ -117,15 +121,19 @@ app.post('/api/dashboard', async (req, res) => { try { const pool = await getCon
 // SAVE PERMIT (With ALL new fields)
 app.post('/api/save-permit', upload.single('file'), async (req, res) => {
     try {
+        const vf = new Date(req.body.ValidFrom); const vt = new Date(req.body.ValidTo);
+        if (vt <= vf) return res.status(400).json({ error: "End time must be greater than Start time." });
+        
         const pool = await getConnection();
         let pid = req.body.PermitID && req.body.PermitID !== 'null' ? req.body.PermitID : null;
         let isUpdate = false;
 
         if (pid) {
             const c = await pool.request().input('p', sql.NVarChar, pid).query("SELECT Status FROM Permits WHERE PermitID=@p");
-            if (c.recordset.length > 0 && (c.recordset[0].Status === 'Pending Review' || c.recordset[0].Status === 'New')) isUpdate = true;
-            else if (c.recordset.length > 0) return res.status(400).json({error: "Cannot edit processed permit"});
-            else pid = null;
+            if (c.recordset.length > 0) {
+                if (c.recordset[0].Status === 'Pending Review' || c.recordset[0].Status === 'New') isUpdate = true;
+                else return res.status(400).json({error: "Cannot edit processed permit"});
+            } else pid = null;
         }
 
         if (!pid) {
@@ -142,11 +150,12 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
         if (isUpdate) await q.query("UPDATE Permits SET FullDataJSON=@j, WorkType=@w, ReviewerEmail=@rv, ApproverEmail=@ap, ValidFrom=@vf, ValidTo=@vt WHERE PermitID=@p");
         else await q.query("INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, FullDataJSON, RenewalsJSON) VALUES (@p, @s, @w, @re, @rv, @ap, @vf, @vt, @j, '[]')");
         
+        if(req.file && containerClient) await containerClient.getBlockBlobClient(`${pid}_${req.file.originalname}`).uploadData(req.file.buffer);
         res.json({ success: true, permitId: pid });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// STATUS UPDATE & RENEWAL (Standard logic preserved)
+// STATUS UPDATE & RENEWAL
 app.post('/api/update-status', async (req, res) => { try { const pool = await getConnection(); const cur = await pool.request().input('p', sql.NVarChar, req.body.PermitID).query("SELECT * FROM Permits WHERE PermitID=@p"); if(!cur.recordset.length) return; let d = JSON.parse(cur.recordset[0].FullDataJSON); Object.assign(d, req.body); let st = cur.recordset[0].Status; const now = getNowIST(); 
     if(req.body.role==='Reviewer' && req.body.action==='review') { st='Pending Approval'; d.Reviewer_Sig=`${req.body.user} on ${now}`; }
     if(req.body.role==='Approver' && req.body.action==='approve') { st=st.includes('Closure')?'Closed':'Active'; if(!st.includes('Closed')) d.Approver_Sig=`${req.body.user} on ${now}`; else d.Closure_Issuer_Sig=`${req.body.user} on ${now}`; }
@@ -160,13 +169,9 @@ app.post('/api/renewal', async (req, res) => { try { const pool = await getConne
     else { r[r.length-1].status = req.body.userRole==='Reviewer'?'pending_approval':'approved'; }
     await pool.request().input('p', req.body.PermitID).input('r', JSON.stringify(r)).input('s', r[r.length-1].status==='approved'?'Active':(r[r.length-1].status==='rejected'?'Active':(req.body.userRole==='Requester'?'Renewal Pending Review':'Renewal Pending Approval'))).query("UPDATE Permits SET RenewalsJSON=@r, Status=@s WHERE PermitID=@p"); res.json({success:true}); } catch(e){res.status(500).json({error:e.message})} });
 
-// PERMIT DATA
 app.post('/api/permit-data', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().input('p', sql.NVarChar, req.body.permitId).query("SELECT * FROM Permits WHERE PermitID=@p"); if(r.recordset.length) res.json({...JSON.parse(r.recordset[0].FullDataJSON), Status:r.recordset[0].Status, RenewalsJSON:r.recordset[0].RenewalsJSON}); else res.json({error:"404"}); } catch(e){res.status(500).json({error:e.message})} });
 
-
-// ==========================================
-// PDF GENERATION (EXACTLY AS PER FORMAT)
-// ==========================================
+// PDF GENERATION (OISD-105 FORMAT)
 app.get('/api/download-pdf/:id', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -181,40 +186,32 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         res.setHeader('Content-Disposition', `attachment; filename=${p.PermitID}.pdf`);
         doc.pipe(res);
 
-        // 1. PAGE 1 - INFO & CHECKLISTS
+        // PAGE 1
         drawHeader(doc);
-        doc.y = 135; // Start below header
+        doc.y = 135; 
         
         doc.fontSize(9).font('Helvetica');
-        
-        // Info Table Logic
         const infoY = doc.y;
         const col1 = 40, col2 = 300;
         doc.text(`Permit No: ${p.PermitID}`, col1, infoY);
         doc.text(`Valid From: ${formatDate(p.ValidFrom)} To: ${formatDate(p.ValidTo)}`, col2, infoY);
-        
         doc.text(`Issued To: ${d.IssuedToDept} (${d.Vendor || 'Self'})`, col1, infoY + 15);
         doc.text(`Location: ${d.ExactLocation} (${d.LocationUnit})`, col2, infoY + 15);
-        
         doc.text(`Description: ${d.Desc}`, col1, infoY + 30, {width: 500});
-        
         doc.text(`Site Person: ${d.RequesterName}`, col1, infoY + 60);
         doc.text(`Security/Patrol: ${d.SecurityGuard || '-'}`, col2, infoY + 60);
-        
         doc.text(`Emergency Contact: ${d.EmergencyContact || '-'}`, col1, infoY + 75);
         doc.text(`Fire Stn/Hospital: ${d.FireStation || '-'}`, col2, infoY + 75);
 
-        doc.rect(30, infoY - 5, 535, 95).stroke(); // Box around info
+        doc.rect(30, infoY - 5, 535, 95).stroke(); 
         doc.y = infoY + 100;
 
         // CHECKLIST TABLES
         const drawChecklistTable = (title, items, idPrefix) => {
             if(doc.y > 650) { doc.addPage(); drawHeader(doc); doc.y = 135; }
-            
             doc.font('Helvetica-Bold').fontSize(10).text(title, 30, doc.y + 10);
             doc.y += 25;
             
-            // Table Header
             let y = doc.y;
             doc.rect(30, y, 30, 20).stroke().text("SN", 35, y+5);
             doc.rect(60, y, 350, 20).stroke().text("Item / Condition", 65, y+5);
@@ -225,14 +222,10 @@ app.get('/api/download-pdf/:id', async (req, res) => {
             doc.font('Helvetica').fontSize(8);
             items.forEach((itemText, i) => {
                 if(y > 750) { doc.addPage(); drawHeader(doc); doc.y = 135; y = 135; }
-                
                 const qId = `${idPrefix}_Q${i+1}`;
                 const status = d[qId] === 'Yes' ? 'YES' : (d[qId] === 'NA' ? 'NA' : 'NO');
-                // Special handling for Gas Test Q12 in Section A
                 let remarks = d[`${idPrefix}_Q${i+1}_Detail`] || '';
-                if(idPrefix === 'A' && i === 11) { // Index 11 is Q12
-                    remarks = `HC:${d.GP_Q12_HC||0}% Tox:${d.GP_Q12_ToxicGas||0} O2:${d.GP_Q12_Oxygen||21}%`;
-                }
+                if(idPrefix === 'A' && i === 11) remarks = `HC:${d.GP_Q12_HC||0}% Tox:${d.GP_Q12_ToxicGas||0} O2:${d.GP_Q12_Oxygen||21}%`;
 
                 doc.rect(30, y, 30, 25).stroke().text(i+1, 35, y+8);
                 doc.rect(60, y, 350, 25).stroke().text(itemText, 65, y+8, {width: 340});
@@ -248,9 +241,8 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         drawChecklistTable("SECTION C: VEHICLE ENTRY", CHECKLIST_DATA.C, 'C');
         drawChecklistTable("SECTION D: EXCAVATION WORK", CHECKLIST_DATA.D, 'D');
 
-        // HAZARDS & SIGNATURES PAGE
+        // HAZARDS & SIGNATURES
         doc.addPage(); drawHeader(doc); doc.y = 135;
-
         doc.font('Helvetica-Bold').fontSize(10).text("HAZARDS & PRECAUTIONS", 30, doc.y);
         doc.y += 15;
         doc.rect(30, doc.y, 535, 60).stroke();
@@ -267,54 +259,42 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.font('Helvetica-Bold').fontSize(10).text("DIGITAL SIGNATURES (ISSUANCE)", 30, doc.y);
         doc.y += 15;
         const sigY = doc.y;
-        doc.rect(30, sigY, 178, 50).stroke();
-        doc.text("REQUESTER", 35, sigY + 5);
-        doc.font('Helvetica').text(`${d.RequesterName}\n${formatDate(p.ValidFrom)}`, 35, sigY + 20);
-
-        doc.rect(208, sigY, 178, 50).stroke();
-        doc.font('Helvetica-Bold').text("SAFETY OFFICER (REVIEWER)", 213, sigY + 5);
-        doc.font('Helvetica').text(d.Reviewer_Sig || 'Pending', 213, sigY + 20);
-
-        doc.rect(386, sigY, 179, 50).stroke();
-        doc.font('Helvetica-Bold').text("ISSUING AUTHORITY", 391, sigY + 5);
-        doc.font('Helvetica').text(d.Approver_Sig || 'Pending', 391, sigY + 20);
+        doc.rect(30, sigY, 178, 50).stroke().text(`REQUESTER\n${d.RequesterName}\n${formatDate(p.ValidFrom)}`, 35, sigY + 5);
+        doc.rect(208, sigY, 178, 50).stroke().text(`SAFETY OFFICER\n${d.Reviewer_Sig||'Pending'}`, 213, sigY + 5);
+        doc.rect(386, sigY, 179, 50).stroke().text(`ISSUING AUTHORITY\n${d.Approver_Sig||'Pending'}`, 391, sigY + 5);
         doc.y = sigY + 60;
 
         // RENEWALS
         doc.font('Helvetica-Bold').fontSize(10).text("CLEARANCE RENEWAL", 30, doc.y);
         doc.y += 15;
-        // Header
         doc.rect(30, doc.y, 100, 20).stroke().text("Date/Time", 35, doc.y+5);
         doc.rect(130, doc.y, 150, 20).stroke().text("Readings (HC/Tox/O2)", 135, doc.y+5);
         doc.rect(280, doc.y, 285, 20).stroke().text("Signatures (Req / Safety / Issuer)", 285, doc.y+5);
         doc.y += 20;
-        
         const renewals = JSON.parse(p.RenewalsJSON || "[]");
         doc.font('Helvetica').fontSize(8);
         renewals.forEach(r => {
-             doc.rect(30, doc.y, 100, 30).stroke().text(`${formatDate(r.valid_from)}\nto\n${formatDate(r.valid_till)}`, 35, doc.y+5);
+             doc.rect(30, doc.y, 100, 30).stroke().text(`${formatDate(r.valid_from)}\n${formatDate(r.valid_till)}`, 35, doc.y+5);
              doc.rect(130, doc.y, 150, 30).stroke().text(`HC:${r.hc} Tox:${r.toxic} O2:${r.oxygen}`, 135, doc.y+10);
              doc.rect(280, doc.y, 285, 30).stroke().text(`${r.req_name} | ${r.rev_name||'-'} | ${r.app_name||'-'}`, 285, doc.y+10);
              doc.y += 30;
         });
-        doc.y += 20;
 
         // CLOSURE
+        doc.addPage(); drawHeader(doc); doc.y = 135;
         doc.font('Helvetica-Bold').fontSize(10).text("CLOSURE OF WORK PERMIT", 30, doc.y);
         doc.y += 15;
         doc.rect(30, doc.y, 535, 70).stroke();
         doc.fontSize(8);
-        doc.text("1. RECEIVER: Certified that work is completed & area cleared.", 35, doc.y + 10);
+        doc.text("1. RECEIVER: Work stopped/completed & area cleared.", 35, doc.y + 10);
         doc.font('Helvetica').text(`${d.Closure_Requestor_Remarks || '-'} (${d.Closure_Requestor_Date || ''})`, 300, doc.y + 10);
-        
         doc.font('Helvetica-Bold').text("2. SAFETY: Verified area is safe.", 35, doc.y + 30);
         doc.font('Helvetica').text(`${d.Closure_Reviewer_Remarks || '-'} (${d.Closure_Reviewer_Date || ''})`, 300, doc.y + 30);
-        
         doc.font('Helvetica-Bold').text("3. ISSUER: Permit Closed.", 35, doc.y + 50);
         doc.font('Helvetica').text(`${d.Closure_Approver_Remarks || '-'} (${d.Closure_Approver_Date || ''})`, 300, doc.y + 50);
 
         // GENERAL INSTRUCTIONS
-        doc.addPage(); drawHeader(doc); doc.y = 135;
+        doc.y += 80;
         doc.font('Helvetica-Bold').fontSize(10).text("GENERAL INSTRUCTIONS", 30, doc.y);
         doc.y += 15;
         doc.font('Helvetica').fontSize(8);
@@ -338,22 +318,16 @@ app.get('/api/download-pdf/:id', async (req, res) => {
             "17. CCTV and gas monitoring devices should be utilized.",
             "18. Refer to PLHO guidelines for additional instructions."
         ];
-        instructions.forEach(ins => {
-            doc.text(ins, 30, doc.y);
-            doc.y += 12;
-        });
+        instructions.forEach(ins => { doc.text(ins, 30, doc.y); doc.y += 12; });
 
         // Watermark
         const wm = p.Status.includes('Closed') ? 'CLOSED' : 'ACTIVE';
         const color = p.Status.includes('Closed') ? '#ff0000' : '#00ff00';
         const range = doc.bufferedPageRange();
         for(let i=0; i<range.count; i++) {
-            doc.switchToPage(i); doc.save(); 
-            doc.rotate(-45, {origin:[300,400]}); 
-            doc.fontSize(80).fillColor(color).opacity(0.15).text(wm, 100, 350, {align:'center'}); 
-            doc.restore();
+            doc.switchToPage(i); doc.save(); doc.rotate(-45, {origin:[300,400]}); 
+            doc.fontSize(80).fillColor(color).opacity(0.15).text(wm, 100, 350, {align:'center'}); doc.restore();
         }
-
         doc.end();
     } catch (e) { res.status(500).send(e.message); }
 });

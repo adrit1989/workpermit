@@ -243,14 +243,16 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
         const data = { ...req.body, SelectedWorkers: workers, PermitID: pid, CreatedDate: getNowIST() }; 
         const q = pool.request().input('p', pid).input('s', 'Pending Review').input('w', req.body.WorkType).input('re', req.body.RequesterEmail).input('rv', req.body.ReviewerEmail).input('ap', req.body.ApproverEmail).input('vf', vf).input('vt', vt).input('j', JSON.stringify(data));
         
-        // --- STRICT LAT/LONG SANITIZATION FOR SQL ---
+        // --- BULLETPROOF LAT/LONG SANITIZATION ---
+        // Force Values to String or NULL. mssql cannot handle 'undefined' text.
         let lat = req.body.Latitude;
         let lng = req.body.Longitude;
-        // Ensure values are NULL if undefined or empty string
-        if (lat === undefined || lat === 'undefined' || lat === 'null' || String(lat).trim() === '') lat = null;
-        if (lng === undefined || lng === 'undefined' || lng === 'null' || String(lng).trim() === '') lng = null;
+        
+        const safeLat = (lat && lat !== 'undefined' && lat !== 'null' && String(lat).trim() !== '') ? String(lat) : null;
+        const safeLng = (lng && lng !== 'undefined' && lng !== 'null' && String(lng).trim() !== '') ? String(lng) : null;
 
-        q.input('lat', sql.NVarChar(50), lat).input('lng', sql.NVarChar(50), lng);
+        q.input('lat', sql.NVarChar, safeLat);
+        q.input('lng', sql.NVarChar, safeLng);
 
         if (chk.recordset.length > 0) await q.query("UPDATE Permits SET FullDataJSON=@j, WorkType=@w, ValidFrom=@vf, ValidTo=@vt, Latitude=@lat, Longitude=@lng WHERE PermitID=@p");
         else await q.query("INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, FullDataJSON, RenewalsJSON) VALUES (@p, @s, @w, @re, @rv, @ap, @vf, @vt, @lat, @lng, @j, '[]')");
@@ -269,7 +271,7 @@ app.post('/api/update-status', async (req, res) => {
         Object.assign(d, extras);
         if(bgColor) d.PdfBgColor = bgColor;
         
-        // MERGE CLOSURE REMARKS EXPLICITLY
+        // MERGE CLOSURE REMARKS
         if(req.body.Closure_Requestor_Remarks) d.Closure_Requestor_Remarks = req.body.Closure_Requestor_Remarks;
         if(req.body.Closure_Reviewer_Remarks) d.Closure_Reviewer_Remarks = req.body.Closure_Reviewer_Remarks;
         if(req.body.Closure_Approver_Remarks) d.Closure_Approver_Remarks = req.body.Closure_Approver_Remarks;
@@ -394,7 +396,7 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.y = wy+20;
 
         doc.font('Helvetica-Bold').text("SIGNATURES",30,doc.y); doc.y+=15; const sY=doc.y;
-        doc.rect(30,sY,178,40).stroke().text(`REQ: ${d.RequesterName}\n${d.CreatedDate||''}`,35,sY+5);
+        doc.rect(30,sY,178,40).stroke().text(`REQ: ${d.RequesterName} on ${d.CreatedDate||'-'}`,35,sY+5);
         doc.rect(208,sY,178,40).stroke().text(`REV: ${d.Reviewer_Sig||'-'}`,213,sY+5);
         doc.rect(386,sY,179,40).stroke().text(`APP: ${d.Approver_Sig||'-'}`,391,sY+5); doc.y=sY+50;
 

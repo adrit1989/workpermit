@@ -116,7 +116,7 @@
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div><label>Work Type</label><select name="WorkType" id="WorkType"><option>Hot</option><option>Cold</option><option>Confined Space</option><option>Excavation</option></select></div>
                         <div><label>Specific Work</label><input name="WorkTypeOther" id="WorkTypeOther"></div>
-                        <div><label>Location (GPS)</label><div class="flex gap-1"><input name="ExactLocation" id="ExactLocation"><button type="button" onclick="window.getGeo()" class="bg-gray-200 px-2">📍</button></div></div>
+                        <div><label>Location (GPS)</label><div class="flex gap-1"><input name="ExactLocation" id="ExactLocation"><button type="button" onclick="window.getGeo()" class="bg-gray-200 px-2" id="btn-get-geo">📍</button></div></div>
                         <div><label>Location Details (Text)</label><input name="WorkLocationDetail" id="WorkLocationDetail"></div>
                         <div><label>Section/Unit</label><input name="LocationUnit" id="LocationUnit" value="Pipeline"></div>
                         
@@ -135,11 +135,6 @@
                     </div>
                 </div>
 
-                <div class="glass">
-                    <h3 class="section-title">2. Checklists</h3>
-                    <div id="checklists-wrapper"></div>
-                </div>
-
                 <div class="glass" id="section-e">
                     <h3 class="section-title">E. Attachment Details</h3>
                     <div class="grid grid-cols-4 gap-4">
@@ -149,6 +144,11 @@
                         <input name="ContEquip" id="ContEquip" placeholder="Contractor Equip">
                         <input name="WorkOrder" id="WorkOrder" placeholder="Work Order No & Date">
                     </div>
+                </div>
+
+                <div class="glass">
+                    <h3 class="section-title">2. Checklists</h3>
+                    <div id="checklists-wrapper"></div>
                 </div>
 
                 <div class="glass" id="worker-select-section">
@@ -374,7 +374,7 @@
                 else { e.value=p[e.name]||''; }
                 e.disabled=true; 
             });
-            // Also populate closure remarks fields explicitly
+            // POPULATE CLOSURE REMARKS EXPLICITLY
             safeSet("Closure_Requestor_Remarks", p.Closure_Requestor_Remarks || "");
             safeSet("Closure_Reviewer_Remarks", p.Closure_Reviewer_Remarks || "");
             safeSet("Closure_Approver_Remarks", p.Closure_Approver_Remarks || "");
@@ -389,7 +389,6 @@
 
             const r=currentUser.Role, s=p.Status;
             
-            // IF EDIT MODE (Pending Review & Requester) -> Show Checkboxes
             if(s==='Pending Review' && r==='Requester') {
                 document.getElementById('worker-checkboxes').classList.remove('hidden');
                 document.getElementById('worker-readonly-table').classList.add('hidden');
@@ -399,11 +398,16 @@
                     c.disabled = false;
                 });
             } else {
-                // READ ONLY MODE -> Show Table
                 document.getElementById('worker-checkboxes').classList.add('hidden');
                 const wTable = document.querySelector('#worker-readonly-table tbody');
                 wTable.innerHTML = workersArr.map(w => `<tr><td>${w.Name}</td><td>${w.Gender}</td><td>${w.Age}</td><td>${p.RequesterName}</td></tr>`).join('');
                 document.getElementById('worker-readonly-table').classList.remove('hidden');
+            }
+            
+            // LOCK LOCATION
+            if(s !== 'New') {
+                 document.getElementById("ExactLocation").disabled = true;
+                 document.getElementById("btn-get-geo").disabled = true;
             }
 
             if(p.H_Others==='Y') document.getElementById('other-hazard-div').classList.remove('hidden');
@@ -489,10 +493,8 @@
                  document.getElementById("closure-section").classList.remove('hidden');
                  document.getElementById("div-closure-req").classList.remove('hidden');
                  setText("ts-clos-req", p.Closure_Requestor_Date);
-                 
                  if(s!=='Closure Pending Review') { document.getElementById("div-closure-rev").classList.remove('hidden'); setText("ts-clos-rev", p.Closure_Reviewer_Date); }
                  if(s==='Closed') { document.getElementById("div-closure-app").classList.remove('hidden'); setText("ts-clos-app", p.Closure_Approver_Date); }
-
                  if(s==='Closure Pending Review' && r==='Reviewer') { 
                      document.getElementById("div-closure-rev").classList.remove('hidden'); 
                      document.getElementById("Closure_Reviewer_Remarks").disabled=false; 

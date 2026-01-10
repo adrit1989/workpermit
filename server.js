@@ -118,7 +118,7 @@ app.post('/api/dashboard', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 4. SAVE PERMIT (FIXED: Handling ID validation properly)
+// 4. SAVE PERMIT (FIXED FOR UPDATE)
 app.post('/api/save-permit', upload.single('file'), async (req, res) => {
     try {
         const vf = new Date(req.body.ValidFrom);
@@ -129,7 +129,7 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
 
         const pool = await getConnection();
         
-        // --- FIX: SANITIZE PERMIT ID ---
+        // --- SANITIZE PERMIT ID ---
         let rawId = req.body.PermitID;
         if (!rawId || rawId === 'undefined' || rawId === 'null' || rawId.trim() === '') {
             rawId = null;
@@ -291,6 +291,7 @@ app.post('/api/update-status', async (req, res) => {
         } else {
              q.query("UPDATE Permits SET Status = @status, FullDataJSON = @json WHERE PermitID = @pid");
         }
+
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -367,7 +368,6 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.font('Helvetica-Bold').text('OTHER DETAILS & CHECKLISTS');
         let y = drawTable(doc.y, [[`Vendor: ${d.Vendor}`, `Location: ${d.ExactLocation}`]], [257, 258]); doc.y = y + 10;
         
-        // --- HAZARDS & PPE (FIXED) ---
         const hazards = ["H_H2S", "H_LackOxygen", "H_Corrosive", "H_ToxicGas", "H_Combustible", "H_Steam", "H_PyroIron", "H_N2Gas", "H_Height", "H_LooseEarth", "H_HighNoise", "H_Radiation", "H_Other"];
         let hList = hazards.filter(h => d[h] === 'Y').map(h => h.replace('H_','')).join(', ');
         if(d.H_Other === 'Y' && d.H_Other_Detail) hList += ` (Other: ${d.H_Other_Detail})`;

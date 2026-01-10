@@ -116,8 +116,9 @@
                         <div><label>Work Type</label><select name="WorkType" id="WorkType"><option>Hot</option><option>Cold</option><option>Confined Space</option><option>Excavation</option></select></div>
                         <div><label>Specific Work</label><input name="WorkTypeOther" id="WorkTypeOther"></div>
                         <div><label>Location (GPS)</label><div class="flex gap-1"><input name="ExactLocation" id="ExactLocation"><button type="button" onclick="window.getGeo()" class="bg-gray-200 px-2" id="btn-get-geo">📍</button></div></div>
-                        <div><label>Latitude</label><input type="text" id="Latitude" name="Latitude" placeholder="Fetch via GPS"></div>
-                        <div><label>Longitude</label><input type="text" id="Longitude" name="Longitude" placeholder="Fetch via GPS"></div>
+                        
+                        <div><label class="font-bold text-red-600">Latitude</label><input type="text" id="Latitude" name="Latitude" placeholder="Fetch via GPS"></div>
+                        <div><label class="font-bold text-red-600">Longitude</label><input type="text" id="Longitude" name="Longitude" placeholder="Fetch via GPS"></div>
                         
                         <div><label>Location Details (Text)</label><input name="WorkLocationDetail" id="WorkLocationDetail"></div>
                         <div><label>Section/Unit</label><input name="LocationUnit" id="LocationUnit" value="Pipeline"></div>
@@ -617,7 +618,7 @@
             if(json.success){alert("Saved: "+json.permitId); showDashboard();} else alert(json.error); 
         }
         
-        window.checkDate = function() { const vf=new Date(document.getElementById("ValidFrom").value); const vt=new Date(document.getElementById("ValidTo").value); if(vf && vt && (vt-vf)/(1000*60*60*24)>7) { alert("Max 7 Days"); document.getElementById("ValidTo").value=""; } }
+        window.checkDate = function() { const vf=new Date(document.getElementById("ValidFrom").value); const vt=new Date(document.getElementById("ValidTo").value); if(vf && vt) { if(vt <= vf) { alert("End time must be greater than Start time"); document.getElementById("ValidTo").value=""; return; } if((vt-vf)/(1000*60*60*24) > 7) { alert("Max 7 Days"); document.getElementById("ValidTo").value=""; } } }
         window.showDashboard = function() { document.getElementById("view-dashboard").classList.remove('hidden'); document.getElementById("view-form").classList.add('hidden'); document.getElementById("view-add-user").classList.add('hidden'); document.getElementById("view-worker-management").classList.add('hidden'); loadDashboard(); }
         window.getGeo = function() { 
             navigator.geolocation.getCurrentPosition(p=>{

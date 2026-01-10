@@ -34,14 +34,15 @@ function getNowIST() {
         hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false 
     }).replace(',', ''); 
 }
-function formatDate(dateStr) { 
-    if (!dateStr) return '-'; 
-    const d = new Date(dateStr); 
+
+function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr; 
     return d.toLocaleString("en-GB", { 
         day: '2-digit', month: '2-digit', year: 'numeric', 
         hour: '2-digit', minute: '2-digit', hour12: false 
-    }).replace(',', ''); 
+    }).replace(',', '');
 }
 
 // --- CHECKLIST DATA ---
@@ -242,16 +243,19 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
         const data = { ...req.body, SelectedWorkers: workers, PermitID: pid, CreatedDate: getNowIST() }; 
         const q = pool.request().input('p', pid).input('s', 'Pending Review').input('w', req.body.WorkType).input('re', req.body.RequesterEmail).input('rv', req.body.ReviewerEmail).input('ap', req.body.ApproverEmail).input('vf', vf).input('vt', vt).input('j', JSON.stringify(data));
         
-        // SAVE LAT/LONG TO COLUMNS - STRICT CHECK
-        const lat = (req.body.Latitude && req.body.Latitude !== 'undefined') ? req.body.Latitude : null;
-        const lng = (req.body.Longitude && req.body.Longitude !== 'undefined') ? req.body.Longitude : null;
+        // --- FIX: ROBUST NULL CHECK FOR LAT/LNG ---
+        let lat = req.body.Latitude;
+        let lng = req.body.Longitude;
+        if (lat === undefined || lat === 'undefined' || lat === 'null' || String(lat).trim() === '') lat = null;
+        if (lng === undefined || lng === 'undefined' || lng === 'null' || String(lng).trim() === '') lng = null;
+
         q.input('lat', sql.NVarChar, lat).input('lng', sql.NVarChar, lng);
 
         if (chk.recordset.length > 0) await q.query("UPDATE Permits SET FullDataJSON=@j, WorkType=@w, ValidFrom=@vf, ValidTo=@vt, Latitude=@lat, Longitude=@lng WHERE PermitID=@p");
         else await q.query("INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, FullDataJSON, RenewalsJSON) VALUES (@p, @s, @w, @re, @rv, @ap, @vf, @vt, @lat, @lng, @j, '[]')");
         
         res.json({ success: true, permitId: pid });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/update-status', async (req, res) => {
@@ -261,16 +265,20 @@ app.post('/api/update-status', async (req, res) => {
         const cur = await pool.request().input('p', PermitID).query("SELECT * FROM Permits WHERE PermitID=@p");
         if(cur.recordset.length===0) return res.json({error:"Not found"});
         let d = JSON.parse(cur.recordset[0].FullDataJSON);
-        // Merge extras including closure remarks
         Object.assign(d, extras);
         if(bgColor) d.PdfBgColor = bgColor;
         
+        // --- FIX: Explicitly save closure remarks from body ---
+        if(req.body.Closure_Requestor_Remarks) d.Closure_Requestor_Remarks = req.body.Closure_Requestor_Remarks;
+        if(req.body.Closure_Reviewer_Remarks) d.Closure_Reviewer_Remarks = req.body.Closure_Reviewer_Remarks;
+        if(req.body.Closure_Approver_Remarks) d.Closure_Approver_Remarks = req.body.Closure_Approver_Remarks;
+
         let st = cur.recordset[0].Status;
         const now = getNowIST();
 
         if(action==='reject') { st='Rejected'; }
         else if(role==='Reviewer' && action==='review') { st='Pending Approval'; d.Reviewer_Sig=`${user} on ${now}`; }
-        else if(role==='Approver' && action==='approve') { st = st.includes('Closure') ? 'Closed' : 'Active'; if(st==='Closed') {d.Closure_Issuer_Sig=`${user} on ${now}`; d.Closure_Approver_Date=now; d.Closure_Approver_Remarks=comment;} else d.Approver_Sig=`${user} on ${now}`; }
+        else if(role==='Approver' && action==='approve') { st = st.includes('Closure') ? 'Closed' : 'Active'; if(st==='Closed') {d.Closure_Issuer_Sig=`${user} on ${now}`; d.Closure_Approver_Date=now; } else d.Approver_Sig=`${user} on ${now}`; }
         else if(action==='initiate_closure') { st='Closure Pending Review'; d.Closure_Requestor_Date=now; d.Closure_Receiver_Sig=`${user} on ${now}`; }
         else if(action==='reject_closure') { st='Active'; }
         else if(action==='approve_closure') { st = 'Closure Pending Approval'; d.Closure_Reviewer_Sig=`${user} on ${now}`; d.Closure_Reviewer_Date=now; }
@@ -408,7 +416,7 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         });
         doc.y = ry + 20;
 
-        // Closure Table (FIXED)
+        // Closure Table
         if(doc.y>650){doc.addPage(); drawHeader(doc, bgColor); doc.y=135;}
         doc.font('Helvetica-Bold').text("CLOSURE OF WORK PERMIT",30,doc.y); doc.y+=15;
         let cy = doc.y;

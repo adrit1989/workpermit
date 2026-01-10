@@ -30,7 +30,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 function getNowIST() { return new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', ''); }
 function formatDate(dateStr) { if (!dateStr) return '-'; const d = new Date(dateStr); if (isNaN(d.getTime())) return dateStr; return d.toLocaleString("en-GB", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', ''); }
 
-// --- CHECKLIST DATA (EXACT OISD-105) ---
+// --- CHECKLIST DATA (FULL OISD-105 TEXT) ---
 const CHECKLIST_DATA = {
     A: [
         "1. Equipment / Work Area inspected.",
@@ -67,8 +67,15 @@ const CHECKLIST_DATA = {
         "14. Welding Machine Checked for Safe Location.",
         "15. Permit taken for working at height Vide Permit No."
     ],
-    C: ["1. PESO approved spark elimination system provided on the mobile equipment/ vehicle provided."],
-    D: ["1. For excavated trench/ pit proper slop/ shoring/ shuttering provided to prevent soil collapse.", "2. Excavated soil kept at safe distance from trench/pit edge (min. pit depth).", "3. Safe means of access provided inside trench/pit.", "4. Movement of heavy vehicle prohibited."]
+    C: [
+        "1. PESO approved spark elimination system provided on the mobile equipment/ vehicle provided."
+    ],
+    D: [
+        "1. For excavated trench/ pit proper slop/ shoring/ shuttering provided to prevent soil collapse.",
+        "2. Excavated soil kept at safe distance from trench/pit edge (min. pit depth).",
+        "3. Safe means of access provided inside trench/pit.",
+        "4. Movement of heavy vehicle prohibited."
+    ]
 };
 
 // --- PDF DRAWING ---
@@ -90,7 +97,6 @@ function drawHeader(doc) {
 
 // --- API ROUTES ---
 
-// 1. LOGIN (Case Insensitive)
 app.post('/api/login', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -102,7 +108,6 @@ app.post('/api/login', async (req, res) => {
     } catch(e){res.status(500).json({error:e.message})} 
 });
 
-// 2. USERS
 app.get('/api/users', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -117,13 +122,21 @@ app.get('/api/users', async (req, res) => {
     } catch(e){res.status(500).json({error:e.message})} 
 });
 
-// 3. DASHBOARD (Stats included)
+app.post('/api/add-user', async (req, res) => {
+    try {
+        const pool = await getConnection();
+        const check = await pool.request().input('e', req.body.email).query("SELECT * FROM Users WHERE Email=@e");
+        if(check.recordset.length) return res.status(400).json({error:"User Exists"});
+        await pool.request().input('n', req.body.name).input('e', req.body.email).input('r', req.body.role).input('p', req.body.password).query("INSERT INTO Users (Name,Email,Role,Password) VALUES (@n,@e,@r,@p)");
+        res.json({success:true});
+    } catch(e){res.status(500).json({error:e.message})} 
+});
+
 app.post('/api/dashboard', async (req, res) => {
     try {
         const pool = await getConnection();
         const r = await pool.request().query("SELECT PermitID, Status, ValidFrom, ValidTo, RequesterEmail, ReviewerEmail, ApproverEmail, FullDataJSON FROM Permits");
-        const p = r.recordset.map(x=>({...JSON.parse(x.FullDataJSON), PermitID:x.PermitID, Status:x.Status}));
-        
+        const p = r.recordset.map(x=>({...JSON.parse(x.FullDataJSON), PermitID:x.PermitID, Status:x.Status, ValidFrom:x.ValidFrom}));
         const f = p.filter(x => {
             const st = (x.Status||"").toLowerCase();
             if (req.body.role==='Requester') return x.RequesterEmail === req.body.email;
@@ -135,21 +148,16 @@ app.post('/api/dashboard', async (req, res) => {
     } catch(e){res.status(500).json({error:e.message})} 
 });
 
-// STATS FOR CHARTS
 app.post('/api/stats', async (req, res) => {
     try {
         const pool = await getConnection();
         const r = await pool.request().query("SELECT Status, WorkType FROM Permits");
         const s={}, t={};
-        r.recordset.forEach(x => {
-            s[x.Status] = (s[x.Status]||0)+1;
-            t[x.WorkType] = (t[x.WorkType]||0)+1;
-        });
+        r.recordset.forEach(x => { s[x.Status] = (s[x.Status]||0)+1; t[x.WorkType] = (t[x.WorkType]||0)+1; });
         res.json({success:true, statusCounts:s, typeCounts:t});
     } catch(e) { res.status(500).json({error:e.message}); }
 });
 
-// 4. SAVE PERMIT
 app.post('/api/save-permit', upload.single('file'), async (req, res) => {
     try {
         const vf = new Date(req.body.ValidFrom); const vt = new Date(req.body.ValidTo);
@@ -157,7 +165,6 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
 
         const pool = await getConnection();
         let pid = req.body.PermitID;
-        // Strict ID Sanitization
         if (!pid || pid === 'undefined' || pid === 'null' || (typeof pid === 'string' && pid.trim() === '')) pid = null;
 
         let isUpdate = false;
@@ -192,7 +199,6 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 5. UPDATE STATUS
 app.post('/api/update-status', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -215,7 +221,6 @@ app.post('/api/update-status', async (req, res) => {
     } catch(e){res.status(500).json({error:e.message})} 
 });
 
-// 6. RENEWALS
 app.post('/api/renewal', async (req, res) => {
     try {
         const { PermitID, userRole, userName, action, rejectionReason, ...data } = req.body;
@@ -243,16 +248,17 @@ app.post('/api/renewal', async (req, res) => {
             }
         }
         
-        let newStatus = r[r.length-1].status==='approved'?'Active':(r[r.length-1].status==='rejected'?'Active':(userRole==='Requester'?'Renewal Pending Review':'Renewal Pending Approval'));
+        let newStatus = r[r.length-1].status==='approved'?'Active':(r[r.length-1].status==='rejected'?'Active':(r[r.length-1].status==='pending_approval'?'Renewal Pending Approval':'Renewal Pending Review'));
         await pool.request().input('p', PermitID).input('r', JSON.stringify(r)).input('s', newStatus).query("UPDATE Permits SET RenewalsJSON=@r, Status=@s WHERE PermitID=@p");
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/permit-data', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().input('p', sql.NVarChar, req.body.permitId).query("SELECT * FROM Permits WHERE PermitID=@p"); if(r.recordset.length) res.json({...JSON.parse(r.recordset[0].FullDataJSON), Status:r.recordset[0].Status, RenewalsJSON:r.recordset[0].RenewalsJSON, FullDataJSON:null}); else res.json({error:"404"}); } catch(e){res.status(500).json({error:e.message})} });
+app.post('/api/permit-data', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().input('p', req.body.permitId).query("SELECT * FROM Permits WHERE PermitID=@p"); if(r.recordset.length) res.json({...JSON.parse(r.recordset[0].FullDataJSON), Status:r.recordset[0].Status, RenewalsJSON:r.recordset[0].RenewalsJSON, FullDataJSON:null}); else res.json({error:"404"}); } catch(e){res.status(500).json({error:e.message})} });
 app.post('/api/map-data', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().query("SELECT PermitID, FullDataJSON, Latitude, Longitude FROM Permits WHERE Status='Active'"); res.json(r.recordset.map(x=>({PermitID:x.PermitID, lat:parseFloat(x.Latitude), lng:parseFloat(x.Longitude), ...JSON.parse(x.FullDataJSON)}))); } catch(e){res.status(500).json({error:e.message})} });
+app.get('/api/download-excel', async (req, res) => { try { const pool = await getConnection(); const result = await pool.request().query("SELECT * FROM Permits ORDER BY Id DESC"); const workbook = new ExcelJS.Workbook(); const sheet = workbook.addWorksheet('Permits Summary'); sheet.columns = [{header:'Permit ID',key:'id',width:15},{header:'Status',key:'status',width:20},{header:'Work Type',key:'wt',width:25},{header:'Requester',key:'req',width:25},{header:'Location',key:'loc',width:30},{header:'Vendor',key:'ven',width:20},{header:'Valid From',key:'vf',width:20},{header:'Valid To',key:'vt',width:20}]; sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 }; sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFED7D31' } }; result.recordset.forEach(r => { const d = JSON.parse(r.FullDataJSON || "{}"); sheet.addRow({ id: r.PermitID, status: r.Status, wt: d.WorkType, req: d.RequesterName, loc: d.ExactLocation, ven: d.Vendor, vf: formatDate(r.ValidFrom), vt: formatDate(r.ValidTo) }); }); res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); res.setHeader('Content-Disposition', 'attachment; filename=IndianOil_Permits.xlsx'); await workbook.xlsx.write(res); res.end(); } catch (e) { res.status(500).send(e.message); } });
 
-// PDF GENERATION
+// 8. PDF GENERATION (EXACT OISD-105 FORMAT)
 app.get('/api/download-pdf/:id', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -263,8 +269,8 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', `attachment; filename=${p.PermitID}.pdf`); doc.pipe(res);
 
         // Header
-        drawHeader(doc); doc.y=135; doc.fontSize(9).font('Helvetica');
-        const infoY=doc.y; const c1=40, c2=300;
+        drawHeader(doc); doc.y = 135; doc.fontSize(9).font('Helvetica');
+        const infoY = doc.y; const c1 = 40, c2 = 300;
         doc.text(`Permit No: ${p.PermitID}`, c1, infoY).text(`Validity: ${formatDate(p.ValidFrom)} - ${formatDate(p.ValidTo)}`, c2, infoY);
         doc.text(`Issued To: ${d.IssuedToDept} (${d.Vendor})`, c1, infoY+15).text(`Location: ${d.ExactLocation}`, c2, infoY+15);
         doc.text(`Desc: ${d.Desc}`, c1, infoY+30,{width:500}).text(`Site Person: ${d.RequesterName}`, c1, infoY+60).text(`Security: ${d.SecurityGuard||'-'}`, c2, infoY+60);
@@ -279,9 +285,12 @@ app.get('/api/download-pdf/:id', async (req, res) => {
             doc.font('Helvetica').fontSize(8);
             i.forEach((x,k)=>{
                 if(y>750){doc.addPage(); drawHeader(doc); doc.y=135; y=135;}
-                doc.rect(30,y,350,20).stroke().text(x,35,y+5,{width:340});
-                doc.rect(380,y,60,20).stroke().text(d[`${pr}_Q${k+1}`]||'NA',385,y+5);
-                doc.rect(440,y,125,20).stroke().text(d[`${pr}_Q${k+1}_Detail`]||'',445,y+5); y+=20;
+                const st = d[`${pr}_Q${k+1}`]||'NA';
+                if (st !== 'NA') { // Only print if relevant or show all? OISD usually shows all.
+                    doc.rect(30,y,350,20).stroke().text(x,35,y+5,{width:340});
+                    doc.rect(380,y,60,20).stroke().text(st,385,y+5);
+                    doc.rect(440,y,125,20).stroke().text(d[`${pr}_Q${k+1}_Detail`]||'',445,y+5); y+=20;
+                }
             }); doc.y=y;
         };
         drawChecklist("SECTION A", CHECKLIST_DATA.A,'A'); drawChecklist("SECTION B", CHECKLIST_DATA.B,'B'); drawChecklist("SECTION C", CHECKLIST_DATA.C,'C'); drawChecklist("SECTION D", CHECKLIST_DATA.D,'D');
@@ -289,7 +298,13 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         // Hazards
         doc.addPage(); drawHeader(doc); doc.y=135;
         doc.font('Helvetica-Bold').text("HAZARDS & PRECAUTIONS",30,doc.y); doc.y+=15; doc.rect(30,doc.y,535,60).stroke();
-        doc.text(`Hazards: ${d.H_Others_Detail||'Standard'}`,35,doc.y+5); doc.text(`PPE: Standard`,35,doc.y+25); doc.y+=70;
+        const hazKeys = ["Lack of Oxygen", "H2S", "Toxic Gases", "Combustible gases", "Pyrophoric Iron", "Corrosive Chemicals", "cave in formation"];
+        const foundHaz = hazKeys.filter(k => d[`H_${k.replace(/ /g,'')}`] === 'Y'); if(d.H_Others==='Y') foundHaz.push(`Others: ${d.H_Others_Detail}`);
+        doc.text(`Hazards: ${foundHaz.join(', ')}`,35,doc.y+5); 
+        
+        const ppeKeys = ["Helmet","Safety Shoes","Hand gloves","Boiler suit","Face Shield","Apron","Goggles","Dust Respirator","Fresh Air Mask","Lifeline","Safety Harness","Airline","Earmuff"];
+        const foundPPE = ppeKeys.filter(k => d[`P_${k.replace(/ /g,'')}`] === 'Y');
+        doc.text(`PPE: ${foundPPE.join(', ')}`,35,doc.y+25); doc.y+=70;
 
         // Signatures
         doc.font('Helvetica-Bold').text("SIGNATURES",30,doc.y); doc.y+=15; const sY=doc.y;
@@ -297,11 +312,10 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.rect(208,sY,178,40).stroke().text(`REV: ${d.Reviewer_Sig||'-'}`,213,sY+5);
         doc.rect(386,sY,179,40).stroke().text(`APP: ${d.Approver_Sig||'-'}`,391,sY+5); doc.y=sY+50;
 
-        // Renewals (TABULAR FORMAT)
+        // Renewals
         doc.font('Helvetica-Bold').text("CLEARANCE RENEWAL",30,doc.y); doc.y+=15;
         let ry = doc.y;
         doc.rect(30,ry,60,25).stroke().text("From",32,ry+5); doc.rect(90,ry,60,25).stroke().text("To",92,ry+5); doc.rect(150,ry,100,25).stroke().text("Gas (HC/Tox/O2)",152,ry+5); doc.rect(250,ry,100,25).stroke().text("Precautions",252,ry+5); doc.rect(350,ry,70,25).stroke().text("Req",352,ry+5); doc.rect(420,ry,70,25).stroke().text("Rev",422,ry+5); doc.rect(490,ry,75,25).stroke().text("App",492,ry+5); ry+=25;
-        
         const renewals = JSON.parse(p.RenewalsJSON || "[]");
         doc.font('Helvetica').fontSize(8);
         renewals.forEach(r => {
@@ -309,9 +323,9 @@ app.get('/api/download-pdf/:id', async (req, res) => {
              doc.rect(90,ry,60,35).stroke().text(r.valid_till.replace('T','\n'), 92, ry+5);
              doc.rect(150,ry,100,35).stroke().text(`${r.hc}/${r.toxic}/${r.oxygen}`, 152, ry+5);
              doc.rect(250,ry,100,35).stroke().text(r.precautions||'-', 252, ry+5);
-             doc.rect(350,ry,70,35).stroke().text(r.req_name, 352, ry+5);
-             doc.rect(420,ry,70,35).stroke().text(r.rev_name||'-', 422, ry+5);
-             doc.rect(490,ry,75,35).stroke().text(r.app_name||'-', 492, ry+5);
+             doc.rect(350,ry,70,35).stroke().text(`${r.req_name}\n${r.req_at}`, 352, ry+5);
+             doc.rect(420,ry,70,35).stroke().text(`${r.rev_name||'-'}\n${r.rev_at||'-'}`, 422, ry+5);
+             doc.rect(490,ry,75,35).stroke().text(`${r.app_name||'-'}\n${r.app_at||'-'}`, 492, ry+5);
              ry += 35;
         });
         doc.y = ry + 20;
@@ -322,8 +336,19 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.text(`Safety: ${d.Closure_Reviewer_Remarks||'-'}`,35,doc.y+20);
         doc.text(`Issuer: ${d.Closure_Approver_Remarks||'-'}`,35,doc.y+35);
         
-        const wm = p.Status.includes('Closed')?'CLOSED':'ACTIVE';
-        const range = doc.bufferedPageRange(); for(let i=0; i<range.count; i++) { doc.switchToPage(i); doc.save(); doc.rotate(-45, {origin:[300,400]}); doc.fontSize(80).fillColor(p.Status.includes('Closed')?'#ef4444':'#22c55e').opacity(0.15).text(wm, 100, 350, {align:'center'}); doc.restore(); }
+        // General Instructions
+        doc.addPage(); drawHeader(doc); doc.y = 135; doc.font('Helvetica-Bold').fontSize(10).text("GENERAL INSTRUCTIONS", 30, doc.y); doc.y += 15; doc.font('Helvetica').fontSize(8);
+        const instructions = ["1. The work permit shall be filled up carefully.", "2. Appropriate safeguards and PPEs shall be determined.", "3. Requirement of standby personnel shall be mentioned.", "4. Means of communication must be available.", "5. Shift-wise communication to Main Control Room.", "6. Only certified vehicles and electrical equipment allowed.", "7. Welding machines shall be placed in ventilated areas.", "8. No hot work unless explosive meter reading is Zero.", "9. Standby person mandatory for confined space.", "10. Compressed gas cylinders not allowed inside.", "11. While filling trench, men/equipment must be outside.", "12. For renewal, issuer must ensure conditions are satisfactory.", "13. Max renewal up to 7 calendar days.", "14. Permit must be available at site.", "15. On completion, permit must be closed.", "16. Follow latest SOP for Trenching.", "17. CCTV and gas monitoring should be utilized.", "18. Refer to PLHO guidelines for details."];
+        instructions.forEach(i => { doc.text(i, 30, doc.y); doc.y += 12; });
+
+        // Watermark
+        const wm = p.Status.includes('Closed') ? 'CLOSED' : 'ACTIVE';
+        const color = p.Status.includes('Closed') ? '#ef4444' : '#22c55e';
+        const range = doc.bufferedPageRange();
+        for(let i=0; i<range.count; i++) {
+            doc.switchToPage(i); doc.save(); doc.rotate(-45, {origin:[300,400]}); 
+            doc.fontSize(80).fillColor(color).opacity(0.15).text(wm, 100, 350, {align:'center'}); doc.restore();
+        }
         doc.end();
     } catch (e) { res.status(500).send(e.message); }
 });

@@ -109,17 +109,16 @@
 
             <form id="pf">
                 <input type="hidden" id="PermitID" name="PermitID"><input type="hidden" id="Status" name="Status">
-                <div class="hidden">
-                   <input type="text" id="Latitude" name="Latitude">
-                   <input type="text" id="Longitude" name="Longitude">
-                </div>
-
+                
                 <div class="glass">
                     <h3 class="section-title">1. Permit Details</h3>
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div><label>Work Type</label><select name="WorkType" id="WorkType"><option>Hot</option><option>Cold</option><option>Confined Space</option><option>Excavation</option></select></div>
                         <div><label>Specific Work</label><input name="WorkTypeOther" id="WorkTypeOther"></div>
                         <div><label>Location (GPS)</label><div class="flex gap-1"><input name="ExactLocation" id="ExactLocation"><button type="button" onclick="window.getGeo()" class="bg-gray-200 px-2" id="btn-get-geo">📍</button></div></div>
+                        <div><label>Latitude</label><input type="text" id="Latitude" name="Latitude" placeholder="Fetch via GPS"></div>
+                        <div><label>Longitude</label><input type="text" id="Longitude" name="Longitude" placeholder="Fetch via GPS"></div>
+                        
                         <div><label>Location Details (Text)</label><input name="WorkLocationDetail" id="WorkLocationDetail"></div>
                         <div><label>Section/Unit</label><input name="LocationUnit" id="LocationUnit" value="Pipeline"></div>
                         
@@ -411,6 +410,8 @@
             if(s !== 'New') {
                  document.getElementById("ExactLocation").disabled = true;
                  document.getElementById("btn-get-geo").disabled = true;
+                 document.getElementById("Latitude").disabled = true;
+                 document.getElementById("Longitude").disabled = true;
             }
 
             if(p.H_Others==='Y') document.getElementById('other-hazard-div').classList.remove('hidden');

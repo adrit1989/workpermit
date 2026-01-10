@@ -22,6 +22,7 @@
     </style>
   </head>
   <body class="antialiased min-h-screen">
+    
     <div id="view-login" class="flex items-center justify-center min-h-screen p-4">
       <div class="glass-panel w-96">
         <h2 class="text-2xl font-bold text-center mb-6 text-slate-800">Permit System</h2>
@@ -33,6 +34,7 @@
         </form>
       </div>
     </div>
+
     <div id="app-container" style="display: none;">
       <nav class="fixed w-full z-50 bg-slate-900 text-white h-14 flex items-center px-4 justify-between shadow-lg">
         <div class="font-bold text-lg">🛡️ Permit System</div>
@@ -41,6 +43,7 @@
           <button onclick="location.reload()" class="bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded">Logout</button>
         </div>
       </nav>
+      
       <main class="max-w-7xl mx-auto px-2 pt-20 pb-12 h-screen flex flex-col">
         <div id="view-dashboard" class="flex-1 overflow-auto">
           <div class="flex justify-between items-center mb-4">
@@ -52,14 +55,17 @@
               <button id="btn-new-permit" onclick="showNewPermit()" class="bg-emerald-600 text-white px-4 py-1.5 rounded font-bold text-xs hidden shadow">+ New Permit</button>
             </div>
           </div>
+
           <div id="charts-container" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 hidden">
               <div class="glass-panel h-64"><canvas id="chartStatus"></canvas></div>
               <div class="glass-panel h-64"><canvas id="chartType"></canvas></div>
           </div>
+
           <div class="glass-panel overflow-x-auto">
              <table class="w-full text-xs text-left"><thead class="bg-slate-100"><tr><th class="p-2">ID</th><th>Work</th><th>Vendor</th><th>Req</th><th>Status</th><th>Action</th></tr></thead><tbody id="permit-list-body" class="divide-y"></tbody></table>
           </div>
         </div>
+
         <div id="view-add-user" class="hidden flex items-center justify-center h-full">
             <div class="glass-panel w-96 relative">
                 <button onclick="showDashboard()" class="absolute top-2 right-2 text-gray-500 hover:text-gray-800 font-bold">✕</button>
@@ -73,6 +79,7 @@
                 </form>
             </div>
         </div>
+
         <div id="view-map-container" class="hidden h-full flex flex-col pt-4">
            <button onclick="showDashboard()" class="bg-white px-3 py-1 rounded mb-2 shadow font-bold text-xs w-fit">← Back</button>
            <div class="flex flex-1 gap-4 h-[500px]">
@@ -80,6 +87,7 @@
                <div class="w-2/3 glass-panel p-0 overflow-hidden"><div id="map"></div></div>
            </div>
         </div>
+
         <div id="view-form" style="display: none;">
            <button onclick="showDashboard()" class="bg-white/20 text-white px-3 py-1 rounded mb-3 font-bold text-xs">← Back</button>
            <form id="permit-form" class="space-y-3">
@@ -115,12 +123,14 @@
                     <div class="col-span-2"><label>Assign Approver</label><select id="ApproverEmail" name="ApproverEmail"></select></div>
                  </div>
               </div>
+
               <div class="glass-panel">
                   <h3 class="font-bold text-indigo-700 mb-3 border-b pb-1">2. Safety Checklists</h3>
                   <div class="overflow-x-auto"><table class="w-full text-xs text-left checklist-table"><thead class="bg-indigo-50"><tr><th class="w-1/2">Check Point</th><th>Status</th><th>Remarks/Details</th></tr></thead><tbody id="checklist-container"></tbody></table></div>
                   <h4 class="font-bold text-indigo-700 mt-4 mb-2">Specific Checks</h4>
                   <div class="overflow-x-auto"><table class="w-full text-xs text-left checklist-table"><thead class="bg-indigo-50"><tr><th class="w-1/2">Check Point</th><th>Status</th><th>Remarks</th></tr></thead><tbody id="specific-container"></tbody></table></div>
               </div>
+              
               <div id="fs-reviewer-section" class="glass-panel border-l-4 border-yellow-500 hidden">
                  <h3 class="font-bold text-yellow-700 mb-2">3. Reviewer Assessment</h3>
                  <div class="mb-2"><span class="font-bold text-xs block mb-1">Hazards Identified:</span><div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs" id="hazards-container"></div></div>
@@ -130,11 +140,13 @@
                     <textarea id="Reviewer_Remarks" name="Reviewer_Remarks" placeholder="Reviewer Remarks" rows="1" class="bg-yellow-50"></textarea>
                  </div>
               </div>
+
               <div id="fs-approver-section" class="glass-panel border-l-4 border-green-500 hidden">
                  <h3 class="font-bold text-green-700 mb-2">4. Final Approval</h3>
                  <select id="ForceBackgroundColor" name="ForceBackgroundColor" class="mb-2 w-48"><option value="">Auto Color</option><option value="Red">Red</option><option value="Green">Green</option><option value="Yellow">Yellow</option></select>
                  <textarea id="Approver_Remarks" name="Approver_Remarks" placeholder="Approver Remarks" rows="1" class="bg-green-50"></textarea>
               </div>
+
               <div id="renewals-section" class="glass-panel hidden">
                  <h3 class="font-bold text-slate-700 mb-2">Clearance Renewal History</h3>
                  <div class="overflow-x-auto mb-4 border rounded"><table class="w-full text-xs text-left"><thead class="bg-gray-100 border-b"><tr><th class="p-2">Period</th><th class="p-2">Readings</th><th class="p-2">Status</th><th class="p-2">Req By</th><th class="p-2">Rev By</th><th class="p-2">App By</th></tr></thead><tbody id="renewals-table-body" class="divide-y"></tbody></table></div>
@@ -154,6 +166,7 @@
                     </div>
                  </div>
               </div>
+
               <div id="closure-section" class="glass-panel hidden">
                  <h3 class="font-bold text-slate-700 mb-2">Closure Workflow</h3>
                  <div class="mb-3 p-2 bg-red-50 border border-red-200 rounded"><label class="flex items-center gap-2 font-bold text-red-800 cursor-pointer"><input type="checkbox" id="Site_Restored_Check" name="Site_Restored_Check"> I confirm that the Job Site is cleared and restored to Original condition.</label></div>
@@ -181,10 +194,26 @@
       function updateRoleUI() { const r = currentUser.Role; if(r==='Requester') document.getElementById("btn-new-permit").classList.remove('hidden'); if(r==='Reviewer'||r==='Approver') { document.getElementById("btn-view-map").classList.remove('hidden'); document.getElementById("btn-download-excel").classList.remove('hidden'); document.getElementById("charts-container").classList.remove('hidden'); document.getElementById("btn-add-user").classList.remove('hidden'); loadStats(); } }
       async function loadStats() { const res = await apiCall('/stats', 'POST'); if(chartS) chartS.destroy(); if(chartT) chartT.destroy(); chartS = new Chart(document.getElementById('chartStatus'), {type:'doughnut', data:{labels:Object.keys(res.statusCounts), datasets:[{data:Object.values(res.statusCounts), backgroundColor:['#3b82f6','#ef4444','#10b981','#f59e0b']}]}}); chartT = new Chart(document.getElementById('chartType'), {type:'bar', data:{labels:Object.keys(res.typeCounts), datasets:[{label:'Work Type', data:Object.values(res.typeCounts), backgroundColor:'#6366f1'}]}}); }
       async function loadDashboard() { const res=await apiCall('/dashboard', 'POST', {role:currentUser.Role, email:currentUser.Email}); const list=document.getElementById("permit-list-body"); list.innerHTML=""; res.forEach(p=>{ list.innerHTML+=`<tr class="hover:bg-slate-50 cursor-pointer border-b" onclick="openPermit('${p.PermitID}')"><td class="p-2 font-bold text-indigo-600">${p.PermitID}</td><td>${p.WorkType}</td><td>${p.Vendor||'-'}</td><td>${p.RequesterName}</td><td><span class="bg-indigo-100 text-indigo-800 px-2 rounded font-bold">${p.Status}</span></td><td class="text-blue-600 font-bold">Open</td></tr>`; }); }
-      function showNewPermit() { document.getElementById("permit-form").reset(); currentPermitId=null; document.getElementById("Status").value="New"; document.getElementById("RequesterName").value=currentUser.name; document.getElementById("OfficialName").value=currentUser.name; const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); rS.innerHTML=""; aS.innerHTML=""; window.users.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); window.users.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false); document.getElementById("OfficialName").disabled=true; document.querySelectorAll('input[type="radio"][value="Yes"]').forEach(r => r.checked = true); document.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = true); document.getElementById("fs-reviewer-section").classList.add('hidden'); document.getElementById("fs-approver-section").classList.add('hidden'); document.getElementById("renewals-section").classList.add('hidden'); document.getElementById("closure-section").classList.add('hidden'); document.getElementById("action-buttons").innerHTML = `<button type="button" onclick="submitNewPermit()" class="bg-blue-600 text-white px-6 py-2 rounded font-bold shadow hover:bg-blue-700">Submit Permit</button>`; showForm(); }
+      function showNewPermit() { document.getElementById("permit-form").reset(); currentPermitId=null; document.getElementById("Status").value="New"; document.getElementById("RequesterName").value=currentUser.name; document.getElementById("OfficialName").value=currentUser.name; populateDropdowns(); document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false); document.getElementById("OfficialName").disabled=true; document.querySelectorAll('input[type="radio"][value="Yes"]').forEach(r => r.checked = true); document.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = true); document.getElementById("fs-reviewer-section").classList.add('hidden'); document.getElementById("fs-approver-section").classList.add('hidden'); document.getElementById("renewals-section").classList.add('hidden'); document.getElementById("closure-section").classList.add('hidden'); document.getElementById("action-buttons").innerHTML = `<button type="button" onclick="submitNewPermit()" class="bg-blue-600 text-white px-6 py-2 rounded font-bold shadow hover:bg-blue-700">Submit Permit</button>`; showForm(); }
+      
+      // CRITICAL FIX: POPULATE DROPDOWNS SEPARATELY
+      function populateDropdowns() {
+          if (!window.users) return;
+          const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); 
+          rS.innerHTML=""; aS.innerHTML="";
+          window.users.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`);
+          window.users.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`);
+      }
+
       async function submitNewPermit() { const vf = document.getElementById("ValidFrom").value; const vt = document.getElementById("ValidTo").value; if(!vf || !vt) return alert("Please select dates"); const diff = new Date(vt) - new Date(vf); if(diff > 7 * 24 * 60 * 60 * 1000) return alert("Error: Permit duration cannot exceed 7 days."); if(diff <= 0) return alert("Error: End time must be after Start time."); const fd=new FormData(document.getElementById("permit-form")); document.querySelectorAll('input[type="checkbox"]').forEach(c=>fd.set(c.name, c.checked?"Y":"N")); fd.append("RequesterEmail", currentUser.Email); if(document.getElementById("H_Other").checked) fd.append("H_Other_Detail", document.getElementById("H_Other_Detail").value); if(currentPermitId && (document.getElementById("Status").value === 'Pending Review' || document.getElementById("Status").value === 'New')) { fd.set("PermitID", currentPermitId); } const res=await fetch(API+'/save-permit', {method:'POST', body:fd}); const json=await res.json(); if(json.success){alert("Saved: "+json.permitId); showDashboard();} else alert(json.error); }
+      
       async function openPermit(id) {
-          const p = await apiCall('/permit-data', 'POST', {permitId:id}); currentPermitId=id; document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=true); 
+          const p = await apiCall('/permit-data', 'POST', {permitId:id}); currentPermitId=id; 
+          
+          // 1. POPULATE DROPDOWNS FIRST (CRITICAL)
+          populateDropdowns();
+
+          document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=true); 
           Object.keys(p).forEach(key=>{ const el=document.getElementById(key); if(el) { if(el.type==='checkbox')el.checked=(p[key]==='Y'); else el.value=p[key]; } const radios = document.querySelectorAll(`input[name="${key}"]`); if(radios.length>0) radios.forEach(r=>{ if(r.value===p[key]) r.checked=true; }); const checks = document.querySelectorAll(`input[type="checkbox"][name="${key}"]`); if(checks.length>0) checks.forEach(c=>{ if(p[key]==='Y') c.checked=true; }); });
           if(p.H_Other === 'Y') { document.getElementById("H_Other_Detail").classList.remove("hidden"); document.getElementById("H_Other_Detail").value = p.H_Other_Detail || ""; } else { document.getElementById("H_Other_Detail").classList.add("hidden"); }
           document.getElementById("fs-reviewer-section").classList.add('hidden'); document.getElementById("fs-approver-section").classList.add('hidden'); document.getElementById("renewals-section").classList.add('hidden'); document.getElementById("closure-section").classList.add('hidden'); document.getElementById("btn-reject-renewal").classList.add('hidden');

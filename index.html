@@ -95,7 +95,13 @@
 
         <div id="view-add-user" class="hidden flex justify-center"><div class="glass w-96 relative"><button onclick="window.showDashboard()" class="absolute top-2 right-2 font-bold">✕</button><h3 class="font-bold mb-4">Add User</h3><form onsubmit="event.preventDefault(); window.submitNewUser();" class="space-y-3"><input id="new-user-name" placeholder="Name" required><input id="new-user-email" placeholder="Email" required><select id="new-user-role"><option>Requester</option><option>Reviewer</option><option>Approver</option></select><input id="new-user-pass" type="password" placeholder="Password" required><button class="w-full bg-purple-600 text-white py-2 rounded">Add</button></form></div></div>
 
-        <div id="view-map" class="hidden h-screen flex flex-col"><button onclick="window.showDashboard()" class="mb-2 text-blue-600 font-bold">← Back</button><div class="flex-1 flex gap-2"><div class="w-1/4 glass overflow-y-auto" id="map-list"></div><div id="map" class="flex-1 rounded shadow"></div></div></div>
+        <div id="view-map" class="hidden h-screen flex gap-2">
+             <div class="w-1/4 bg-white p-2 overflow-y-auto" id="map-list"></div>
+             <div class="flex-1 relative">
+                 <button onclick="window.showDashboard()" class="absolute top-2 left-2 bg-white px-2 py-1 z-10 font-bold shadow">← Back</button>
+                 <div id="map" class="w-full h-full"></div>
+             </div>
+        </div>
 
         <div id="view-form" class="hidden">
             <button onclick="window.showDashboard()" class="text-blue-600 font-bold mb-2">← Back</button>
@@ -109,7 +115,8 @@
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div><label>Work Type</label><select name="WorkType" id="WorkType"><option>Hot</option><option>Cold</option><option>Confined Space</option><option>Excavation</option></select></div>
                         <div><label>Specific Work</label><input name="WorkTypeOther" id="WorkTypeOther"></div>
-                        <div><label>Location</label><div class="flex gap-1"><input name="ExactLocation" id="ExactLocation"><button type="button" onclick="window.getGeo()" class="bg-gray-200 px-2">📍</button></div></div>
+                        <div><label>Location (GPS)</label><div class="flex gap-1"><input name="ExactLocation" id="ExactLocation"><button type="button" onclick="window.getGeo()" class="bg-gray-200 px-2">📍</button></div></div>
+                        <div><label>Location Details (Text)</label><input name="WorkLocationDetail" id="WorkLocationDetail"></div>
                         <div><label>Section/Unit</label><input name="LocationUnit" id="LocationUnit" value="Pipeline"></div>
                         
                         <div><label>Valid From</label><input type="datetime-local" name="ValidFrom" id="ValidFrom" onchange="window.checkDate()"></div>
@@ -127,9 +134,21 @@
                     </div>
                 </div>
 
+                <div class="glass">
+                    <h3 class="section-title">E. Attachment Details</h3>
+                    <div class="grid grid-cols-4 gap-4">
+                        <input name="SopNo" id="SopNo" placeholder="SOP/SWP/SMP No">
+                        <input name="JsaNo" id="JsaNo" placeholder="JSA No">
+                        <input name="IoclEquip" id="IoclEquip" placeholder="IOCL Equip">
+                        <input name="ContEquip" id="ContEquip" placeholder="Contractor Equip">
+                        <input name="WorkOrder" id="WorkOrder" placeholder="Work Order No & Date">
+                    </div>
+                </div>
+
                 <div class="glass" id="worker-select-section">
                     <h3 class="section-title">Select Workers (Approved Only)</h3>
-                    <div id="worker-checkboxes" class="grid grid-cols-3 gap-2">Loading...</div>
+                    <div id="worker-checkboxes" class="grid grid-cols-3 gap-2"></div>
+                    <div id="worker-readonly-table" class="hidden overflow-x-auto"><table class="w-full text-xs text-left custom-table"><thead><tr><th>Name</th><th>Gender</th><th>Age</th><th>Contractor</th></tr></thead><tbody></tbody></table></div>
                 </div>
 
                 <div class="glass">
@@ -173,7 +192,7 @@
                         </div>
                     </div>
 
-                    <div class="overflow-x-auto"><table class="w-full text-xs text-left custom-table"><thead><tr><th>Time</th><th>Gas (HC/Tox/O2)</th><th>Status</th><th>Audit Trail</th></tr></thead><tbody id="renewals-list"></tbody></table></div>
+                    <div class="overflow-x-auto"><table class="w-full text-xs text-left custom-table"><thead><tr><th>Time</th><th>Gas (HC/Tox/O2)</th><th>Precautions</th><th>Status</th><th>Audit Trail</th></tr></thead><tbody id="renewals-list"></tbody></table></div>
                     
                     <div id="form-renewal" class="hidden p-4 bg-blue-50 mt-2 rounded">
                         <div class="grid grid-cols-5 gap-2 mb-2">
@@ -194,17 +213,17 @@
                 <div id="closure-section" class="glass hidden">
                     <h3 class="section-title">Closure</h3>
                     <label class="flex items-center gap-2 mb-2 font-bold text-red-600"><input type="checkbox" id="Site_Restored_Check" name="Site_Restored_Check"> Site Restored</label>
-                    <div id="div-closure-req" class="hidden">
-                        <textarea id="Closure_Requestor_Remarks" placeholder="Req Remarks" class="w-full"></textarea>
-                        <span id="ts-clos-req" class="text-xs text-gray-500 float-right"></span>
-                    </div>
-                    <div id="div-closure-rev" class="hidden mt-2">
-                        <textarea id="Closure_Reviewer_Remarks" placeholder="Rev Remarks" class="w-full"></textarea>
-                        <span id="ts-clos-rev" class="text-xs text-gray-500 float-right"></span>
-                    </div>
-                    <div id="div-closure-app" class="hidden mt-2">
-                        <textarea id="Closure_Approver_Remarks" placeholder="App Remarks" class="w-full"></textarea>
-                        <span id="ts-clos-app" class="text-xs text-gray-500 float-right"></span>
+                    <div id="div-closure-req" class="hidden"><textarea id="Closure_Requestor_Remarks" placeholder="Req Remarks" class="w-full"></textarea><span id="ts-clos-req" class="text-xs text-gray-500 float-right"></span></div>
+                    <div id="div-closure-rev" class="hidden mt-2"><textarea id="Closure_Reviewer_Remarks" placeholder="Rev Remarks" class="w-full"></textarea><span id="ts-clos-rev" class="text-xs text-gray-500 float-right"></span></div>
+                    <div id="div-closure-app" class="hidden mt-2"><textarea id="Closure_Approver_Remarks" placeholder="App Remarks" class="w-full"></textarea><span id="ts-clos-app" class="text-xs text-gray-500 float-right"></span></div>
+                </div>
+
+                <div id="signature-history" class="glass hidden">
+                    <h3 class="section-title">Signature History</h3>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div class="border p-2"><strong>Approval:</strong><br><span id="sig-app"></span></div>
+                        <div class="border p-2"><strong>Renewal:</strong><br><span id="sig-ren"></span></div>
+                        <div class="border p-2"><strong>Closure:</strong><br><span id="sig-clos"></span></div>
                     </div>
                 </div>
 
@@ -343,7 +362,7 @@
             const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); rS.innerHTML=""; aS.innerHTML=""; 
             if(window.users){ window.users.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); window.users.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); }
 
-            // Safe Set Helper
+            // Helpers
             const safeSet = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
             const setText = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
 
@@ -355,31 +374,42 @@
                 e.disabled=true; 
             });
 
-            // Populate Approved Workers List
+            // WORKER LOGIC
             await loadWorkers('permit_dropdown');
-            const savedWorkers = p.SelectedWorkers || []; // Now an Array
-            // Ensure savedWorkers is Array
             let workersArr = [];
-            if(Array.isArray(savedWorkers)) workersArr = savedWorkers;
-            else if(typeof savedWorkers === 'string') {
-                 try { workersArr = JSON.parse(savedWorkers); } catch(e){}
+            if(p.SelectedWorkers) {
+                if(Array.isArray(p.SelectedWorkers)) workersArr = p.SelectedWorkers;
+                else if(typeof p.SelectedWorkers === 'string') { try { workersArr = JSON.parse(p.SelectedWorkers); } catch(e){} }
             }
 
-            document.querySelectorAll('#worker-checkboxes input').forEach(c => {
-                 const wData = JSON.parse(c.value);
-                 if(workersArr.find(sw => sw.WorkerID === wData.WorkerID)) c.checked = true;
-                 c.disabled = true; 
-            });
+            const r=currentUser.Role, s=p.Status;
+            
+            // IF EDIT MODE (Pending Review & Requester) -> Show Checkboxes
+            if(s==='Pending Review' && r==='Requester') {
+                document.getElementById('worker-checkboxes').classList.remove('hidden');
+                document.getElementById('worker-readonly-table').classList.add('hidden');
+                document.querySelectorAll('#worker-checkboxes input').forEach(c => {
+                    const wData = JSON.parse(c.value);
+                    if(workersArr.find(sw => sw.WorkerID === wData.WorkerID)) c.checked = true;
+                    c.disabled = false;
+                });
+            } else {
+                // READ ONLY MODE -> Show Table
+                document.getElementById('worker-checkboxes').classList.add('hidden');
+                const wTable = document.querySelector('#worker-readonly-table tbody');
+                wTable.innerHTML = workersArr.map(w => `<tr><td>${w.Name}</td><td>${w.Gender}</td><td>${w.Age}</td><td>${p.RequesterName}</td></tr>`).join('');
+                document.getElementById('worker-readonly-table').classList.remove('hidden');
+            }
 
             if(p.H_Others==='Y') document.getElementById('other-hazard-div').classList.remove('hidden');
 
-            const r=currentUser.Role, s=p.Status;
             document.getElementById("fs-reviewer-section").classList.add('hidden');
             document.getElementById("fs-approver-section").classList.add('hidden');
             document.getElementById("renewals-section").classList.add('hidden');
             document.getElementById("closure-section").classList.add('hidden');
             document.getElementById("pending-renewal-display").classList.add('hidden');
             document.getElementById("action-renewal").classList.add('hidden');
+            document.getElementById("signature-history").classList.add('hidden');
             let btns = "";
 
             if(s === 'Pending Review') {
@@ -387,7 +417,6 @@
                     document.querySelectorAll('#pf input, #pf select, #pf textarea').forEach(e=>e.disabled=false); 
                     document.getElementById("Vendor").value = currentUser.name; document.getElementById("Vendor").disabled=true;
                     document.getElementById("RequesterName").disabled=false; 
-                    document.querySelectorAll('#worker-checkboxes input').forEach(c => c.disabled = false);
                     btns=`<button type="button" onclick="window.savePermit()" class="bg-blue-600 text-white px-4 py-2 rounded">Update</button>`; 
                 }
                 if(r==='Reviewer') { 
@@ -415,14 +444,16 @@
                     <tr class="border-b text-xs">
                         <td>${x.valid_from}<br>${x.valid_till}</td>
                         <td>H:${x.hc} T:${x.toxic} O:${x.oxygen}</td>
+                        <td>${x.precautions||'-'}</td>
                         <td>${x.status}</td>
-                        <td>Req:${x.req_name}<br>Rev:${x.rev_name||'-'}<br>App:${x.app_name||'-'}</td>
+                        <td>Req:${x.req_name} (${x.req_at})<br>Rev:${x.rev_name||'-'} ${x.rev_rem||''}<br>App:${x.app_name||'-'} ${x.rev_rem||''}</td>
                     </tr>`).join('');
                 
                 const last = rens[rens.length-1];
                 if(r==='Requester' && (!last || (last.status!=='pending_review' && last.status!=='pending_approval'))) {
                      document.getElementById("form-renewal").classList.remove('hidden');
                      document.querySelectorAll('#form-renewal input').forEach(e => e.disabled = false);
+                     
                      document.getElementById("div-closure-req").classList.remove('hidden');
                      document.getElementById("Closure_Requestor_Remarks").disabled = false;
                      document.getElementById("Site_Restored_Check").disabled = false;
@@ -453,12 +484,32 @@
                  document.getElementById("closure-section").classList.remove('hidden');
                  document.getElementById("div-closure-req").classList.remove('hidden');
                  setText("ts-clos-req", p.Closure_Requestor_Date);
+                 
                  if(s!=='Closure Pending Review') { document.getElementById("div-closure-rev").classList.remove('hidden'); setText("ts-clos-rev", p.Closure_Reviewer_Date); }
                  if(s==='Closed') { document.getElementById("div-closure-app").classList.remove('hidden'); setText("ts-clos-app", p.Closure_Approver_Date); }
-                 if(s==='Closure Pending Review' && r==='Reviewer') { document.getElementById("div-closure-rev").classList.remove('hidden'); document.getElementById("Closure_Reviewer_Remarks").disabled=false; btns=`<button onclick="window.upd('reject_closure')" class="bg-red-600 text-white px-4 py-2 rounded">Reject Closure</button><button onclick="window.upd('approve_closure')" class="bg-green-600 text-white px-4 py-2 rounded">Verify Closure</button>`; }
-                 if(s==='Closure Pending Approval' && r==='Approver') { document.getElementById("div-closure-app").classList.remove('hidden'); document.getElementById("Closure_Approver_Remarks").disabled=false; btns=`<button onclick="window.upd('reject_closure')" class="bg-red-600 text-white px-4 py-2 rounded">Reject Closure</button><button onclick="window.upd('approve')" class="bg-black text-white px-4 py-2 rounded">Final Close</button>`; }
+
+                 if(s==='Closure Pending Review' && r==='Reviewer') { 
+                     document.getElementById("div-closure-rev").classList.remove('hidden'); 
+                     document.getElementById("Closure_Reviewer_Remarks").disabled=false; 
+                     btns=`<button onclick="window.upd('reject_closure')" class="bg-red-600 text-white px-4 py-2 rounded">Reject Closure</button><button onclick="window.upd('approve_closure')" class="bg-green-600 text-white px-4 py-2 rounded">Verify Closure</button>`; 
+                 }
+                 if(s==='Closure Pending Approval' && r==='Approver') { 
+                     document.getElementById("div-closure-app").classList.remove('hidden'); 
+                     document.getElementById("Closure_Approver_Remarks").disabled=false; 
+                     btns=`<button onclick="window.upd('reject_closure')" class="bg-red-600 text-white px-4 py-2 rounded">Reject Closure</button><button onclick="window.upd('approve')" class="bg-black text-white px-4 py-2 rounded">Final Close</button>`; 
+                 }
                  if(s==='Closed') btns = `<a href="${API}/download-pdf/${id}" target="_blank" class="bg-gray-600 text-white px-4 py-2 rounded ml-2">PDF</a>`;
             }
+
+            // Populate Signature History
+            document.getElementById("signature-history").classList.remove('hidden');
+            setText("sig-app", p.Approver_Sig || 'Pending');
+            // Simplified logic for showing latest renewal sig
+            const rens = JSON.parse(p.RenewalsJSON || "[]");
+            const lastRen = rens[rens.length-1];
+            setText("sig-ren", lastRen ? `${lastRen.app_name} on ${lastRen.app_at}` : 'None');
+            setText("sig-clos", p.Closure_Issuer_Sig || 'Pending');
+
             document.getElementById("actions").innerHTML = btns;
             document.getElementById("view-dashboard").classList.add('hidden');
             document.getElementById("view-form").classList.remove('hidden');
@@ -525,6 +576,8 @@
 
            await loadWorkers('permit_dropdown');
            document.querySelectorAll('#worker-checkboxes input').forEach(c => c.disabled = false);
+           document.getElementById('worker-checkboxes').classList.remove('hidden');
+           document.getElementById('worker-readonly-table').classList.add('hidden');
 
            document.getElementById("fs-reviewer-section").classList.add('hidden'); 
            document.getElementById("fs-approver-section").classList.add('hidden'); 
@@ -554,7 +607,25 @@
         window.showAddUser = function() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-add-user").classList.remove('hidden'); }
         window.submitNewUser = async function() { const n=document.getElementById("new-user-name").value; const e=document.getElementById("new-user-email").value; const r=document.getElementById("new-user-role").value; const p=document.getElementById("new-user-pass").value; const res=await apiCall('/add-user','POST',{name:n,email:e,role:r,password:p}); if(res.success){alert("User Added"); showDashboard();} else alert(res.error); }
         window.showMap = function() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-map").classList.remove('hidden'); loadMapData(); }
-        async function loadMapData() { const p = await apiCall('/map-data', 'POST'); if(!mapInstance) mapInstance=new google.maps.Map(document.getElementById("map"),{center:{lat:22.57,lng:88.36},zoom:5}); document.getElementById("map-list").innerHTML = p.map(x=>`<div class="p-2 border-b cursor-pointer hover:bg-gray-100" onclick="mapInstance.setCenter({lat:${x.lat},lng:${x.lng}}); mapInstance.setZoom(12);">${x.PermitID}</div>`).join(''); p.forEach(x=>{ new google.maps.Marker({position:{lat:x.lat,lng:x.lng},map:mapInstance,title:x.PermitID}); }); }
+        async function loadMapData() { 
+            const p = await apiCall('/map-data', 'POST'); 
+            if(!mapInstance) mapInstance=new google.maps.Map(document.getElementById("map"),{center:{lat:22.57,lng:88.36},zoom:5}); 
+            const listEl = document.getElementById("map-list"); listEl.innerHTML = "";
+            const infoWindow = new google.maps.InfoWindow();
+
+            p.forEach(x => {
+                const marker = new google.maps.Marker({position:{lat:x.lat,lng:x.lng}, map:mapInstance, title:x.PermitID});
+                const content = `<div><b>${x.PermitID}</b><br>Loc: ${x.ExactLocation}<br>Req: ${x.RequesterName}<br>Valid: ${x.ValidTo}</div>`;
+                marker.addListener("click", () => { infoWindow.setContent(content); infoWindow.open(mapInstance, marker); });
+                
+                // Sidebar Item
+                const item = document.createElement("div");
+                item.className = "p-2 border-b cursor-pointer hover:bg-gray-100 text-xs";
+                item.innerHTML = `<b>${x.PermitID}</b><br>${x.WorkType}`;
+                item.onclick = () => { mapInstance.setCenter({lat:x.lat,lng:x.lng}); mapInstance.setZoom(12); infoWindow.setContent(content); infoWindow.open(mapInstance, marker); };
+                listEl.appendChild(item);
+            });
+        }
     </script>
   </body>
 </html>

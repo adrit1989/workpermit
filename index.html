@@ -126,9 +126,16 @@
                     <div id="form-renewal" class="hidden p-4 bg-blue-50">
                         <div class="grid grid-cols-4 gap-2 mb-2">
                              <input type="datetime-local" id="RenewalValidFrom"> <input type="datetime-local" id="RenewalValidTo">
-                             <input id="RenewalGas" placeholder="Gas Readings"> <input id="RenewalPrec" placeholder="Precautions">
+                             <input id="RenewalHC" placeholder="HC %"> <input id="RenewalToxic" placeholder="Toxic"> <input id="RenewalOxygen" placeholder="O2 %">
                         </div>
+                        <input id="RenewalPrec" placeholder="Precautions" class="w-full mb-2">
                         <button type="button" onclick="submitRenewal('approve')" class="bg-blue-600 text-white px-3 py-1 rounded">Submit</button>
+                    </div>
+
+                    <div id="action-renewal" class="hidden p-4 bg-yellow-50 mt-2 rounded">
+                        <textarea id="RenewalRemark" placeholder="Reason for Rejection / Remarks" class="w-full mb-2"></textarea>
+                        <button type="button" onclick="submitRenewal('approve')" class="bg-green-600 text-white px-3 py-1 rounded">Approve</button>
+                        <button type="button" onclick="submitRenewal('reject')" class="bg-red-600 text-white px-3 py-1 rounded">Reject</button>
                     </div>
                 </div>
                 
@@ -193,7 +200,7 @@
             const sel = document.getElementById("login-role");
             sel.innerHTML = '<option value="">Select Role</option><option>Requester</option><option>Reviewer</option><option>Approver</option>';
             sel.onchange = () => {
-                const list = u[sel.value+'s']; // Fixed Pluralization check
+                const list = u[sel.value+'s']; // e.g. Requesters
                 const n = document.getElementById("login-name");
                 n.disabled = false; n.innerHTML = "";
                 if(list) list.forEach(x => n.innerHTML += `<option value="${x.email}">${x.name}</option>`);
@@ -207,7 +214,7 @@
             const pass = document.getElementById("login-password").value;
             const res = await apiCall('/login', 'POST', {role, name:email, password:pass});
             if(res.success) {
-                currentUser = {...res.user, name};
+                currentUser = {...res.user, name:name}; // Ensure name is set
                 document.getElementById("view-login").style.display = 'none';
                 document.getElementById("app-container").style.display = 'block';
                 document.getElementById("user-info").innerText = `${name} (${role})`;
@@ -249,8 +256,9 @@
                 if(e.type === 'radio') { if(e.value === p[e.name]) e.checked = true; }
                 else if(e.type === 'checkbox') { e.checked = (p[e.name] === 'Y'); }
                 else { e.value = p[e.name] || ''; }
-                e.disabled = true;
+                e.disabled = true; 
             });
+
             if(p.H_Others==='Y') document.getElementById('other-hazard-div').classList.remove('hidden');
 
             const r = currentUser.Role, s = p.Status;
@@ -258,6 +266,7 @@
             document.getElementById("fs-approver-section").classList.add('hidden');
             document.getElementById("renewals-section").classList.add('hidden');
             document.getElementById("closure-section").classList.add('hidden');
+            document.getElementById("action-renewal").classList.add('hidden'); // Reset
 
             let btns = "";
             if(s.includes('Pending Review')) {
@@ -289,26 +298,30 @@
                 
                 const rens = JSON.parse(p.RenewalsJSON || "[]");
                 document.getElementById("renewals-list").innerHTML = rens.map(x => `
-                    <div class="border-b p-2 text-xs grid grid-cols-4">
-                        <div>${x.valid_from}<br>${x.valid_till}</div>
-                        <div>${x.readings}</div>
-                        <div>${x.status}</div>
-                        <div>${x.rej_reason || '-'}</div>
-                    </div>`).join('');
+                    <tr class="border-b text-xs">
+                        <td>${x.valid_from}<br>${x.valid_till}</td>
+                        <td>H:${x.hc} T:${x.toxic} O:${x.oxygen}</td>
+                        <td>${x.status}</td>
+                        <td>Req:${x.req_name}<br>Rev:${x.rev_name||'-'}<br>App:${x.app_name||'-'}</td>
+                    </tr>`).join('');
                 
-                btns = `<a href="${API}/download-pdf/${id}" target="_blank" class="bg-gray-600 text-white px-4 py-2 rounded">PDF</a>`;
-
-                if(r === 'Requester') {
+                const last = rens[rens.length-1];
+                if(r === 'Requester' && (!last || (last.status!=='pending_review' && last.status!=='pending_approval'))) {
+                     document.getElementById("form-renewal").classList.remove('hidden');
+                     document.querySelectorAll('#form-renewal input').forEach(e => e.disabled = false);
+                     
                      document.getElementById("div-closure-req").classList.remove('hidden');
                      document.getElementById("Closure_Requestor_Remarks").disabled = false;
                      document.getElementById("Site_Restored_Check").disabled = false;
-                     document.getElementById("form-renewal").classList.remove('hidden');
-                     document.querySelectorAll('#form-renewal input').forEach(e => e.disabled = false);
                      btns += `<button type="button" onclick="upd('initiate_closure')" class="bg-red-600 text-white px-4 py-2 rounded ml-2">Job Complete</button>`;
                 }
+                
+                if(r==='Reviewer' && last && last.status==='pending_review') document.getElementById("action-renewal").classList.remove('hidden');
+                if(r==='Approver' && last && last.status==='pending_approval') document.getElementById("action-renewal").classList.remove('hidden');
+
+                btns += `<a href="${API}/download-pdf/${id}" target="_blank" class="bg-gray-600 text-white px-4 py-2 rounded ml-2">PDF</a>`;
             }
 
-            // CLOSURE LOGIC
             if(s.includes('Closure') || s === 'Closed') {
                  document.getElementById("closure-section").classList.remove('hidden');
                  document.getElementById("div-closure-req").classList.remove('hidden');
@@ -325,6 +338,7 @@
                      document.getElementById("Closure_Approver_Remarks").disabled=false;
                      btns=`<button onclick="upd('approve')" class="bg-black text-white px-4 py-2 rounded">Close Permit</button>`;
                  }
+                 if(s==='Closed') btns = `<a href="${API}/download-pdf/${id}" target="_blank" class="bg-gray-600 text-white px-4 py-2 rounded ml-2">PDF</a>`;
             }
 
             document.getElementById("actions").innerHTML = btns;
@@ -333,7 +347,6 @@
         }
 
         async function upd(act) {
-            // FIX: Safe Access to Elements
             const getVal = (id) => document.getElementById(id) ? document.getElementById(id).value : '';
             const body = { 
                 PermitID: currentPermitId, action: act, role: currentUser.Role, user: currentUser.name,
@@ -343,14 +356,15 @@
                 Closure_Approver_Remarks: getVal("Closure_Approver_Remarks")
             };
             
-            if(currentUser.Role === 'Reviewer') {
+            if(currentUser.Role === 'Reviewer' && act==='review') {
                  const fd = new FormData(document.getElementById("pf"));
                  document.querySelectorAll('#hazards-section input[type=checkbox]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
                  document.querySelectorAll('#ppe-container input[type=checkbox]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
                  body.AdditionalPrecautions = getVal("AdditionalPrecautions");
             }
+
             const res = await apiCall('/update-status', 'POST', body);
-            if(res.success) showDashboard();
+            if(res.success) showDashboard(); else alert(res.error);
         }
 
         async function submitRenewal(act) {
@@ -358,13 +372,23 @@
                 PermitID: currentPermitId, userRole: currentUser.Role, userName: currentUser.name, action: act,
                 RenewalValidFrom: document.getElementById("RenewalValidFrom").value,
                 RenewalValidTo: document.getElementById("RenewalValidTo").value,
-                GasReadings: document.getElementById("RenewalGas").value,
-                Precautions: document.getElementById("RenewalPrec").value
+                hc: document.getElementById("RenewalHC").value,
+                toxic: document.getElementById("RenewalToxic").value,
+                oxygen: document.getElementById("RenewalOxygen").value,
+                precautions: document.getElementById("RenewalPrec").value,
+                rejectionReason: document.getElementById("RenewalRemark").value
             };
             const res = await apiCall('/renewal', 'POST', body);
-            if(res.success) { alert("Renewal Submitted"); showDashboard(); } else alert(res.error);
+            if(res.success) { alert("Done"); showDashboard(); } else alert(res.error);
         }
 
+        function showDashboard() { document.getElementById("view-dashboard").classList.remove('hidden'); document.getElementById("view-form").classList.add('hidden'); loadDashboard(); }
+        function getGeo() { navigator.geolocation.getCurrentPosition(p=>{document.getElementById("Latitude").value=p.coords.latitude;document.getElementById("Longitude").value=p.coords.longitude;}); }
+        function showAddUser() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-add-user").classList.remove('hidden'); }
+        function showMap() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-map").classList.remove('hidden'); loadMapData(); }
+        async function loadMapData() { const p = await apiCall('/map-data', 'POST'); if(!mapInstance) mapInstance=new google.maps.Map(document.getElementById("map"),{center:{lat:22.57,lng:88.36},zoom:5}); document.getElementById("map-list").innerHTML = p.map(x=>`<div class="p-2 border-b cursor-pointer hover:bg-gray-100" onclick="mapInstance.setCenter({lat:${x.lat},lng:${x.lng}}); mapInstance.setZoom(12);">${x.PermitID}</div>`).join(''); p.forEach(x=>{ new google.maps.Marker({position:{lat:x.lat,lng:x.lng},map:mapInstance,title:x.PermitID}); }); }
+        
+        // ... (showNewPermit, savePermit, checkDate, submitNewUser from previous response are identical) ...
         function showNewPermit() { document.getElementById("pf").reset(); currentPermitId=null; document.getElementById("Status").value="New"; document.getElementById("permit-header-display").innerText = "New Permit"; 
            const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); rS.innerHTML=""; aS.innerHTML=""; if(window.users){window.users.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); window.users.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`);}
            document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false); document.getElementById("OfficialName").value=currentUser.name; document.getElementById("OfficialName").disabled=true; document.getElementById("RequesterName").value=currentUser.name; document.getElementById("RequesterName").disabled=true;
@@ -374,12 +398,8 @@
         }
         async function savePermit() { const fd=new FormData(document.getElementById("pf")); document.querySelectorAll('input[type="checkbox"]').forEach(c=>fd.set(c.name, c.checked?"Y":"N")); fd.append("RequesterEmail", currentUser.Email); if(currentPermitId) fd.set("PermitID", currentPermitId); const res=await fetch(API+'/save-permit', {method:'POST', body:fd}); const json=await res.json(); if(json.success){alert("Saved: "+json.permitId); showDashboard();} else alert(json.error); }
         function checkDate() { const vf=new Date(document.getElementById("ValidFrom").value); const vt=new Date(document.getElementById("ValidTo").value); if(vf && vt && (vt-vf)/(1000*60*60*24)>7) { alert("Max 7 Days"); document.getElementById("ValidTo").value=""; } }
-        function showDashboard() { document.getElementById("view-dashboard").classList.remove('hidden'); document.getElementById("view-form").classList.add('hidden'); loadDashboard(); }
-        function showAddUser() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-add-user").classList.remove('hidden'); }
         async function submitNewUser() { const n=document.getElementById("new-user-name").value; const e=document.getElementById("new-user-email").value; const r=document.getElementById("new-user-role").value; const p=document.getElementById("new-user-pass").value; const res=await apiCall('/add-user','POST',{name:n,email:e,role:r,password:p}); if(res.success){alert("User Added"); showDashboard();} else alert(res.error); }
-        function showMap() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-map").classList.remove('hidden'); loadMapData(); }
-        function getGeo() { navigator.geolocation.getCurrentPosition(p=>{document.getElementById("Latitude").value=p.coords.latitude;document.getElementById("Longitude").value=p.coords.longitude;}); }
-        async function loadMapData() { const p = await apiCall('/map-data', 'POST'); if(!mapInstance) mapInstance=new google.maps.Map(document.getElementById("map"),{center:{lat:22.57,lng:88.36},zoom:5}); document.getElementById("map-list").innerHTML = p.map(x=>`<div class="p-2 border-b cursor-pointer hover:bg-gray-100" onclick="mapInstance.setCenter({lat:${x.lat},lng:${x.lng}}); mapInstance.setZoom(12);">${x.PermitID}</div>`).join(''); p.forEach(x=>{ new google.maps.Marker({position:{lat:x.lat,lng:x.lng},map:mapInstance,title:x.PermitID}); }); }
+
     </script>
   </body>
 </html>

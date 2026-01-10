@@ -6,10 +6,12 @@
     <title>IndianOil Permit System</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyADwuqMDCwNSaZKBnWURDCYdqlMxfiWBnU"></script>
     <style>
-      body { background-color: #f3f4f6; font-family: sans-serif; font-size: 0.85rem; }
+      body { background-color: #f3f4f6; font-family: 'Segoe UI', sans-serif; font-size: 0.85rem; }
       .glass { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 1rem; }
       input, select, textarea { width: 100%; border: 1px solid #d1d5db; padding: 5px; border-radius: 4px; font-size: 0.85rem; }
+      input:disabled, select:disabled, textarea:disabled { background-color: #f9fafb; cursor: not-allowed; }
       table.custom-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
       table.custom-table th { background: #ea580c; color: white; padding: 8px; text-align: left; }
       table.custom-table td { border-bottom: 1px solid #e5e7eb; padding: 8px; }
@@ -18,7 +20,7 @@
   </head>
   <body>
     <div id="view-login" class="flex items-center justify-center min-h-screen">
-      <div class="glass w-96 text-center">
+      <div class="glass w-96 text-center shadow-2xl">
         <h1 class="text-2xl font-bold text-orange-600 mb-6">IndianOil Permit System</h1>
         <form onsubmit="event.preventDefault(); handleLogin();" class="space-y-4">
           <select id="login-role" class="w-full"><option>Loading...</option></select>
@@ -29,47 +31,70 @@
       </div>
     </div>
 
-    <div id="app-container" class="max-w-6xl mx-auto p-4 hidden">
-        <div class="flex justify-between items-center mb-4">
-            <h1 class="text-2xl font-bold text-orange-700">IndianOil Permit System</h1>
+    <div id="app-container" class="max-w-7xl mx-auto p-4 hidden">
+        <div class="flex justify-between items-center mb-4 bg-orange-600 p-4 rounded shadow text-white">
+            <h1 class="text-xl font-bold">🛡️ IndianOil Permit System</h1>
             <div class="flex gap-4 items-center">
-                <span id="user-info" class="font-bold text-gray-700"></span>
-                <button onclick="location.reload()" class="bg-gray-600 text-white px-3 py-1 rounded text-xs">Logout</button>
+                <span id="user-info" class="font-bold"></span>
+                <button onclick="location.reload()" class="bg-white/20 px-3 py-1 rounded text-xs hover:bg-white/30">Logout</button>
             </div>
         </div>
 
         <div id="view-dashboard">
-            <button onclick="showNewPermit()" class="bg-orange-600 text-white px-4 py-2 rounded font-bold mb-4">+ New Permit</button>
-            <div class="glass overflow-x-auto">
-                <table class="w-full text-left text-sm">
-                    <thead class="bg-gray-100"><tr><th class="p-2">ID</th><th>Type</th><th>Location</th><th>Requester</th><th>Status</th><th>Action</th></tr></thead>
-                    <tbody id="permit-list"></tbody>
-                </table>
+            <div class="flex justify-between mb-4">
+                <h2 class="text-lg font-bold text-gray-700">Active Permits</h2>
+                <div class="flex gap-2">
+                    <button onclick="showAddUser()" id="btn-add-user" class="bg-purple-600 text-white px-3 py-1 rounded hidden">Users</button>
+                    <button onclick="showMap()" id="btn-view-map" class="bg-blue-600 text-white px-3 py-1 rounded hidden">Map</button>
+                    <button onclick="window.open('/api/download-excel')" id="btn-download-excel" class="bg-green-600 text-white px-3 py-1 rounded hidden">Excel</button>
+                    <button onclick="showNewPermit()" id="btn-new-permit" class="bg-orange-600 text-white px-4 py-1 rounded font-bold hidden">+ New Permit</button>
+                </div>
             </div>
+            
+            <div class="glass overflow-x-auto">
+                <table class="w-full text-left text-sm"><thead class="bg-gray-100"><tr><th class="p-2">ID</th><th>Type</th><th>Location</th><th>Requester</th><th>Status</th><th>Action</th></tr></thead><tbody id="permit-list"></tbody></table>
+            </div>
+            <div id="charts-container" class="grid grid-cols-2 gap-4 hidden"><div class="glass h-64"><canvas id="chartStatus"></canvas></div><div class="glass h-64"><canvas id="chartType"></canvas></div></div>
         </div>
+
+        <div id="view-map" class="hidden h-screen flex flex-col"><button onclick="showDashboard()" class="mb-2 text-blue-600 font-bold">← Back</button><div class="flex-1 flex gap-2"><div class="w-1/4 glass overflow-y-auto" id="map-list"></div><div id="map" class="flex-1 rounded shadow"></div></div></div>
+
+        <div id="view-add-user" class="hidden flex justify-center"><div class="glass w-96 relative"><button onclick="showDashboard()" class="absolute top-2 right-2 font-bold">✕</button><h3 class="font-bold mb-4">Add User</h3><form onsubmit="event.preventDefault(); submitNewUser();" class="space-y-3"><input id="new-user-name" placeholder="Name" required><input id="new-user-email" placeholder="Email" required><select id="new-user-role"><option>Requester</option><option>Reviewer</option><option>Approver</option></select><input id="new-user-pass" type="password" placeholder="Password" required><button class="w-full bg-purple-600 text-white py-2 rounded">Add</button></form></div></div>
 
         <div id="view-form" class="hidden">
             <button onclick="showDashboard()" class="text-blue-600 font-bold mb-2">← Back</button>
-            <div id="permit-header-display" class="mb-4 p-2 bg-blue-100 text-blue-800 rounded font-bold text-center"></div>
+            <div id="permit-header-display" class="mb-4 p-3 bg-blue-100 text-blue-800 rounded font-bold text-center shadow-sm"></div>
 
             <form id="pf">
                 <input type="hidden" id="PermitID" name="PermitID"><input type="hidden" id="Status" name="Status">
                 
                 <div class="glass">
                     <h3 class="section-title">1. Permit Details</h3>
-                    <div class="grid grid-cols-4 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div><label>Work Type</label><select name="WorkType" id="WorkType"><option>Hot</option><option>Cold</option><option>Confined Space</option><option>Excavation</option></select></div>
+                        <div><label>Specific Work</label><input name="WorkTypeOther" id="WorkTypeOther"></div>
                         <div><label>Location</label><input name="ExactLocation" id="ExactLocation"></div>
-                        <div><label>Valid From</label><input type="datetime-local" name="ValidFrom" id="ValidFrom"></div>
-                        <div><label>Valid To</label><input type="datetime-local" name="ValidTo" id="ValidTo"></div>
+                        <div><label>Section/Unit</label><input name="LocationUnit" id="LocationUnit" value="Pipeline"></div>
                         
-                        <div><label>Issued To</label><input name="IssuedToDept" id="IssuedToDept"></div>
+                        <div><label>Valid From</label><input type="datetime-local" name="ValidFrom" id="ValidFrom" onchange="checkDate()"></div>
+                        <div><label>Valid To</label><input type="datetime-local" name="ValidTo" id="ValidTo" onchange="checkDate()"></div>
+                        <div><label>Requester</label><input name="RequesterName" id="RequesterName" readonly></div>
+                        <div><label>Official Name</label><input name="OfficialName" id="OfficialName" readonly></div>
+
+                        <div><label>Issued To Dept</label><input name="IssuedToDept" id="IssuedToDept"></div>
                         <div><label>Vendor</label><input name="Vendor" id="Vendor"></div>
+                        <div><label>Security Guard</label><input name="SecurityGuard" id="SecurityGuard"></div>
                         <div><label>Emergency Contact</label><input name="EmergencyContact" id="EmergencyContact"></div>
-                        <div><label>Security/Patrol</label><input name="SecurityGuard" id="SecurityGuard"></div>
-                        <div><label>Fire Stn/Hospital</label><input name="FireStation" id="FireStation"></div>
+                        <div><label>Fire Stn/Hosp</label><input name="FireStation" id="FireStation"></div>
                         
-                        <div class="col-span-3"><label>Description</label><textarea name="Desc" id="Desc" rows="2"></textarea></div>
+                        <div class="col-span-3"><label>Description</label><textarea name="Desc" id="Desc" rows="1"></textarea></div>
+                        
+                        <div class="p-2 border rounded bg-gray-50 flex gap-2 items-end">
+                            <div class="flex-1"><label>Lat</label><input id="Latitude" name="Latitude"></div>
+                            <div class="flex-1"><label>Long</label><input id="Longitude" name="Longitude"></div>
+                            <button type="button" onclick="getGeo()" class="bg-blue-200 px-2 rounded">📍</button>
+                        </div>
+                        
                         <div><label>Reviewer</label><select name="ReviewerEmail" id="ReviewerEmail"></select></div>
                         <div><label>Approver</label><select name="ApproverEmail" id="ApproverEmail"></select></div>
                     </div>
@@ -77,49 +102,39 @@
 
                 <div class="glass">
                     <h3 class="section-title">2. Checklists (OISD-105)</h3>
-                    <div class="font-bold bg-gray-100 p-2">SECTION A: General</div>
-                    <table class="custom-table" id="table-A"><thead><tr><th style="width:50%">Item</th><th>Status</th><th>Remarks/Gas Reading</th></tr></thead><tbody></tbody></table>
+                    <div class="font-bold bg-orange-100 p-2 text-orange-800">SECTION A: General Points (16 Pts)</div>
+                    <table class="custom-table" id="table-A"><thead><tr><th style="width:50%">Item</th><th>Status</th><th>Remarks</th></tr></thead><tbody></tbody></table>
                     
-                    <div class="font-bold bg-gray-100 p-2 mt-4">SECTION B: Hot Work / Confined Space</div>
+                    <div class="font-bold bg-orange-100 p-2 mt-4 text-orange-800">SECTION B: Hot Work / Confined Space (15 Pts)</div>
                     <table class="custom-table" id="table-B"><thead><tr><th style="width:50%">Item</th><th>Status</th><th>Remarks</th></tr></thead><tbody></tbody></table>
 
-                    <div class="font-bold bg-gray-100 p-2 mt-4">SECTION C: Vehicle Entry</div>
+                    <div class="font-bold bg-orange-100 p-2 mt-4 text-orange-800">SECTION C: Vehicle Entry (1 Pt)</div>
                     <table class="custom-table" id="table-C"><thead><tr><th style="width:50%">Item</th><th>Status</th><th>Remarks</th></tr></thead><tbody></tbody></table>
 
-                    <div class="font-bold bg-gray-100 p-2 mt-4">SECTION D: Excavation</div>
+                    <div class="font-bold bg-orange-100 p-2 mt-4 text-orange-800">SECTION D: Excavation (4 Pts)</div>
                     <table class="custom-table" id="table-D"><thead><tr><th style="width:50%">Item</th><th>Status</th><th>Remarks</th></tr></thead><tbody></tbody></table>
+                </div>
+                
+                <div class="glass" id="hazards-section">
+                    <h3 class="section-title">3. Hazard Identification (Requester & Reviewer)</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4" id="hazards-container"></div>
+                    <div id="other-hazard-div" class="hidden mb-2"><input id="H_Others_Detail" name="H_Others_Detail" placeholder="Specify other hazards..." class="w-full"></div>
                 </div>
 
                 <div id="fs-reviewer-section" class="glass hidden border-l-4 border-yellow-500">
-                     <h3 class="section-title text-yellow-700">3. Reviewer Assessment</h3>
-                     <div class="grid grid-cols-4 gap-2 mb-4" id="hazards-container"></div>
-                     <textarea name="Reviewer_Remarks" id="Reviewer_Remarks" placeholder="Reviewer Remarks"></textarea>
+                     <h3 class="section-title text-yellow-700">4. Reviewer Assessment (Safety Officer)</h3>
+                     <div class="mb-4 font-bold">PPE Required:</div>
+                     <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4" id="ppe-container"></div>
+                     <textarea name="Reviewer_Remarks" id="Reviewer_Remarks" placeholder="Reviewer Remarks" class="w-full"></textarea>
+                     <textarea name="AdditionalPrecautions" id="AdditionalPrecautions" placeholder="Additional Precautions" class="w-full mt-2"></textarea>
                 </div>
 
                 <div id="fs-approver-section" class="glass hidden border-l-4 border-green-500">
-                     <h3 class="section-title text-green-700">4. Final Approval</h3>
-                     <textarea name="Approver_Remarks" id="Approver_Remarks" placeholder="Approver Remarks"></textarea>
+                     <h3 class="section-title text-green-700">5. Final Approval (Issuer)</h3>
+                     <textarea name="Approver_Remarks" id="Approver_Remarks" placeholder="Approver Remarks" class="w-full"></textarea>
                 </div>
 
-                <div id="renewals-section" class="glass hidden">
-                    <h3 class="section-title">Clearance Renewal</h3>
-                    <div id="renewals-list" class="mb-4 text-xs"></div>
-                    <div id="form-renewal" class="hidden p-4 bg-blue-50">
-                        <label>New Renewal:</label>
-                        <input type="datetime-local" id="RenewalValidFrom"> to <input type="datetime-local" id="RenewalValidTill">
-                        <button type="button" onclick="submitRenewal('approve')" class="bg-blue-600 text-white px-3 py-1 rounded">Submit</button>
-                    </div>
-                </div>
-
-                <div id="closure-section" class="glass hidden">
-                    <h3 class="section-title">Closure</h3>
-                    <label class="block mb-2 font-bold text-red-600"><input type="checkbox" id="Site_Restored_Check" name="Site_Restored_Check"> Site Restored & Cleared</label>
-                    <div id="div-closure-req" class="hidden"><textarea id="Closure_Requestor_Remarks" placeholder="Requestor Closure Remarks" class="w-full"></textarea></div>
-                    <div id="div-closure-rev" class="hidden mt-2"><textarea id="Closure_Reviewer_Remarks" placeholder="Reviewer Verification" class="w-full"></textarea></div>
-                    <div id="div-closure-app" class="hidden mt-2"><textarea id="Closure_Approver_Remarks" placeholder="Approver Final Close" class="w-full"></textarea></div>
-                </div>
-
-                <div id="actions" class="mt-4 flex justify-end gap-2 sticky bottom-0 bg-white p-4 shadow"></div>
+                <div id="actions" class="mt-4 flex justify-end gap-2 sticky bottom-0 bg-white p-4 shadow z-50"></div>
             </form>
         </div>
     </div>
@@ -127,226 +142,144 @@
     <script>
         const API = "/api";
         let currentUser = null, currentPermitId = null;
-
+        
+        // DATA
         const CL_DATA = {
-            A: ["1. Equipment / Work Area inspected.", "2. Surrounding area checked, cleaned.", "3. Manholes covered.", "4. Hazards considered.", "5. Equipment blinded/isolated.", "6. Drained & Depressurized.", "7. Steamed/Purged.", "8. Water Flushed.", "9. Fire Tender Access.", "10. Iron Sulfide removed.", "11. Electrically Isolated.", "12. Gas Test (HC/Tox/O2).", "13. Fire Extinguisher / Water hose.", "14. Area Cordoned.", "15. CCTV Available.", "16. Ventilation/Lighting."],
-            B: ["1. Means of Exit.", "2. Standby Personnel.", "3. Trapped Oil/Gas Check.", "4. Shield against spark.", "5. Equipment Grounded.", "6. Confined Space Standby.", "7. Communication.", "8. Rescue Equip/SCBA.", "9. Space Cooled.", "10. Inert Gas Flow.", "11. Earthing/ELCB.", "12. Cylinders outside.", "13. Spark Arrestor.", "14. Welding Machine Loc.", "15. Height Permit."],
-            C: ["1. PESO Approved Spark Arrestor on Vehicle."],
-            D: ["1. Shoring/Sloping provided.", "2. Soil at safe distance.", "3. Safe Access.", "4. Heavy Vehicle Prohibited."]
+            A: ["1. Equipment / Work Area inspected.", "2. Surrounding area checked, cleaned and covered.", "3. Manholes, Sewers, CBD etc. covered.", "4. Hazards considered from other operations.", "5. Equipment blinded/ disconnected/ closed.", "6. Equipment properly drained and depressurized.", "7. Equipment properly steamed/purged.", "8. Equipment water flushed.", "9. Access for Free approach of Fire Tender.", "10. Iron Sulfide removed/ Kept wet.", "11. Equipment electrically isolated and tagged.", "12. Gas Test: HC / Toxic / O2 checked.", "13. Running water hose / Fire extinguisher.", "14. Area cordoned off and Tag provided.", "15. CCTV monitoring facility available.", "16. Proper ventilation and Lighting provided."],
+            B: ["1. Proper means of exit / escape provided.", "2. Standby personnel provided.", "3. Checked for oil/Gas trapped behind lining.", "4. Shield provided against spark.", "5. Portable equipment grounded.", "6. Standby persons for confined space.", "7. Adequate Communication to Stand by Person.", "8. Attendant Trained with Rescue Equipment.", "9. Space Adequately Cooled.", "10. Continuous Inert Gas Flow Arranged.", "11. Check For Earthing/ELCB of connections.", "12. Gas Cylinders kept outside.", "13. Spark arrestor Checked on mobile Equip.", "14. Welding Machine Safe Location.", "15. Permit taken for working at height."],
+            C: ["1. PESO approved spark elimination system provided."],
+            D: ["1. Proper slop/ shoring/ shuttering provided.", "2. Excavated soil kept at safe distance.", "3. Safe means of access provided inside trench.", "4. Movement of heavy vehicle prohibited."]
         };
+        const HAZARDS = ["Lack of Oxygen", "H2S", "Toxic Gases", "Combustible gases", "Pyrophoric Iron", "Corrosive Chemicals", "cave in formation", "Others"];
+        const PPE = ["Helmet", "Safety Shoes", "Hand gloves", "Boiler suit", "Face Shield", "Apron", "Goggles", "Dust Respirator", "Fresh Air Mask", "Lifeline", "Safety Harness", "Airline", "Earmuff"];
 
-        const hazards = ["H2S", "Toxic Gas", "Fire", "Electricity", "Height", "Confined Space"];
-
-        document.addEventListener("DOMContentLoaded", () => {
-            loadUsers();
-            renderTables();
-            renderHazards();
-        });
+        // INIT
+        document.addEventListener("DOMContentLoaded", () => { loadUsers(); renderTables(); });
 
         function renderTables() {
             ['A','B','C','D'].forEach(sec => {
-                const tb = document.querySelector(`#table-${sec} tbody`);
-                tb.innerHTML = CL_DATA[sec].map((t, i) => {
+                document.querySelector(`#table-${sec} tbody`).innerHTML = CL_DATA[sec].map((t, i) => {
                     const id = `${sec}_Q${i+1}`;
-                    let remInput = `<input name="${id}_Detail" placeholder="Remarks" class="text-xs w-full">`;
-                    if(sec==='A' && i===11) remInput = `<div class="flex gap-1"><input name="GP_Q12_HC" placeholder="HC%" class="w-1/3"><input name="GP_Q12_ToxicGas" placeholder="Tox" class="w-1/3"><input name="GP_Q12_Oxygen" placeholder="O2%" class="w-1/3"></div>`;
-                    return `<tr><td>${t}</td><td class="w-32"><label><input type="radio" name="${id}" value="Yes"> Yes</label> <label><input type="radio" name="${id}" value="NA"> NA</label></td><td>${remInput}</td></tr>`;
+                    let rem = `<input name="${id}_Detail" placeholder="Remarks" class="w-full text-xs">`;
+                    if(sec==='A' && i===11) rem = `<div class="flex gap-1"><input name="GP_Q12_HC" placeholder="HC%"><input name="GP_Q12_ToxicGas" placeholder="Tox"><input name="GP_Q12_Oxygen" placeholder="O2%"></div>`;
+                    return `<tr><td>${t}</td><td class="flex items-center gap-2"><label><input type="radio" name="${id}" value="Yes" checked> Yes</label><label><input type="radio" name="${id}" value="NA"> NA</label><label><input type="radio" name="${id}" value="No"> No</label></td><td>${rem}</td></tr>`;
                 }).join('');
             });
+            document.getElementById('hazards-container').innerHTML = HAZARDS.map(h => {
+                const val = h.replace(/ /g,'');
+                const change = h==='Others' ? `onchange="document.getElementById('other-hazard-div').classList.toggle('hidden', !this.checked)"` : '';
+                return `<label class="flex items-center gap-2 border p-2 rounded cursor-pointer hover:bg-gray-50"><input type="checkbox" name="H_${val}" value="Y" ${change}> ${h}</label>`;
+            }).join('');
+            document.getElementById('ppe-container').innerHTML = PPE.map(p => `<label class="flex items-center gap-2 border p-2 rounded cursor-pointer hover:bg-gray-50"><input type="checkbox" name="P_${p.replace(/ /g,'')}" value="Y"> ${p}</label>`).join('');
         }
 
-        function renderHazards() {
-            document.getElementById('hazards-container').innerHTML = hazards.map(h => `<label class="flex gap-1"><input type="checkbox" name="H_${h}" value="Y"> ${h}</label>`).join('');
-        }
-
-        // --- AUTH & DATA LOADING ---
         async function apiCall(ep, meth="GET", body=null) {
             const opts = { method:meth, headers:{'Content-Type':'application/json'} };
             if(body) opts.body = JSON.stringify(body);
             const res = await fetch(API+ep, opts); return await res.json();
         }
+        
+        // ... (User/Login functions from previous version remain here, ensure showAddUser etc are connected) ...
+        async function loadUsers() { const u = await apiCall('/users'); window.users = u; const sel = document.getElementById("login-role"); sel.innerHTML='<option value="">Select Role</option><option>Requester</option><option>Reviewer</option><option>Approver</option>'; sel.onchange=()=>{ const list=u[sel.value+'s']; const n=document.getElementById("login-name"); n.disabled=false; n.innerHTML=""; list.forEach(x=>n.innerHTML+=`<option value="${x.email}">${x.name}</option>`); }; }
+        async function handleLogin() { const role=document.getElementById("login-role").value; const name=document.getElementById("login-name").selectedOptions[0].text; const email=document.getElementById("login-name").value; const pass=document.getElementById("login-password").value; const res=await apiCall('/login', 'POST', {role, name:email, password:pass}); if(res.success) { currentUser={...res.user, name}; document.getElementById("view-login").style.display='none'; document.getElementById("app-container").style.display='block'; document.getElementById("user-info").innerText=`${name} (${role})`; updateRoleUI(); loadDashboard(); } else alert(res.message); }
+        function updateRoleUI() { const r = currentUser.Role; if(r==='Requester') document.getElementById("btn-new-permit").classList.remove('hidden'); if(r==='Reviewer'||r==='Approver') { document.getElementById("btn-view-map").classList.remove('hidden'); document.getElementById("btn-download-excel").classList.remove('hidden'); document.getElementById("btn-add-user").classList.remove('hidden'); } }
+        async function loadDashboard() { const res = await apiCall('/dashboard', 'POST', {role:currentUser.Role, email:currentUser.Email}); document.getElementById("permit-list").innerHTML = res.map(p => `<tr class="border-b hover:bg-orange-50 cursor-pointer" onclick="openPermit('${p.PermitID}')"><td class="p-2 font-bold text-blue-600">${p.PermitID}</td><td>${p.WorkType}</td><td>${p.LocationUnit}</td><td>${p.RequesterName}</td><td>${p.Status}</td><td>Open</td></tr>`).join(''); }
 
-        async function loadUsers() {
-            const u = await apiCall('/users'); window.users = u;
-            const sel = document.getElementById("login-role");
-            sel.innerHTML = '<option value="">Select Role</option><option>Requester</option><option>Reviewer</option><option>Approver</option>';
-            sel.onchange = () => {
-                const list = u[sel.value+'s'];
-                const n = document.getElementById("login-name");
-                n.disabled = false; n.innerHTML = "";
-                list.forEach(x => n.innerHTML += `<option value="${x.email}">${x.name}</option>`);
+        function checkDate() {
+            const vf = new Date(document.getElementById("ValidFrom").value);
+            const vt = new Date(document.getElementById("ValidTo").value);
+            if(vf && vt) {
+                const diff = (vt - vf) / (1000 * 60 * 60 * 24);
+                if(diff > 7) { alert("Max duration is 7 days!"); document.getElementById("ValidTo").value = ""; }
+            }
+        }
+
+        // ... (showNewPermit, openPermit, upd, submitNewPermit from previous fix) ...
+        // ENSURE upd() logic handles null checks:
+        async function upd(act) {
+            const body = { 
+                PermitID: currentPermitId, action: act, role: currentUser.Role, user: currentUser.name,
+                comment: (currentUser.Role==='Reviewer' ? document.getElementById("Reviewer_Remarks")?.value : document.getElementById("Approver_Remarks")?.value) || ''
             };
+            if(currentUser.Role==='Reviewer') {
+                 // Save PPE & Hazards edits
+                 const fd = new FormData(document.getElementById("pf"));
+                 for(let [k,v] of fd.entries()) body[k] = v;
+                 document.querySelectorAll('input[type="checkbox"]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
+            }
+            const res = await apiCall('/update-status', 'POST', body);
+            if(res.success) showDashboard(); else alert(res.error);
         }
 
-        async function handleLogin() {
-            const role = document.getElementById("login-role").value;
-            const name = document.getElementById("login-name").selectedOptions[0].text;
-            const email = document.getElementById("login-name").value;
-            const pass = document.getElementById("login-password").value;
-            const res = await apiCall('/login', 'POST', {role, name:email, password:pass});
-            if(res.success) {
-                currentUser = {...res.user, name};
-                document.getElementById("view-login").style.display = 'none';
-                document.getElementById("app-container").style.display = 'block';
-                document.getElementById("user-info").innerText = `${name} (${role})`;
-                loadDashboard();
-            } else alert(res.message);
-        }
-
-        async function loadDashboard() {
-            const res = await apiCall('/dashboard', 'POST', {role:currentUser.Role, email:currentUser.Email});
-            document.getElementById("permit-list").innerHTML = res.map(p => 
-                `<tr class="border-b hover:bg-orange-50 cursor-pointer" onclick="openPermit('${p.PermitID}')">
-                    <td class="p-2 font-bold text-blue-600">${p.PermitID}</td><td>${p.WorkType}</td><td>${p.LocationUnit}</td><td>${p.Status}</td><td>Open</td>
-                </tr>`
-            ).join('');
-        }
-
-        // --- FORM LOGIC ---
-        function showNewPermit() {
-            document.getElementById("pf").reset();
-            currentPermitId = null;
-            document.getElementById("Status").value = "New";
-            document.getElementById("permit-header-display").innerText = "NEW PERMIT";
-            
-            // Populate Dropdowns
-            const rS = document.getElementById("ReviewerEmail"), aS = document.getElementById("ApproverEmail");
-            rS.innerHTML = ""; aS.innerHTML = "";
-            window.users.Reviewers.forEach(u => rS.innerHTML += `<option value="${u.email}">${u.name}</option>`);
-            window.users.Approvers.forEach(u => aS.innerHTML += `<option value="${u.email}">${u.name}</option>`);
-
-            document.querySelectorAll('input, textarea, select').forEach(e => e.disabled = false);
-            document.getElementById("fs-reviewer-section").classList.add('hidden');
-            document.getElementById("fs-approver-section").classList.add('hidden');
-            document.getElementById("renewals-section").classList.add('hidden');
-            document.getElementById("closure-section").classList.add('hidden');
-
-            document.getElementById("actions").innerHTML = `<button type="button" onclick="savePermit()" class="bg-blue-600 text-white px-6 py-2 rounded font-bold">Submit</button>`;
-            
-            document.getElementById("view-dashboard").classList.add('hidden');
-            document.getElementById("view-form").classList.remove('hidden');
-        }
-
-        async function savePermit() {
-            const fd = new FormData(document.getElementById("pf"));
-            document.querySelectorAll('input[type="checkbox"]').forEach(c => fd.set(c.name, c.checked ? "Y" : "N"));
-            fd.append("RequesterEmail", currentUser.Email);
+        // Ensure all other functions like showNewPermit, openPermit are copied from previous response 2
+        // Just replace the renderTables logic with the new one above.
+        
+        function showNewPermit() { document.getElementById("pf").reset(); currentPermitId=null; document.getElementById("Status").value="New"; document.getElementById("permit-header-display").innerText = "New Permit: Final permit number will be allotted after successful submission."; document.getElementById("RequesterName").value=currentUser.name; document.getElementById("OfficialName").value=currentUser.name; populateDropdowns(); document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false); document.getElementById("OfficialName").disabled=true; document.getElementById("fs-reviewer-section").classList.add('hidden'); document.getElementById("fs-approver-section").classList.add('hidden'); document.getElementById("actions").innerHTML = `<button type="button" onclick="submitNewPermit()" class="bg-blue-600 text-white px-6 py-2 rounded font-bold">Submit</button>`; document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-form").classList.remove('hidden'); }
+        function populateDropdowns() { if (!window.users) return; const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); rS.innerHTML=""; aS.innerHTML=""; window.users.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); window.users.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); }
+        async function submitNewPermit() { 
+            const fd=new FormData(document.getElementById("pf")); 
+            document.querySelectorAll('input[type="checkbox"]').forEach(c=>fd.set(c.name, c.checked?"Y":"N")); 
+            fd.append("RequesterEmail", currentUser.Email); 
             if(currentPermitId) fd.set("PermitID", currentPermitId);
-
-            const res = await fetch(API+'/save-permit', {method:'POST', body:fd});
-            const json = await res.json();
-            if(json.success) { alert("Saved: " + json.permitId); showDashboard(); } else alert(json.error);
+            const res=await fetch(API+'/save-permit', {method:'POST', body:fd}); const json=await res.json(); 
+            if(json.success){alert("Saved: "+json.permitId); showDashboard();} else alert(json.error); 
         }
 
         async function openPermit(id) {
-            const p = await apiCall('/permit-data', 'POST', {permitId:id});
-            currentPermitId = id;
+            const p = await apiCall('/permit-data', 'POST', {permitId:id}); currentPermitId=id; 
             document.getElementById("permit-header-display").innerText = `PERMIT: ${id} [${p.Status}]`;
+            populateDropdowns(); 
             
-            // Populate Dropdowns FIRST
-            const rS = document.getElementById("ReviewerEmail"), aS = document.getElementById("ApproverEmail");
-            rS.innerHTML = ""; aS.innerHTML = "";
-            window.users.Reviewers.forEach(u => rS.innerHTML += `<option value="${u.email}">${u.name}</option>`);
-            window.users.Approvers.forEach(u => aS.innerHTML += `<option value="${u.email}">${u.name}</option>`);
-
-            // Fill Form
-            document.querySelectorAll('input, textarea, select').forEach(e => {
-                if(e.type === 'radio') { if(e.value === p[e.name]) e.checked = true; }
-                else if(e.type === 'checkbox') { e.checked = (p[e.name] === 'Y'); }
-                else { e.value = p[e.name] || ''; }
-                e.disabled = true; // Lock all
+            // Fill
+            document.querySelectorAll('#pf input, #pf select, #pf textarea').forEach(e => {
+                if(e.type==='radio') { if(e.value===p[e.name]) e.checked=true; }
+                else if(e.type==='checkbox') { e.checked=(p[e.name]==='Y'); }
+                else { e.value=p[e.name]||''; }
+                e.disabled=true;
             });
+            // Handle Others Toggle
+            if(p.H_Others==='Y') document.getElementById('other-hazard-div').classList.remove('hidden');
 
-            // Logic for Role
-            const r = currentUser.Role, s = p.Status;
+            // View Logic
+            const r=currentUser.Role, s=p.Status;
             document.getElementById("fs-reviewer-section").classList.add('hidden');
             document.getElementById("fs-approver-section").classList.add('hidden');
-            document.getElementById("renewals-section").classList.add('hidden');
-            document.getElementById("closure-section").classList.add('hidden');
-
-            let btns = "";
             
+            let btns = '';
             if(s.includes('Pending Review')) {
-                if(r === 'Requester') {
-                    document.querySelectorAll('#pf input, #pf select, #pf textarea').forEach(e => e.disabled = false);
-                    btns = `<button type="button" onclick="savePermit()" class="bg-blue-600 text-white px-4 py-2 rounded">Update</button>`;
+                if(r==='Requester') { 
+                    document.querySelectorAll('#pf input, #pf select, #pf textarea').forEach(e=>e.disabled=false); 
+                    btns=`<button type="button" onclick="submitNewPermit()" class="bg-blue-600 text-white px-4 py-2 rounded">Update</button>`;
                 }
-                if(r === 'Reviewer') {
+                if(r==='Reviewer') {
                     document.getElementById("fs-reviewer-section").classList.remove('hidden');
-                    document.querySelectorAll('#fs-reviewer-section *').forEach(e => e.disabled = false);
-                    btns = `<button type="button" onclick="upd('reject')" class="bg-red-600 text-white px-4 py-2 rounded">Reject</button>
-                            <button type="button" onclick="upd('review')" class="bg-green-600 text-white px-4 py-2 rounded">Submit Review</button>`;
+                    document.querySelectorAll('#fs-reviewer-section *, #hazards-section *').forEach(e=>e.disabled=false);
+                    btns=`<button type="button" onclick="upd('reject')" class="bg-red-600 text-white px-4 py-2 rounded">Reject</button><button type="button" onclick="upd('review')" class="bg-green-600 text-white px-4 py-2 rounded">Submit Review</button>`;
                 }
             }
-
             if(s.includes('Pending Approval')) {
                 document.getElementById("fs-reviewer-section").classList.remove('hidden');
-                if(r === 'Approver') {
+                if(r==='Approver') {
                     document.getElementById("fs-approver-section").classList.remove('hidden');
-                    document.querySelectorAll('#fs-approver-section *').forEach(e => e.disabled = false);
-                    btns = `<button type="button" onclick="upd('reject')" class="bg-red-600 text-white px-4 py-2 rounded">Reject</button>
-                            <button type="button" onclick="upd('approve')" class="bg-green-600 text-white px-4 py-2 rounded">Approve</button>`;
+                    document.getElementById("Approver_Remarks").disabled=false;
+                    btns=`<button type="button" onclick="upd('reject')" class="bg-red-600 text-white px-4 py-2 rounded">Reject</button><button type="button" onclick="upd('approve')" class="bg-green-600 text-white px-4 py-2 rounded">Approve</button>`;
                 }
             }
-
-            if(s === 'Active') {
+            if(s==='Active') {
                 document.getElementById("fs-reviewer-section").classList.remove('hidden');
                 document.getElementById("fs-approver-section").classList.remove('hidden');
-                document.getElementById("renewals-section").classList.remove('hidden');
-                document.getElementById("closure-section").classList.remove('hidden');
-                
                 btns = `<a href="${API}/download-pdf/${id}" target="_blank" class="bg-gray-600 text-white px-4 py-2 rounded">PDF</a>`;
-                
-                if(r === 'Requester') {
-                     document.getElementById("div-closure-req").classList.remove('hidden');
-                     document.getElementById("Closure_Requestor_Remarks").disabled = false;
-                     document.getElementById("form-renewal").classList.remove('hidden');
-                     document.querySelectorAll('#form-renewal input').forEach(e => e.disabled = false);
-                     btns += `<button type="button" onclick="upd('initiate_closure')" class="bg-red-600 text-white px-4 py-2 rounded ml-2">Job Complete</button>`;
-                }
             }
-            
-            // Populate Renewals List
-            const renList = document.getElementById("renewals-list");
-            const rens = JSON.parse(p.RenewalsJSON || "[]");
-            renList.innerHTML = rens.map(x => `<div class="border-b p-1">${x.valid_from} - ${x.valid_to} [${x.status}]</div>`).join('');
 
             document.getElementById("actions").innerHTML = btns;
             document.getElementById("view-dashboard").classList.add('hidden');
             document.getElementById("view-form").classList.remove('hidden');
         }
 
-        async function upd(act) {
-            const body = { 
-                PermitID: currentPermitId, action: act, role: currentUser.Role, user: currentUser.name,
-                comment: document.getElementById("Reviewer_Remarks").value || document.getElementById("Approver_Remarks").value,
-                Closure_Requestor_Remarks: document.getElementById("Closure_Requestor_Remarks").value
-            };
-            if(currentUser.Role === 'Reviewer') {
-                 document.querySelectorAll('#hazards-container input').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
-                 body.AdditionalPrecautions = document.getElementById("AdditionalPrecautions").value;
-            }
-            const res = await apiCall('/update-status', 'POST', body);
-            if(res.success) showDashboard();
-        }
-
-        async function submitRenewal(act) {
-            const body = {
-                PermitID: currentPermitId, userRole: currentUser.Role, userName: currentUser.name,
-                RenewalValidFrom: document.getElementById("RenewalValidFrom").value,
-                RenewalValidTill: document.getElementById("RenewalValidTill").value,
-                RenewalHC: document.getElementById("RenewalHC").value,
-                RenewalPrecautions: document.getElementById("RenewalPrecautions").value
-            };
-            const res = await apiCall('/renewal', 'POST', body);
-            if(res.success) { alert("Renewal Submitted"); showDashboard(); }
-        }
-
-        function showDashboard() {
-            document.getElementById("view-dashboard").classList.remove('hidden');
-            document.getElementById("view-form").classList.add('hidden');
-            loadDashboard();
-        }
+        function showDashboard() { document.getElementById("view-dashboard").classList.remove('hidden'); document.getElementById("view-form").classList.add('hidden'); loadDashboard(); }
+        function getGeo() { navigator.geolocation.getCurrentPosition(p=>{document.getElementById("Latitude").value=p.coords.latitude;document.getElementById("Longitude").value=p.coords.longitude;}); }
+        function showAddUser() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-add-user").classList.remove('hidden'); }
+        function showMap() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-map").classList.remove('hidden'); /* Call loadMapData() */ }
     </script>
   </body>
 </html>

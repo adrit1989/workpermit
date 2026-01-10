@@ -148,13 +148,13 @@
                              <input id="RenewalHC" placeholder="HC %"> <input id="RenewalToxic" placeholder="Toxic"> <input id="RenewalOxygen" placeholder="O2 %">
                         </div>
                         <input id="RenewalPrec" placeholder="Precautions" class="w-full mb-2">
-                        <button type="button" onclick="submitRenewal('approve')" class="bg-blue-600 text-white px-3 py-1 rounded">Submit</button>
+                        <button type="button" onclick="window.submitRenewal('approve')" class="bg-blue-600 text-white px-3 py-1 rounded">Submit</button>
                     </div>
 
                     <div id="action-renewal" class="hidden p-4 bg-yellow-50 mt-2 rounded">
                         <textarea id="RenewalRemark" placeholder="Reason for Rejection / Remarks" class="w-full mb-2"></textarea>
-                        <button type="button" onclick="submitRenewal('approve')" class="bg-green-600 text-white px-3 py-1 rounded">Approve</button>
-                        <button type="button" onclick="submitRenewal('reject')" class="bg-red-600 text-white px-3 py-1 rounded">Reject</button>
+                        <button type="button" onclick="window.submitRenewal('approve')" class="bg-green-600 text-white px-3 py-1 rounded">Approve</button>
+                        <button type="button" onclick="window.submitRenewal('reject')" class="bg-red-600 text-white px-3 py-1 rounded">Reject</button>
                     </div>
                 </div>
                 
@@ -200,7 +200,12 @@
                 h += `</tbody></table>`;
             });
             document.getElementById('checklists-wrapper').innerHTML = h;
-            document.getElementById('hazards-container').innerHTML = HAZARDS.map(z => `<label class="flex items-center gap-1 border p-1 rounded hover:bg-gray-50"><input type="checkbox" name="H_${z.replace(/ /g,'')}" value="Y" ${z==='Others'?'onchange="document.getElementById(\'other-hazard-div\').classList.toggle(\'hidden\',!this.checked)"':''}> ${z}</label>`).join('');
+
+            document.getElementById('hazards-container').innerHTML = HAZARDS.map(z => {
+                const v = z.replace(/ /g,'');
+                const ch = z==='Others' ? `onchange="document.getElementById('other-hazard-div').classList.toggle('hidden',!this.checked)"` : '';
+                return `<label class="flex items-center gap-1 border p-1 rounded hover:bg-gray-50"><input type="checkbox" name="H_${v}" value="Y" ${ch}> ${z}</label>`;
+            }).join('');
             document.getElementById('ppe-container').innerHTML = PPE.map(p => `<label class="flex items-center gap-1 border p-1 rounded hover:bg-gray-50"><input type="checkbox" name="P_${p.replace(/ /g,'')}" value="Y"> ${p}</label>`).join('');
         }
 
@@ -214,7 +219,7 @@
         }
 
         async function loadUsers() { const u=await apiCall('/users'); window.users=u; const s=document.getElementById("login-role"); s.innerHTML='<option>Requester</option><option>Reviewer</option><option>Approver</option>'; s.onchange=()=>{const l=u[s.value+'s']; const n=document.getElementById("login-name"); n.disabled=false; n.innerHTML=""; l.forEach(x=>n.innerHTML+=`<option value="${x.email}">${x.name}</option>`);};}
-        async function handleLogin() { const r=document.getElementById("login-role").value; const n=document.getElementById("login-name").options[document.getElementById("login-name").selectedIndex].text; const e=document.getElementById("login-name").value; const p=document.getElementById("login-password").value; const res=await apiCall('/login','POST',{role:r,name:e,password:p}); if(res.success){currentUser={...res.user, name:n}; document.getElementById("view-login").style.display='none'; document.getElementById("app-container").style.display='block'; document.getElementById("user-info").innerText=`${n} (${r})`; updateRoleUI(); loadDashboard();} else alert(res.message); }
+        window.handleLogin = async function() { const r=document.getElementById("login-role").value; const n=document.getElementById("login-name").options[document.getElementById("login-name").selectedIndex].text; const e=document.getElementById("login-name").value; const p=document.getElementById("login-password").value; const res=await apiCall('/login','POST',{role:r,name:e,password:p}); if(res.success){currentUser={...res.user, name:n}; document.getElementById("view-login").style.display='none'; document.getElementById("app-container").style.display='block'; document.getElementById("user-info").innerText=`${n} (${r})`; updateRoleUI(); loadDashboard();} else alert(res.message); }
         function updateRoleUI() { if(currentUser.Role==='Requester') document.getElementById("btn-new-permit").classList.remove('hidden'); if(currentUser.Role!=='Requester') { document.getElementById("btn-view-map").classList.remove('hidden'); document.getElementById("btn-download-excel").classList.remove('hidden'); document.getElementById("charts-container").classList.remove('hidden'); loadStats(); if(currentUser.Role==='Approver') document.getElementById("btn-add-user").classList.remove('hidden'); } }
         async function loadStats() { const res=await apiCall('/stats','POST'); if(chartS)chartS.destroy(); if(chartT)chartT.destroy(); chartS=new Chart(document.getElementById('chartStatus'),{type:'doughnut',data:{labels:Object.keys(res.statusCounts),datasets:[{data:Object.values(res.statusCounts)}]}}); chartT=new Chart(document.getElementById('chartType'),{type:'bar',data:{labels:Object.keys(res.typeCounts),datasets:[{label:'Types',data:Object.values(res.typeCounts)}]}}); }
         
@@ -224,12 +229,12 @@
             const tA = document.querySelector('#table-active tbody'); tA.innerHTML = "";
             const tO = document.querySelector('#table-other tbody'); tO.innerHTML = "";
             res.forEach(p => {
-                const row = `<tr class="border-b hover:bg-gray-100 cursor-pointer" onclick="openPermit('${p.PermitID}')"><td class="p-2 font-bold text-blue-600">${p.PermitID}</td><td>${p.WorkType}</td><td>${p.LocationUnit}</td><td>${p.Status}</td><td>Open</td></tr>`;
+                const row = `<tr class="border-b hover:bg-gray-100 cursor-pointer" onclick="window.openPermit('${p.PermitID}')"><td class="p-2 font-bold text-blue-600">${p.PermitID}</td><td>${p.WorkType}</td><td>${p.LocationUnit}</td><td>${p.Status}</td><td>Open</td></tr>`;
                 if(p.Status.includes('Pending')) tP.innerHTML += row; else if(p.Status === 'Active') tA.innerHTML += row; else tO.innerHTML += row;
             });
         }
 
-        async function openPermit(id) {
+        window.openPermit = async function(id) {
             const p = await apiCall('/permit-data', 'POST', {permitId:id});
             currentPermitId = id;
             document.getElementById("permit-header-display").innerText = `PERMIT: ${id} [${p.Status}]`;
@@ -251,12 +256,12 @@
             let btns = "";
 
             if(s.includes('Pending Review')) {
-                if(r==='Requester') { document.querySelectorAll('#pf input, #pf select, #pf textarea').forEach(e=>e.disabled=false); btns=`<button type="button" onclick="savePermit()" class="bg-blue-600 text-white px-4 py-2 rounded">Update</button>`; }
-                if(r==='Reviewer') { document.getElementById("fs-reviewer-section").classList.remove('hidden'); document.querySelectorAll('#fs-reviewer-section *, #hazards-section input').forEach(e=>e.disabled=false); btns=`<button type="button" onclick="upd('reject')" class="bg-red-600 text-white px-4 py-2 rounded">Reject</button><button type="button" onclick="upd('review')" class="bg-green-600 text-white px-4 py-2 rounded">Submit Review</button>`; }
+                if(r==='Requester') { document.querySelectorAll('#pf input, #pf select, #pf textarea').forEach(e=>e.disabled=false); btns=`<button type="button" onclick="window.savePermit()" class="bg-blue-600 text-white px-4 py-2 rounded">Update</button>`; }
+                if(r==='Reviewer') { document.getElementById("fs-reviewer-section").classList.remove('hidden'); document.querySelectorAll('#fs-reviewer-section *, #hazards-section input').forEach(e=>e.disabled=false); btns=`<button type="button" onclick="window.upd('reject')" class="bg-red-600 text-white px-4 py-2 rounded">Reject</button><button type="button" onclick="window.upd('review')" class="bg-green-600 text-white px-4 py-2 rounded">Submit Review</button>`; }
             }
             if(s.includes('Pending Approval')) {
                 document.getElementById("fs-reviewer-section").classList.remove('hidden');
-                if(r==='Approver') { document.getElementById("fs-approver-section").classList.remove('hidden'); document.getElementById("Approver_Remarks").disabled=false; btns=`<button type="button" onclick="upd('reject')" class="bg-red-600 text-white px-4 py-2 rounded">Reject</button><button type="button" onclick="upd('approve')" class="bg-green-600 text-white px-4 py-2 rounded">Approve</button>`; }
+                if(r==='Approver') { document.getElementById("fs-approver-section").classList.remove('hidden'); document.getElementById("Approver_Remarks").disabled=false; btns=`<button type="button" onclick="window.upd('reject')" class="bg-red-600 text-white px-4 py-2 rounded">Reject</button><button type="button" onclick="window.upd('approve')" class="bg-green-600 text-white px-4 py-2 rounded">Approve</button>`; }
             }
             if(s==='Active' || s.includes('Renewal')) {
                 document.getElementById("fs-reviewer-section").classList.remove('hidden');
@@ -281,7 +286,7 @@
                      document.getElementById("div-closure-req").classList.remove('hidden');
                      document.getElementById("Closure_Requestor_Remarks").disabled = false;
                      document.getElementById("Site_Restored_Check").disabled = false;
-                     btns += `<button type="button" onclick="upd('initiate_closure')" class="bg-red-600 text-white px-4 py-2 rounded ml-2">Job Complete</button>`;
+                     btns += `<button type="button" onclick="window.upd('initiate_closure')" class="bg-red-600 text-white px-4 py-2 rounded ml-2">Job Complete</button>`;
                 }
                 
                 if(last && (last.status==='pending_review' || last.status==='pending_approval')) {
@@ -302,8 +307,8 @@
                  document.getElementById("div-closure-req").classList.remove('hidden');
                  if(s!=='Closure Pending Review') document.getElementById("div-closure-rev").classList.remove('hidden');
                  if(s==='Closed') document.getElementById("div-closure-app").classList.remove('hidden');
-                 if(s==='Closure Pending Review' && r==='Reviewer') { document.getElementById("div-closure-rev").classList.remove('hidden'); document.getElementById("Closure_Reviewer_Remarks").disabled=false; btns=`<button onclick="upd('approve')" class="bg-green-600 text-white px-4 py-2 rounded">Verify</button>`; }
-                 if(s==='Closure Pending Approval' && r==='Approver') { document.getElementById("div-closure-app").classList.remove('hidden'); document.getElementById("Closure_Approver_Remarks").disabled=false; btns=`<button onclick="upd('approve')" class="bg-black text-white px-4 py-2 rounded">Close Permit</button>`; }
+                 if(s==='Closure Pending Review' && r==='Reviewer') { document.getElementById("div-closure-rev").classList.remove('hidden'); document.getElementById("Closure_Reviewer_Remarks").disabled=false; btns=`<button onclick="window.upd('reject_closure')" class="bg-red-600 text-white px-4 py-2 rounded">Reject</button><button onclick="window.upd('approve')" class="bg-green-600 text-white px-4 py-2 rounded">Verify</button>`; }
+                 if(s==='Closure Pending Approval' && r==='Approver') { document.getElementById("div-closure-app").classList.remove('hidden'); document.getElementById("Closure_Approver_Remarks").disabled=false; btns=`<button onclick="window.upd('reject_closure')" class="bg-red-600 text-white px-4 py-2 rounded">Reject</button><button onclick="window.upd('approve')" class="bg-black text-white px-4 py-2 rounded">Close Permit</button>`; }
                  if(s==='Closed') btns = `<a href="${API}/download-pdf/${id}" target="_blank" class="bg-gray-600 text-white px-4 py-2 rounded ml-2">PDF</a>`;
             }
             document.getElementById("actions").innerHTML = btns;
@@ -311,8 +316,8 @@
             document.getElementById("view-form").classList.remove('hidden');
         }
 
-        async function upd(act) {
-            const getVal = (id) => document.getElementById(id) ? document.getElementById(id).value : '';
+        window.upd = async function(act) {
+            const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
             const body = { 
                 PermitID: currentPermitId, action: act, role: currentUser.Role, user: currentUser.name,
                 comment: (currentUser.Role==='Reviewer' ? getVal("Reviewer_Remarks") : getVal("Approver_Remarks")),
@@ -320,7 +325,7 @@
                 Closure_Reviewer_Remarks: getVal("Closure_Reviewer_Remarks"),
                 Closure_Approver_Remarks: getVal("Closure_Approver_Remarks")
             };
-            if(currentUser.Role==='Reviewer' && act==='review') {
+            if(currentUser.Role === 'Reviewer' && act==='review') {
                  const fd = new FormData(document.getElementById("pf"));
                  document.querySelectorAll('#hazards-section input[type=checkbox]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
                  document.querySelectorAll('#ppe-container input[type=checkbox]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
@@ -330,7 +335,7 @@
             if(res.success) showDashboard(); else alert(res.error);
         }
 
-        async function submitRenewal(act) {
+        window.submitRenewal = async function(act) {
             const body = {
                 PermitID: currentPermitId, userRole: currentUser.Role, userName: currentUser.name, action: act,
                 RenewalValidFrom: document.getElementById("RenewalValidFrom").value,
@@ -345,14 +350,14 @@
             if(res.success) { alert("Done"); showDashboard(); } else alert(res.error);
         }
 
-        function showNewPermit() { document.getElementById("pf").reset(); currentPermitId=null; document.getElementById("Status").value="New"; document.getElementById("permit-header-display").innerText = "New Permit"; const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); rS.innerHTML=""; aS.innerHTML=""; if(window.users){window.users.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); window.users.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`);} document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false); document.getElementById("OfficialName").value=currentUser.name; document.getElementById("OfficialName").disabled=true; document.getElementById("RequesterName").value=currentUser.name; document.getElementById("RequesterName").disabled=true; document.getElementById("fs-reviewer-section").classList.add('hidden'); document.getElementById("fs-approver-section").classList.add('hidden'); document.getElementById("renewals-section").classList.add('hidden'); document.getElementById("closure-section").classList.add('hidden'); document.getElementById("actions").innerHTML = `<button type="button" onclick="savePermit()" class="bg-blue-600 text-white px-6 py-2 rounded font-bold">Submit</button>`; document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-form").classList.remove('hidden'); }
-        async function savePermit() { const fd=new FormData(document.getElementById("pf")); document.querySelectorAll('input[type="checkbox"]').forEach(c=>fd.set(c.name, c.checked?"Y":"N")); fd.append("RequesterEmail", currentUser.Email); if(currentPermitId) fd.set("PermitID", currentPermitId); const res=await fetch(API+'/save-permit', {method:'POST', body:fd}); const json=await res.json(); if(json.success){alert("Saved: "+json.permitId); showDashboard();} else alert(json.error); }
-        function checkDate() { const vf=new Date(document.getElementById("ValidFrom").value); const vt=new Date(document.getElementById("ValidTo").value); if(vf && vt && (vt-vf)/(1000*60*60*24)>7) { alert("Max 7 Days"); document.getElementById("ValidTo").value=""; } }
-        function showDashboard() { document.getElementById("view-dashboard").classList.remove('hidden'); document.getElementById("view-form").classList.add('hidden'); loadDashboard(); }
-        function getGeo() { navigator.geolocation.getCurrentPosition(p=>{document.getElementById("Latitude").value=p.coords.latitude;document.getElementById("Longitude").value=p.coords.longitude;}); }
-        function showAddUser() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-add-user").classList.remove('hidden'); }
-        async function submitNewUser() { const n=document.getElementById("new-user-name").value; const e=document.getElementById("new-user-email").value; const r=document.getElementById("new-user-role").value; const p=document.getElementById("new-user-pass").value; const res=await apiCall('/add-user','POST',{name:n,email:e,role:r,password:p}); if(res.success){alert("User Added"); showDashboard();} else alert(res.error); }
-        function showMap() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-map").classList.remove('hidden'); loadMapData(); }
+        window.showNewPermit = function() { document.getElementById("pf").reset(); currentPermitId=null; document.getElementById("Status").value="New"; document.getElementById("permit-header-display").innerText = "New Permit"; const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); rS.innerHTML=""; aS.innerHTML=""; if(window.users){window.users.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); window.users.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`);} document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false); document.getElementById("OfficialName").value=currentUser.name; document.getElementById("OfficialName").disabled=true; document.getElementById("RequesterName").value=currentUser.name; document.getElementById("RequesterName").disabled=true; document.getElementById("fs-reviewer-section").classList.add('hidden'); document.getElementById("fs-approver-section").classList.add('hidden'); document.getElementById("renewals-section").classList.add('hidden'); document.getElementById("closure-section").classList.add('hidden'); document.getElementById("actions").innerHTML = `<button type="button" onclick="window.savePermit()" class="bg-blue-600 text-white px-6 py-2 rounded font-bold">Submit</button>`; document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-form").classList.remove('hidden'); }
+        window.savePermit = async function() { const fd=new FormData(document.getElementById("pf")); document.querySelectorAll('input[type="checkbox"]').forEach(c=>fd.set(c.name, c.checked?"Y":"N")); fd.append("RequesterEmail", currentUser.Email); if(currentPermitId) fd.set("PermitID", currentPermitId); const res=await fetch(API+'/save-permit', {method:'POST', body:fd}); const json=await res.json(); if(json.success){alert("Saved: "+json.permitId); showDashboard();} else alert(json.error); }
+        window.checkDate = function() { const vf=new Date(document.getElementById("ValidFrom").value); const vt=new Date(document.getElementById("ValidTo").value); if(vf && vt && (vt-vf)/(1000*60*60*24)>7) { alert("Max 7 Days"); document.getElementById("ValidTo").value=""; } }
+        window.showDashboard = function() { document.getElementById("view-dashboard").classList.remove('hidden'); document.getElementById("view-form").classList.add('hidden'); loadDashboard(); }
+        window.getGeo = function() { navigator.geolocation.getCurrentPosition(p=>{document.getElementById("Latitude").value=p.coords.latitude;document.getElementById("Longitude").value=p.coords.longitude;}); }
+        window.showAddUser = function() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-add-user").classList.remove('hidden'); }
+        window.submitNewUser = async function() { const n=document.getElementById("new-user-name").value; const e=document.getElementById("new-user-email").value; const r=document.getElementById("new-user-role").value; const p=document.getElementById("new-user-pass").value; const res=await apiCall('/add-user','POST',{name:n,email:e,role:r,password:p}); if(res.success){alert("User Added"); showDashboard();} else alert(res.error); }
+        window.showMap = function() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-map").classList.remove('hidden'); loadMapData(); }
         async function loadMapData() { const p = await apiCall('/map-data', 'POST'); if(!mapInstance) mapInstance=new google.maps.Map(document.getElementById("map"),{center:{lat:22.57,lng:88.36},zoom:5}); document.getElementById("map-list").innerHTML = p.map(x=>`<div class="p-2 border-b cursor-pointer hover:bg-gray-100" onclick="mapInstance.setCenter({lat:${x.lat},lng:${x.lng}}); mapInstance.setZoom(12);">${x.PermitID}</div>`).join(''); p.forEach(x=>{ new google.maps.Marker({position:{lat:x.lat,lng:x.lng},map:mapInstance,title:x.PermitID}); }); }
     </script>
   </body>

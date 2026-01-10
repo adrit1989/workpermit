@@ -307,8 +307,8 @@
                 const t = document.querySelector('#table-workers tbody');
                 t.innerHTML = res.map(w => `<tr><td>${w.WorkerID}</td><td>${w.Name}</td><td>${w.Age}</td><td>${w.Status}</td><td>
                     ${(currentUser.Role==='Requester' && w.Status==='Approved') ? `<button onclick='window.openWorkerForm("edit_request", ${JSON.stringify(w)})' class="text-blue-600">Edit</button> <button onclick="window.workerAction('${w.WorkerID}','delete')" class="text-red-600">Del</button>` : ''}
-                    ${(currentUser.Role==='Reviewer' && w.Status.includes('Review')) ? `<button onclick="window.workerAction('${w.WorkerID}','approve')" class="text-green-600">Approve</button>` : ''}
-                    ${(currentUser.Role==='Approver' && w.Status.includes('Approval')) ? `<button onclick="window.workerAction('${w.WorkerID}','approve')" class="text-green-600">Approve</button>` : ''}
+                    ${(currentUser.Role==='Reviewer' && w.Status.includes('Review')) ? `<button onclick="window.workerAction('${w.WorkerID}','approve')" class="text-green-600">Approve</button> <button onclick="window.workerAction('${w.WorkerID}','reject')" class="text-red-600">Reject</button>` : ''}
+                    ${(currentUser.Role==='Approver' && w.Status.includes('Approval')) ? `<button onclick="window.workerAction('${w.WorkerID}','approve')" class="text-green-600">Approve</button> <button onclick="window.workerAction('${w.WorkerID}','reject')" class="text-red-600">Reject</button>` : ''}
                 </td></tr>`).join('');
             }
         }
@@ -357,10 +357,17 @@
 
             // Populate Approved Workers List
             await loadWorkers('permit_dropdown');
-            const savedWorkers = p.SelectedWorkers || [];
+            const savedWorkers = p.SelectedWorkers || []; // Now an Array
+            // Ensure savedWorkers is Array
+            let workersArr = [];
+            if(Array.isArray(savedWorkers)) workersArr = savedWorkers;
+            else if(typeof savedWorkers === 'string') {
+                 try { workersArr = JSON.parse(savedWorkers); } catch(e){}
+            }
+
             document.querySelectorAll('#worker-checkboxes input').forEach(c => {
                  const wData = JSON.parse(c.value);
-                 if(savedWorkers.find(sw => sw.WorkerID === wData.WorkerID)) c.checked = true;
+                 if(workersArr.find(sw => sw.WorkerID === wData.WorkerID)) c.checked = true;
                  c.disabled = true; 
             });
 
@@ -510,7 +517,6 @@
 
            document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false); 
            
-           // Safe Set
            const safeSet = (id, val) => { const el = document.getElementById(id); if(el) { el.value = val; } };
            safeSet("RequesterName", currentUser.name);
            safeSet("Vendor", currentUser.name);

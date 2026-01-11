@@ -162,19 +162,20 @@ app.post('/api/add-user', async (req, res) => {
     } catch(e){res.status(500).json({error:e.message})} 
 });
 
-// WORKER MANAGEMENT
+// WORKER MANAGEMENT - UPDATED FOR ID TYPE, APPROVAL & REQUESTOR NAME
 app.post('/api/save-worker', async (req, res) => {
     try {
-        const { WorkerID, Action, Role, Details, RequestorEmail, ApproverName } = req.body;
+        const { WorkerID, Action, Role, Details, RequestorEmail, RequestorName, ApproverName } = req.body;
         const pool = await getConnection();
         if ((Action === 'create' || Action === 'edit_request') && Details && parseInt(Details.Age) < 18) return res.status(400).json({error: "Worker must be 18+"});
 
         if (Action === 'create') {
             const idRes = await pool.request().query("SELECT TOP 1 WorkerID FROM Workers ORDER BY WorkerID DESC");
             const wid = `W-${parseInt(idRes.recordset.length > 0 ? idRes.recordset[0].WorkerID.split('-')[1] : 1000) + 1}`;
-            const dataObj = { Current: {}, Pending: Details }; 
+            // Save RequestorName in JSON
+            const dataObj = { Current: {}, Pending: { ...Details, RequestorName: RequestorName } }; 
             
-            // Added IDType to SQL Insert
+            // Insert IDType into SQL column as well
             await pool.request()
                 .input('w', wid).input('s', 'Pending Review').input('r', RequestorEmail)
                 .input('j', JSON.stringify(dataObj))
@@ -186,7 +187,8 @@ app.post('/api/save-worker', async (req, res) => {
             const cur = await pool.request().input('w', WorkerID).query("SELECT DataJSON FROM Workers WHERE WorkerID=@w");
             if(cur.recordset.length === 0) return res.status(404).json({error:"Worker not found"});
             let dataObj = JSON.parse(cur.recordset[0].DataJSON);
-            dataObj.Pending = { ...dataObj.Current, ...Details };
+            // Preserve Requestor Name
+            dataObj.Pending = { ...dataObj.Current, ...Details, RequestorName: RequestorName || dataObj.Current.RequestorName };
             
             await pool.request()
                 .input('w', WorkerID).input('s', 'Edit Pending Review').input('j', JSON.stringify(dataObj))
@@ -219,7 +221,7 @@ app.post('/api/save-worker', async (req, res) => {
                 st = 'Rejected'; dataObj.Pending = null;
             }
             
-            // Added ApprovedBy and ApprovedOn to SQL Update
+            // Update Approval columns
             await pool.request()
                 .input('w', WorkerID).input('s', st).input('j', JSON.stringify(dataObj))
                 .input('aby', sql.NVarChar, appBy)
@@ -246,7 +248,7 @@ app.post('/api/get-workers', async (req, res) => {
         });
         if(req.body.context === 'permit_dropdown') res.json(list.filter(w => w.Status === 'Approved'));
         else {
-            if(req.body.role === 'Requester') res.json(list.filter(w => w.RequestorEmail === req.body.email || w.Status === 'Approved')); // Requestor sees approved too
+            if(req.body.role === 'Requester') res.json(list.filter(w => w.RequestorEmail === req.body.email || w.Status === 'Approved'));
             else res.json(list);
         }
     } catch(e) { res.status(500).json({error: e.message}); }
@@ -444,16 +446,16 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         const foundPPE = ppeKeys.filter(k => d[`P_${k.replace(/ /g,'')}`] === 'Y');
         doc.text(`PPE: ${foundPPE.join(', ')}`,35,doc.y+25); doc.y+=70;
 
-        // Workers Table
+        // Workers Table - RECTIFY B: Added Requestor Column
         if(doc.y>650){doc.addPage(); drawHeaderOnAll(); doc.y=135;}
         doc.font('Helvetica-Bold').text("WORKERS DEPLOYED",30,doc.y); doc.y+=15; 
         let wy = doc.y;
         
-        // Added columns for ID and Approval
-        doc.rect(30,wy,100,20).stroke().text("Name",35,wy+5); 
-        doc.rect(130,wy,40,20).stroke().text("Age",135,wy+5); 
-        doc.rect(170,wy,120,20).stroke().text("ID Details",175,wy+5); 
-        doc.rect(290,wy,275,20).stroke().text("Worker approved on Date and Time, by Approver name",295,wy+5); 
+        doc.rect(30,wy,80,20).stroke().text("Name",35,wy+5); 
+        doc.rect(110,wy,30,20).stroke().text("Age",115,wy+5); 
+        doc.rect(140,wy,100,20).stroke().text("ID Details",145,wy+5); 
+        doc.rect(240,wy,90,20).stroke().text("Requestor",245,wy+5);
+        doc.rect(330,wy,235,20).stroke().text("Approved On / By",335,wy+5); 
         wy+=20;
         
         let workers = d.SelectedWorkers || [];
@@ -461,10 +463,11 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.font('Helvetica').fontSize(8);
         workers.forEach(w => {
             if(wy>750){doc.addPage(); drawHeaderOnAll(); doc.y=135; wy=135;}
-            doc.rect(30,wy,100,35).stroke().text(w.Name,35,wy+5); 
-            doc.rect(130,wy,40,35).stroke().text(w.Age,135,wy+5); 
-            doc.rect(170,wy,120,35).stroke().text(`${w.IDType || ''}: ${w.ID || '-'}`,175,wy+5); 
-            doc.rect(290,wy,275,35).stroke().text(`Approved on ${w.ApprovedAt || '-'} by ${w.ApprovedBy || 'Admin'}`,295,wy+5); 
+            doc.rect(30,wy,80,35).stroke().text(w.Name,35,wy+5); 
+            doc.rect(110,wy,30,35).stroke().text(w.Age,115,wy+5); 
+            doc.rect(140,wy,100,35).stroke().text(`${w.IDType || ''}: ${w.ID || '-'}`,145,wy+5); 
+            doc.rect(240,wy,90,35).stroke().text(w.RequestorName || '-', 245,wy+5);
+            doc.rect(330,wy,235,35).stroke().text(`${w.ApprovedAt || '-'} by ${w.ApprovedBy || 'Admin'}`, 335,wy+5); 
             wy+=35;
         });
         doc.y = wy+20;

@@ -3,7 +3,6 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <meta name="theme-color" content="#ea580c">
     <title>IndianOil Permit System</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -254,9 +253,11 @@
     </style>
 </head>
 <body>
-    <div id="loader" class="loader">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-orange-600"></div>
-        <div>Processing...</div>
+    <div id="loader" class="fixed inset-0 bg-white/80 flex items-center justify-center z-[100] hidden">
+        <div class="text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-orange-600 mx-auto mb-2"></div>
+            <div class="font-bold text-orange-600">Processing...</div>
+        </div>
     </div>
 
     <div id="view-login" class="flex items-center justify-center min-h-screen p-4 bg-orange-50">
@@ -606,7 +607,11 @@
 
     <script>
         const API = "/api";
-        let currentUser = null; let usersData = {}; let mapInstance = null; let chartS=null; let chartT=null;
+        let currentUser = null; 
+        let usersData = {}; 
+        let mapInstance = null; 
+        let chartS = null; 
+        let chartT = null;
         const loader = document.getElementById('loader');
 
         const CL_DATA = {
@@ -676,7 +681,6 @@
                 loadUserNames(); 
             } catch (e) {
                 console.error("Failed to load users", e);
-                alert("Could not load users. Check server connection.");
             }
         }
 
@@ -872,8 +876,13 @@
                     </table>`;
             }
 
-            const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); rS.innerHTML=""; aS.innerHTML=""; 
-            if(window.users){ window.users.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); window.users.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); }
+            const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); 
+            rS.innerHTML=""; aS.innerHTML=""; 
+            // FIXED: Use usersData instead of window.users
+            if(usersData){ 
+                usersData.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); 
+                usersData.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); 
+            }
 
             // Safe Set Helper
             const safeSet = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
@@ -1112,9 +1121,10 @@
            const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); 
            if(rS && aS) {
                rS.innerHTML=""; aS.innerHTML=""; 
-               if(window.users){
-                   window.users.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); 
-                   window.users.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`);
+               // FIXED: Use usersData instead of window.users
+               if(usersData){
+                   usersData.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); 
+                   usersData.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`);
                }
            }
 

@@ -42,16 +42,27 @@
         /* Bottom Sticky Actions */
         #actions { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid #e5e7eb; padding: 1rem; box-shadow: 0 -4px 6px rgba(0,0,0,0.05); z-index: 100; flex-direction: column; gap: 0.5rem; }
         #actions button, #actions a { width: 100%; display: block; text-align: center; padding: 12px; font-size: 1.1rem; }
+
+        /* RECTIFY D & E: Map View Mobile */
+        #view-map { flex-direction: column; }
+        #map-list { height: 35%; order: 2; width: 100%; border-top: 2px solid #ccc; }
+        #map-container { height: 65%; order: 1; width: 100%; }
       }
 
       /* RECTIFY E: Desktop Friendly View */
       @media (min-width: 769px) {
+        .desktop-container { max-width: 1200px; margin: 0 auto; padding: 20px; }
         table.mobile-table { width: 100%; border-collapse: collapse; display: table; }
         table.mobile-table thead { display: table-header-group; }
         table.mobile-table tr { display: table-row; border: none; box-shadow: none; background: transparent; }
         table.mobile-table th { background: #ea580c; color: white; padding: 12px; text-align: left; border-bottom: 2px solid #c2410c; }
         table.mobile-table td { display: table-cell; border-bottom: 1px solid #e5e7eb; padding: 12px; text-align: left; vertical-align: top; }
         table.mobile-table td::before { content: none; } /* Remove mobile labels */
+
+        /* RECTIFY D: Map Side Table Desktop */
+        #view-map { flex-direction: row; }
+        #map-list { width: 350px; height: 100%; border-right: 1px solid #ddd; overflow-y: auto; }
+        #map-container { flex: 1; height: 100%; }
       }
     </style>
   </head>
@@ -85,7 +96,7 @@
       </div>
     </div>
 
-    <div id="app-container" class="max-w-7xl mx-auto p-2 pb-24 hidden">
+    <div id="app-container" class="max-w-7xl mx-auto p-2 pb-24 hidden desktop-container">
         <div class="flex justify-between items-center mb-4 bg-orange-600 p-4 rounded-xl shadow-lg text-white sticky top-2 z-40">
             <div class="flex items-center gap-3">
                 <img src="logo.png" alt="Logo" class="h-10 w-10 bg-white rounded-full p-1 object-contain">
@@ -114,7 +125,17 @@
                      <input id="w-father" placeholder="Father's Name" required>
                      <input id="w-address" placeholder="Address">
                      <input id="w-contact" placeholder="Contact No" type="tel">
-                     <input id="w-idcard" placeholder="ID Card No (Not Aadhar)">
+                     
+                     <div>
+                         <select id="w-id-type" onchange="window.toggleOtherID()">
+                             <option value="Voter Card">Voter Card</option>
+                             <option value="PAN Card">PAN Card</option>
+                             <option value="Other">Any Other</option>
+                         </select>
+                         <input id="w-id-type-other" placeholder="Specify ID Type" class="hidden bg-yellow-50 mt-1">
+                     </div>
+                     <input id="w-idcard" placeholder="ID Number (No Aadhar)" required>
+                     
                      <select id="w-gender"><option>Male</option><option>Female</option></select>
                      <input id="w-age" type="number" placeholder="Age (Must be 18+)" min="19" required>
                      <button class="bg-green-600 text-white py-3 rounded-lg font-bold mt-2 shadow md:col-span-2">Save Worker</button>
@@ -124,7 +145,7 @@
              <button onclick="window.openWorkerForm('create')" id="btn-add-worker" class="w-full bg-orange-600 text-white py-3 rounded-lg font-bold mb-4 shadow hidden">+ Add New Worker</button>
              
              <table class="mobile-table w-full text-left text-sm" id="table-workers">
-                <thead class="hidden md:table-header-group bg-gray-100 text-gray-700"><tr><th>ID</th><th>Name</th><th>Age</th><th>Status</th><th>Action</th></tr></thead>
+                <thead class="hidden md:table-header-group bg-gray-100 text-gray-700"><tr><th>Name</th><th>Full Details</th><th>Status</th><th>Approval Trail</th><th>Action</th></tr></thead>
                 <tbody class="divide-y divide-gray-200"></tbody>
              </table>
         </div>
@@ -185,14 +206,17 @@
             </div>
         </div>
 
-        <div id="view-map" class="hidden fixed inset-0 z-50 bg-white flex flex-col">
-             <div class="bg-white p-2 shadow z-10 flex justify-between items-center">
-                 <button onclick="window.showDashboard()" class="bg-gray-100 px-3 py-1 rounded font-bold">← Back</button>
-                 <span class="font-bold text-gray-700">Live Permit Map</span>
+        <div id="view-map" class="hidden fixed inset-0 z-50 bg-white flex">
+             <div id="map-list" class="bg-white border-r relative z-10 shadow-xl overflow-y-auto">
+                 <div class="p-3 bg-orange-600 text-white font-bold flex justify-between items-center sticky top-0">
+                     <span>Active Permits</span>
+                     <button onclick="window.showDashboard()" class="bg-white text-orange-600 px-2 rounded text-xs font-bold shadow">← Back</button>
+                 </div>
+                 <div id="map-list-content"></div>
              </div>
-             <div class="flex-1 relative">
+             
+             <div id="map-container" class="relative">
                  <div id="map" class="w-full h-full"></div>
-                 <div class="absolute bottom-0 left-0 right-0 h-1/3 bg-white border-t rounded-t-xl overflow-y-auto shadow-2xl p-2" id="map-list"></div>
              </div>
         </div>
 
@@ -200,6 +224,11 @@
             <div class="flex items-center gap-2 mb-2">
                 <button onclick="window.showDashboard()" class="bg-white border text-gray-600 px-3 py-2 rounded-lg font-bold shadow-sm">← Back</button>
                 <div id="permit-header-display" class="flex-1 p-2 bg-blue-100 text-blue-800 rounded-lg font-bold text-center text-sm truncate"></div>
+            </div>
+
+            <div id="permit-worker-audit-display" class="glass border-l-4 border-orange-500 mb-4 hidden">
+                <h3 class="font-bold border-b pb-2 mb-2 text-orange-800">Deployed Workers & Approval Status</h3>
+                <div id="assigned-worker-audit" class="overflow-x-auto"></div>
             </div>
 
             <form id="pf" class="space-y-4">
@@ -434,8 +463,18 @@
         async function loadStats() { const res=await apiCall('/stats','POST'); if(chartS)chartS.destroy(); if(chartT)chartT.destroy(); chartS=new Chart(document.getElementById('chartStatus'),{type:'doughnut',data:{labels:Object.keys(res.statusCounts),datasets:[{data:Object.values(res.statusCounts)}]}}); chartT=new Chart(document.getElementById('chartType'),{type:'bar',data:{labels:Object.keys(res.typeCounts),datasets:[{label:'Types',data:Object.values(res.typeCounts)}]}}); }
         
         // --- WORKER MANAGEMENT ---
+        window.toggleOtherID = function() {
+            const val = document.getElementById("w-id-type").value;
+            const otherInput = document.getElementById("w-id-type-other");
+            if(val === "Other") otherInput.classList.remove("hidden");
+            else otherInput.classList.add("hidden");
+        }
+
         window.toggleWorkerMode = function() { 
             const dash = document.getElementById("view-dashboard"); const work = document.getElementById("view-worker-management"); 
+            // Also hide map if open
+            document.getElementById("view-map").classList.add('hidden');
+            
             if(dash.classList.contains('hidden')) { dash.classList.remove('hidden'); work.classList.add('hidden'); }
             else { dash.classList.add('hidden'); work.classList.remove('hidden'); loadWorkers('dashboard'); }
         }
@@ -455,12 +494,30 @@
                 document.getElementById('w-idcard').value = data.ID;
                 document.getElementById('w-gender').value = data.Gender;
                 document.getElementById('w-age').value = data.Age;
+                // Set ID Type
+                const idType = data.IDType || "Voter Card";
+                const isStandard = ["Voter Card", "PAN Card"].includes(idType);
+                document.getElementById("w-id-type").value = isStandard ? idType : "Other";
+                window.toggleOtherID();
+                if(!isStandard) document.getElementById("w-id-type-other").value = idType;
             }
         }
         window.saveWorker = async function(act) {
+            const idTypeRaw = document.getElementById("w-id-type").value;
+            const idTypeFinal = idTypeRaw === "Other" ? document.getElementById("w-id-type-other").value : idTypeRaw;
+
             const body = {
-                Action: act, Role: currentUser.Role, RequestorEmail: currentUser.Email, WorkerID: document.getElementById('w-id').value,
-                Details: { Name:document.getElementById("w-name").value, Father:document.getElementById("w-father").value, Address:document.getElementById("w-address").value, Contact:document.getElementById("w-contact").value, ID:document.getElementById("w-idcard").value, Gender:document.getElementById("w-gender").value, Age:document.getElementById("w-age").value }
+                Action: act, Role: currentUser.Role, RequestorEmail: currentUser.Email, WorkerID: document.getElementById('w-id').value, ApproverName: currentUser.name,
+                Details: { 
+                    Name:document.getElementById("w-name").value, 
+                    Father:document.getElementById("w-father").value, 
+                    Address:document.getElementById("w-address").value, 
+                    Contact:document.getElementById("w-contact").value, 
+                    ID:document.getElementById("w-idcard").value, 
+                    Gender:document.getElementById("w-gender").value, 
+                    Age:document.getElementById("w-age").value,
+                    IDType: idTypeFinal 
+                }
             };
             const res = await apiCall('/save-worker', 'POST', body);
             if(res.success) { alert("Saved"); loadWorkers('dashboard'); document.getElementById('worker-form-container').classList.add('hidden'); } else alert(res.error);
@@ -472,11 +529,20 @@
                 con.innerHTML = res.map(w => `<label class="flex items-center gap-2 border p-3 rounded-lg bg-gray-50"><input type="checkbox" name="Worker_${w.WorkerID}" value='${JSON.stringify(w)}' class="w-5 h-5"> <span class="font-bold">${w.Name}</span> <span class="text-xs text-gray-500">(${w.Age})</span></label>`).join('');
             } else {
                 const t = document.querySelector('#table-workers tbody');
+                // UPDATED TABLE ROW for RECTIFY B (Full Details + Approval Trail)
                 t.innerHTML = res.map(w => `<tr>
-                    <td data-label="ID" class="font-bold text-blue-600">${w.WorkerID}</td>
-                    <td data-label="Name">${w.Name}</td>
-                    <td data-label="Age">${w.Age}</td>
+                    <td data-label="Name" class="font-bold text-blue-600">${w.Name}</td>
+                    <td data-label="Full Details" class="text-xs text-gray-600">
+                        <strong>Father:</strong> ${w.Father}<br>
+                        <strong>Address:</strong> ${w.Address}<br>
+                        <strong>Contact:</strong> ${w.Contact}<br>
+                        <strong>ID:</strong> ${w.IDType} - ${w.ID}<br>
+                        <strong>Age/Gender:</strong> ${w.Age} / ${w.Gender}
+                    </td>
                     <td data-label="Status"><span class="px-2 py-1 rounded text-xs font-bold ${w.Status==='Approved'?'bg-green-100 text-green-800':'bg-yellow-100 text-yellow-800'}">${w.Status}</span></td>
+                    <td data-label="Approval Trail" class="text-xs">
+                        ${w.ApprovedBy ? `<div class="text-green-700 font-bold">Approved By: ${w.ApprovedBy}<br>On: ${w.ApprovedAt}</div>` : '<span class="text-orange-500">Pending</span>'}
+                    </td>
                     <td data-label="Action">
                     ${(currentUser.Role==='Requester' && w.Status==='Approved') ? `<button onclick='window.openWorkerForm("edit_request", ${JSON.stringify(w)})' class="text-blue-600 font-bold mr-2">Edit</button> <button onclick="window.workerAction('${w.WorkerID}','delete')" class="text-red-600 font-bold">Del</button>` : ''}
                     ${(currentUser.Role==='Reviewer' && w.Status.includes('Review')) ? `<button onclick="window.workerAction('${w.WorkerID}','approve')" class="text-green-600 font-bold mr-2">Approve</button> <button onclick="window.workerAction('${w.WorkerID}','reject')" class="text-red-600 font-bold">Reject</button>` : ''}
@@ -484,7 +550,7 @@
                 </td></tr>`).join('');
             }
         }
-        window.workerAction = async function(id, act) { await apiCall('/save-worker', 'POST', {WorkerID:id, Action:act, Role:currentUser.Role}); loadWorkers('dashboard'); }
+        window.workerAction = async function(id, act) { await apiCall('/save-worker', 'POST', {WorkerID:id, Action:act, Role:currentUser.Role, ApproverName: currentUser.name}); loadWorkers('dashboard'); }
 
         // --- DASHBOARD ---
         async function loadDashboard() { 
@@ -522,6 +588,22 @@
             currentPermitId = id;
             document.getElementById("permit-header-display").innerText = `${id} | ${p.Status}`;
             
+            // RECTIFY B: Populate Worker Audit Table in Permit Console
+            const workerAuditTable = document.getElementById("assigned-worker-audit");
+            document.getElementById("permit-worker-audit-display").classList.remove("hidden"); // Show container
+            workerAuditTable.innerHTML = `
+                <table class="mobile-table w-full text-xs">
+                    <thead><tr><th>Name</th><th>ID Details</th><th>Father Name</th><th>Approval Trail</th></tr></thead>
+                    <tbody>${p.SelectedWorkers.map(w=>`
+                        <tr>
+                            <td data-label="Name">${w.Name}</td>
+                            <td data-label="ID">${w.IDType || 'ID'}: ${w.ID}</td>
+                            <td data-label="Father">${w.Father}</td>
+                            <td data-label="Approval"><span class="text-green-700 font-bold">Approved by ${w.ApprovedBy||'Admin'} on ${w.ApprovedAt||p.CreatedDate}</span></td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>`;
+
             const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); rS.innerHTML=""; aS.innerHTML=""; 
             if(window.users){ window.users.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); window.users.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); }
 
@@ -755,7 +837,8 @@
            currentPermitId=null; 
            document.getElementById("Status").value="New"; 
            document.getElementById("permit-header-display").innerText = "New Permit"; 
-           
+           document.getElementById("permit-worker-audit-display").classList.add("hidden"); // Hide audit initially
+
            const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); 
            if(rS && aS) {
                rS.innerHTML=""; aS.innerHTML=""; 
@@ -805,7 +888,17 @@
         }
         
         window.checkDate = function() { const vf=new Date(document.getElementById("ValidFrom").value); const vt=new Date(document.getElementById("ValidTo").value); if(vf && vt) { if(vt <= vf) { alert("End time must be greater than Start time"); document.getElementById("ValidTo").value=""; return; } if((vt-vf)/(1000*60*60*24) > 7) { alert("Max 7 Days"); document.getElementById("ValidTo").value=""; } } }
-        window.showDashboard = function() { document.getElementById("view-dashboard").classList.remove('hidden'); document.getElementById("view-form").classList.add('hidden'); document.getElementById("view-add-user").classList.add('hidden'); document.getElementById("view-worker-management").classList.add('hidden'); loadDashboard(); }
+        
+        // RECTIFY E: Fix Back Button Logic
+        window.showDashboard = function() { 
+            document.getElementById("view-dashboard").classList.remove('hidden'); 
+            document.getElementById("view-form").classList.add('hidden'); 
+            document.getElementById("view-add-user").classList.add('hidden'); 
+            document.getElementById("view-worker-management").classList.add('hidden'); 
+            document.getElementById("view-map").classList.add('hidden'); 
+            loadDashboard(); 
+        }
+        
         window.getGeo = function() { 
             navigator.geolocation.getCurrentPosition(p=>{
                 document.getElementById("ExactLocation").value=`${p.coords.latitude}, ${p.coords.longitude}`;
@@ -815,11 +908,18 @@
         }
         window.showAddUser = function() { document.getElementById("view-add-user").classList.remove('hidden'); }
         window.submitNewUser = async function() { const n=document.getElementById("new-user-name").value; const e=document.getElementById("new-user-email").value; const r=document.getElementById("new-user-role").value; const p=document.getElementById("new-user-pass").value; const res=await apiCall('/add-user','POST',{name:n,email:e,role:r,password:p}); if(res.success){alert("User Added"); document.getElementById("view-add-user").classList.add('hidden');} else alert(res.error); }
-        window.showMap = function() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-map").classList.remove('hidden'); loadMapData(); }
+        
+        // RECTIFY D: Side Table Logic for Map
+        window.showMap = function() { 
+            document.getElementById("view-dashboard").classList.add('hidden'); 
+            document.getElementById("view-map").classList.remove('hidden'); 
+            loadMapData(); 
+        }
+        
         async function loadMapData() { 
             const p = await apiCall('/map-data', 'POST'); 
             if(!mapInstance) mapInstance=new google.maps.Map(document.getElementById("map"),{center:{lat:22.57,lng:88.36},zoom:5}); 
-            const listEl = document.getElementById("map-list"); listEl.innerHTML = "";
+            const listEl = document.getElementById("map-list-content"); listEl.innerHTML = "";
             const infoWindow = new google.maps.InfoWindow();
 
             p.forEach(x => {
@@ -828,8 +928,8 @@
                 marker.addListener("click", () => { infoWindow.setContent(content); infoWindow.open(mapInstance, marker); });
                 
                 const item = document.createElement("div");
-                item.className = "p-3 border-b cursor-pointer hover:bg-gray-100 text-sm flex justify-between";
-                item.innerHTML = `<div><b>${x.PermitID}</b></div><div>${x.WorkType}</div>`;
+                item.className = "p-3 border-b cursor-pointer hover:bg-orange-50 text-sm flex justify-between";
+                item.innerHTML = `<div><b>${x.PermitID}</b><div class="text-xs text-gray-500">${x.ExactLocation}</div></div><div class="text-xs font-bold text-orange-600">${x.WorkType}</div>`;
                 item.onclick = () => { mapInstance.setCenter({lat:x.lat,lng:x.lng}); mapInstance.setZoom(12); infoWindow.setContent(content); infoWindow.open(mapInstance, marker); };
                 listEl.appendChild(item);
             });

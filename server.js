@@ -73,7 +73,7 @@ const CHECKLIST_DATA = {
         "5. Portable equipment / nozzle properly grounded.",
         "6. Standby persons provided for entry to confined space.",
         "7. Adequate Communication Provided to Stand by Person.",
-        "8. Attendant Trained Provided With Rescue Equipment/SCBA.",
+        "8. Attendant Trained Provided With Rescue Equipment/SCABA.",
         "9. Space Adequately Cooled for Safe Entry Of Person.",
         "10. Continuous Inert Gas Flow Arranged.",
         "11. Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding.",
@@ -243,13 +243,16 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
         const data = { ...req.body, SelectedWorkers: workers, PermitID: pid, CreatedDate: getNowIST() }; 
         const q = pool.request().input('p', pid).input('s', 'Pending Review').input('w', req.body.WorkType).input('re', req.body.RequesterEmail).input('rv', req.body.ReviewerEmail).input('ap', req.body.ApproverEmail).input('vf', vf).input('vt', vt).input('j', JSON.stringify(data));
         
-        // --- STRICT LAT/LONG SANITIZATION FOR SQL ---
+        // --- BULLETPROOF LAT/LONG SANITIZATION ---
+        // Force Values to String or NULL. mssql cannot handle 'undefined' text.
         let lat = req.body.Latitude;
         let lng = req.body.Longitude;
-        if (lat === undefined || lat === 'undefined' || lat === 'null' || String(lat).trim() === '') lat = null;
-        if (lng === undefined || lng === 'undefined' || lng === 'null' || String(lng).trim() === '') lng = null;
+        
+        const safeLat = (lat && lat !== 'undefined' && lat !== 'null' && String(lat).trim() !== '') ? String(lat) : null;
+        const safeLng = (lng && lng !== 'undefined' && lng !== 'null' && String(lng).trim() !== '') ? String(lng) : null;
 
-        q.input('lat', sql.NVarChar(50), lat).input('lng', sql.NVarChar(50), lng);
+        q.input('lat', sql.NVarChar, safeLat);
+        q.input('lng', sql.NVarChar, safeLng);
 
         if (chk.recordset.length > 0) await q.query("UPDATE Permits SET FullDataJSON=@j, WorkType=@w, ValidFrom=@vf, ValidTo=@vt, Latitude=@lat, Longitude=@lng WHERE PermitID=@p");
         else await q.query("INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, FullDataJSON, RenewalsJSON) VALUES (@p, @s, @w, @re, @rv, @ap, @vf, @vt, @lat, @lng, @j, '[]')");
@@ -268,7 +271,7 @@ app.post('/api/update-status', async (req, res) => {
         Object.assign(d, extras);
         if(bgColor) d.PdfBgColor = bgColor;
         
-        // MERGE CLOSURE REMARKS EXPLICITLY
+        // MERGE CLOSURE REMARKS
         if(req.body.Closure_Requestor_Remarks) d.Closure_Requestor_Remarks = req.body.Closure_Requestor_Remarks;
         if(req.body.Closure_Reviewer_Remarks) d.Closure_Reviewer_Remarks = req.body.Closure_Reviewer_Remarks;
         if(req.body.Closure_Approver_Remarks) d.Closure_Approver_Remarks = req.body.Closure_Approver_Remarks;
@@ -400,53 +403,43 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         // Renewals
         doc.font('Helvetica-Bold').text("CLEARANCE RENEWAL",30,doc.y); doc.y+=15;
         let ry = doc.y;
-        doc.rect(30,ry,60,25).stroke().text("From",32,ry+5); doc.rect(90,ry,60,25).stroke().text("To",92,ry+5); doc.rect(150,ry,70,25).stroke().text("Gas",152,ry+5); doc.rect(220,ry,80,25).stroke().text("Precautions",222,ry+5); doc.rect(300,ry,85,25).stroke().text("Req (Name/Date)",302,ry+5); doc.rect(385,ry,85,25).stroke().text("Rev (Name/Date)",387,ry+5); doc.rect(470,ry,85,25).stroke().text("App (Name/Date)",472,ry+5); ry+=25;
+        doc.rect(30,ry,60,25).stroke().text("From",32,ry+5); doc.rect(90,ry,60,25).stroke().text("To",92,ry+5); doc.rect(150,ry,70,25).stroke().text("Gas",152,ry+5); doc.rect(220,ry,80,25).stroke().text("Precautions",222,ry+5); doc.rect(300,ry,85,25).stroke().text("Req (Name/Date)",302,ry+5); doc.rect(385,ry,85,25).stroke().text("Rev (Name/Date/Rem)",387,ry+5); doc.rect(470,ry,85,25).stroke().text("App (Name/Date/Rem)",472,ry+5); ry+=25;
         const renewals = JSON.parse(p.RenewalsJSON || "[]");
         doc.font('Helvetica').fontSize(8);
         renewals.forEach(r => {
              if(ry>700){doc.addPage(); drawHeader(doc, bgColor); doc.y=135; ry=135;}
-             
-             // Row height is now 55 (35 for dates + 20 for remarks space)
-             doc.rect(30,ry,60,55).stroke().text(r.valid_from.replace('T','\n'), 32, ry+5, {width:55});
-             doc.rect(90,ry,60,55).stroke().text(r.valid_till.replace('T','\n'), 92, ry+5, {width:55});
-             doc.rect(150,ry,70,55).stroke().text(`${r.hc}/${r.toxic}/${r.oxygen}`, 152, ry+5, {width:65});
-             doc.rect(220,ry,80,55).stroke().text(r.precautions||'-', 222, ry+5, {width:75});
-             
-             // Requestor Column
-             doc.rect(300,ry,85,55).stroke();
-             doc.text(`${r.req_name}\n${r.req_at}`, 302, ry+5, {width:80});
-             
-             // Reviewer Column (Name+Date + Remark below)
-             doc.rect(385,ry,85,55).stroke();
-             doc.text(`${r.rev_name||'-'}\n${r.rev_at||'-'}\nRem: ${r.rev_rem||'-'}`, 387, ry+5, {width:80});
-             
-             // Approver Column (Name+Date + Remark below)
-             doc.rect(470,ry,85,55).stroke();
-             doc.text(`${r.app_name||'-'}\n${r.app_at||'-'}\nRem: ${r.app_rem||'-'}`, 472, ry+5, {width:80});
-             
-             ry += 55; // Increased row height to fit remarks
+             const rh = 45; // INCREASED ROW HEIGHT FOR REMARKS
+             doc.rect(30,ry,60,rh).stroke().text(r.valid_from.replace('T','\n'), 32, ry+5, {width:55});
+             doc.rect(90,ry,60,rh).stroke().text(r.valid_till.replace('T','\n'), 92, ry+5, {width:55});
+             doc.rect(150,ry,70,rh).stroke().text(`${r.hc}/${r.toxic}/${r.oxygen}`, 152, ry+5, {width:65});
+             doc.rect(220,ry,80,rh).stroke().text(r.precautions||'-', 222, ry+5, {width:75});
+             doc.rect(300,ry,85,rh).stroke().text(`${r.req_name}\n${r.req_at}`, 302, ry+5, {width:80});
+             // ADDED REMARKS BELOW DATE
+             doc.rect(385,ry,85,rh).stroke().text(`${r.rev_name||'-'}\n${r.rev_at||'-'}\n${r.rev_rem||''}`, 387, ry+5, {width:80});
+             doc.rect(470,ry,85,rh).stroke().text(`${r.app_name||'-'}\n${r.app_at||'-'}\n${r.app_rem||''}`, 472, ry+5, {width:80});
+             ry += rh;
         });
         doc.y = ry + 20;
 
-        // Closure Table
+        // Closure Table (FIXED)
         if(doc.y>650){doc.addPage(); drawHeader(doc, bgColor); doc.y=135;}
         doc.font('Helvetica-Bold').text("CLOSURE OF WORK PERMIT",30,doc.y); doc.y+=15;
         let cy = doc.y;
-        doc.rect(30,cy,80,20).stroke().text("Stage",35,cy+5); doc.rect(110,cy,120,20).stroke().text("Name/Sig",115,cy+5); doc.rect(230,cy,100,20).stroke().text("Date/Time",235,cy+5); doc.rect(330,cy,235,20).stroke().text("Remarks",335,cy+5); cy+=20;
+        doc.rect(30,cy,80,20).stroke().text("Stage",35,cy+5); doc.rect(110,cy,120,20).stroke().text("Name",115,cy+5); doc.rect(230,cy,100,20).stroke().text("Date/Time",235,cy+5); doc.rect(330,cy,235,20).stroke().text("Remarks",335,cy+5); cy+=20;
         
-        // --- FIX: Logic to extract only Name from "Name on Date" ---
-        const getName = (sig) => (sig || '').split(' on ')[0]; 
-
         const closureSteps = [
             {role:'Requestor', name:d.RequesterName, date:d.Closure_Requestor_Date, rem:d.Closure_Requestor_Remarks},
-            {role:'Reviewer', name: getName(d.Closure_Reviewer_Sig), date:d.Closure_Reviewer_Date, rem:d.Closure_Reviewer_Remarks},
-            {role:'Approver', name: getName(d.Closure_Issuer_Sig), date:d.Closure_Approver_Date, rem:d.Closure_Approver_Remarks}
+            {role:'Reviewer', name:d.Reviewer_Sig, date:d.Closure_Reviewer_Date, rem:d.Closure_Reviewer_Remarks},
+            {role:'Approver', name:d.Closure_Issuer_Sig, date:d.Closure_Approver_Date, rem:d.Closure_Approver_Remarks}
         ];
         
         doc.font('Helvetica').fontSize(8);
         closureSteps.forEach(s => {
+             // FIXED: EXTRACT NAME ONLY, REMOVE TIMESTAMP
+             const justName = (s.name && s.name.includes(' on ')) ? s.name.split(' on ')[0] : (s.name || '-');
+             
              doc.rect(30,cy,80,30).stroke().text(s.role,35,cy+5); 
-             doc.rect(110,cy,120,30).stroke().text(s.name||'-',115,cy+5, {width:110}); 
+             doc.rect(110,cy,120,30).stroke().text(justName,115,cy+5, {width:110}); 
              doc.rect(230,cy,100,30).stroke().text(s.date||'-',235,cy+5, {width:90}); 
              doc.rect(330,cy,235,30).stroke().text(s.rem||'-',335,cy+5, {width:225}); 
              cy+=30;

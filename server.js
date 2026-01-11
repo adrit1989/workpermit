@@ -240,6 +240,7 @@ app.post('/api/dashboard', async (req, res) => {
 app.post('/api/save-permit', upload.single('file'), async (req, res) => {
     try {
         const vf = new Date(req.body.ValidFrom); const vt = new Date(req.body.ValidTo);
+        // RECTIFY A: Validation for Start < End
         if (vt <= vf) return res.status(400).json({ error: "End date must be after Start date" });
         if ((vt-vf)/(1000*60*60*24) > 7) return res.status(400).json({ error: "Max 7 days allowed" });
         
@@ -258,7 +259,7 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
         const data = { ...req.body, SelectedWorkers: workers, PermitID: pid, CreatedDate: getNowIST() }; 
         const q = pool.request().input('p', pid).input('s', 'Pending Review').input('w', req.body.WorkType).input('re', req.body.RequesterEmail).input('rv', req.body.ReviewerEmail).input('ap', req.body.ApproverEmail).input('vf', vf).input('vt', vt).input('j', JSON.stringify(data));
         
-        // --- ROBUST LAT/LONG SANITIZATION (FIXES 500 ERROR) ---
+        // --- ROBUST LAT/LONG SANITIZATION ---
         let lat = req.body.Latitude;
         let lng = req.body.Longitude;
         
@@ -320,6 +321,9 @@ app.post('/api/renewal', async (req, res) => {
         if (userRole === 'Requester') {
              const rs = new Date(data.RenewalValidFrom); const re = new Date(data.RenewalValidTo);
              const pS = new Date(cur.recordset[0].ValidFrom); const pE = new Date(cur.recordset[0].ValidTo);
+             
+             // RECTIFY A: Validation
+             if (re <= rs) return res.status(400).json({error: "Renewal End time must be later than Start time"});
              if (rs < pS || re > pE) return res.status(400).json({error: "Renewal must be within permit validity"});
              if ((re - rs) / 36e5 > 8) return res.status(400).json({error: "Max 8 hours per clearance"});
              if(r.length > 0) {
@@ -330,7 +334,14 @@ app.post('/api/renewal', async (req, res) => {
              r.push({ status: 'pending_review', valid_from: data.RenewalValidFrom, valid_till: data.RenewalValidTo, hc: data.hc, toxic: data.toxic, oxygen: data.oxygen, precautions: data.precautions, req_name: userName, req_at: now });
         } else {
             const last = r[r.length-1];
-            if (action === 'reject') { last.status = 'rejected'; last.rej_by = userName; last.rej_at = now; last.rej_reason = rejectionReason; }
+            if (action === 'reject') { 
+                last.status = 'rejected'; 
+                last.rej_by = userName; 
+                last.rej_at = now; 
+                last.rej_reason = rejectionReason; 
+                // RECTIFY D: Save role to display in correct PDF column
+                last.rej_role = userRole; 
+            }
             else { 
                 last.status = userRole==='Reviewer'?'pending_approval':'approved'; 
                 if(userRole==='Reviewer') { last.rev_name = userName; last.rev_at = now; last.rev_rem = rejectionReason; }
@@ -430,22 +441,34 @@ app.get('/api/download-pdf/:id', async (req, res) => {
              // Row height is now 55 (35 for dates + 20 for remarks space)
              doc.rect(30,ry,60,55).stroke().text(r.valid_from.replace('T','\n'), 32, ry+5, {width:55});
              doc.rect(90,ry,60,55).stroke().text(r.valid_till.replace('T','\n'), 92, ry+5, {width:55});
-             doc.rect(150,ry,70,55).stroke().text(`${r.hc}/${r.toxic}/${r.oxygen}`, 152, ry+5, {width:65});
+             // RECTIFY C: Clear Gas Values
+             doc.rect(150,ry,70,55).stroke().text(`HC: ${r.hc}\nTox: ${r.toxic}\nO2: ${r.oxygen}`, 152, ry+5, {width:65});
              doc.rect(220,ry,80,55).stroke().text(r.precautions||'-', 222, ry+5, {width:75});
              
              // Requestor Column
              doc.rect(300,ry,85,55).stroke();
              doc.text(`${r.req_name}\n${r.req_at}`, 302, ry+5, {width:80});
              
-             // Reviewer Column (Name+Date + Remark below)
+             let revText = `${r.rev_name||'-'}\n${r.rev_at||'-'}\nRem: ${r.rev_rem||'-'}`;
+             let appText = `${r.app_name||'-'}\n${r.app_at||'-'}\nRem: ${r.app_rem||'-'}`;
+
+             // RECTIFY D: Display rejection in correct column
+             if (r.status === 'rejected') {
+                 const rejText = `REJECTED BY:\n${r.rej_by}\n${r.rej_at}\nReason: ${r.rej_reason}`;
+                 if (r.rej_role === 'Reviewer') revText = rejText;
+                 else if (r.rej_role === 'Approver') appText = rejText;
+                 else appText = rejText; // Fallback
+             }
+
+             // Reviewer Column 
              doc.rect(385,ry,85,55).stroke();
-             doc.text(`${r.rev_name||'-'}\n${r.rev_at||'-'}\nRem: ${r.rev_rem||'-'}`, 387, ry+5, {width:80});
+             doc.text(revText, 387, ry+5, {width:80});
              
-             // Approver Column (Name+Date + Remark below)
+             // Approver Column 
              doc.rect(470,ry,85,55).stroke();
-             doc.text(`${r.app_name||'-'}\n${r.app_at||'-'}\nRem: ${r.app_rem||'-'}`, 472, ry+5, {width:80});
+             doc.text(appText, 472, ry+5, {width:80});
              
-             ry += 55; // Increased row height to fit remarks
+             ry += 55; 
         });
         doc.y = ry + 20;
 

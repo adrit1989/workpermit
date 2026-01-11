@@ -73,7 +73,7 @@ const CHECKLIST_DATA = {
         "5. Portable equipment / nozzle properly grounded.",
         "6. Standby persons provided for entry to confined space.",
         "7. Adequate Communication Provided to Stand by Person.",
-        "8. Attendant Trained Provided With Rescue Equipment/SCBA.",
+        "8. Attendant Trained Provided With Rescue Equipment/SCABA.",
         "9. Space Adequately Cooled for Safe Entry Of Person.",
         "10. Continuous Inert Gas Flow Arranged.",
         "11. Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding.",

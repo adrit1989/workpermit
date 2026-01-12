@@ -337,19 +337,15 @@ app.post('/api/update-status', async (req, res) => {
 
         const now = getNowIST();
 
-        // --- MODIFIED LOGIC FOR CLOSURE FLOW ---
-
-        // 1. Handle Closure Rejection (By Reviewer OR Approver)
+        // --- CLOSURE FLOW ---
         if(action === 'reject_closure') {
             st = 'Active'; 
         }
-        // 2. Handle Reviewer Closure Approval
         else if(action === 'approve_closure' && role === 'Reviewer') {
             st = 'Closure Pending Approval'; 
             d.Closure_Reviewer_Sig = `${user} on ${now}`;
             d.Closure_Reviewer_Date = now;
         }
-        // 3. Handle Approver Actions (Standard & Closure)
         else if(action === 'approve' && role === 'Approver') {
             if(st.includes('Closure Pending Approval')) {
                 st = 'Closed';
@@ -360,7 +356,6 @@ app.post('/api/update-status', async (req, res) => {
                 d.Approver_Sig = `${user} on ${now}`;
             }
         }
-        // 4. Other Standard Actions
         else if(action === 'initiate_closure') {
              st = 'Closure Pending Review';
              d.Closure_Requestor_Date = now;
@@ -560,7 +555,7 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         const foundPPE = ppeKeys.filter(k => d[`P_${k.replace(/ /g,'')}`] === 'Y');
         if(d.AdditionalPrecautions && d.AdditionalPrecautions.trim() !== '') { foundPPE.push(`(Other: ${d.AdditionalPrecautions})`); }
         doc.text(`PPE: ${foundPPE.join(', ')}`,35,doc.y+25); doc.y+=70;
-
+        
         // Workers Table
         if(doc.y>650){doc.addPage(); drawHeaderOnAll(); doc.y=135;}
         doc.font('Helvetica-Bold').text("WORKERS DEPLOYED",30,doc.y); doc.y+=15; 
@@ -586,7 +581,7 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         });
         doc.y = wy+20;
 
-        // --- SIGNATURES (FIXED FOR PAGE BREAK) ---
+        // Signatures (WITH FIX)
         if(doc.y > 650) { 
             doc.addPage(); 
             drawHeaderOnAll(); 
@@ -664,6 +659,16 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.font('Helvetica').fontSize(8); 
         const instructions = ["1. The work permit shall be filled up carefully.", "2. Appropriate safeguards and PPEs shall be determined.", "3. Requirement of standby personnel shall be mentioned.", "4. Means of communication must be available.", "5. Shift-wise communication to Main Control Room.", "6. Only certified vehicles and electrical equipment allowed.", "7. Welding machines shall be placed in ventilated areas.", "8. No hot work unless explosive meter reading is Zero.", "9. Standby person mandatory for confined space.", "10. Compressed gas cylinders not allowed inside.", "11. While filling trench, men/equipment must be outside.", "12. For renewal, issuer must ensure conditions are satisfactory.", "13. Max renewal up to 7 calendar days.", "14. Permit must be available at site.", "15. On completion, permit must be closed.", "16. Follow latest SOP for Trenching.", "17. CCTV and gas monitoring should be utilized.", "18. Refer to PLHO guidelines for details.", "19. This original permit must always be available with permit receiver.", "20. On completion of the work, the permit must be closed and the original copy of TBT, JSA, Permission etc. associated with permit to be handed over to Permit issuer", "21. A group shall be made for every work with SIC, EIC, permit issuer, Permit receiver, Mainline In charge and authorized contractor supervisor for digital platform", "22. The renewal of permits shall be done through confirmation by digital platform. However, the regularization on permits for renewal shall be done before closure of permit.", "23. No additional worker/supervisor to be engaged unless approved by Permit Receiver."]; 
         instructions.forEach(i => { doc.text(i, 30, doc.y); doc.y += 12; }); 
+
+        // --- AGREEMENT LINE ADDITION ---
+        if (d.SafetyRulesAgreed === 'Y') {
+            doc.moveDown(0.5);
+            doc.font('Helvetica-Bold').fontSize(9).fillColor('#c2410c'); // Orange-red color
+            doc.text(`Requestor (${d.RequesterName} of ${d.Vendor}) has agreed to Golden Safety Rules and all its Terms, penalties and rules.`, 30, doc.y, {align: 'center'});
+            doc.fillColor('black'); // Reset color
+            doc.moveDown(0.5);
+        }
+        // -------------------------------
 
         // --- SAFETY BANNER LOGIC ---
         if (fs.existsSync('safety_banner.png')) {

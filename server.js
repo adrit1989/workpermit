@@ -632,6 +632,11 @@ if(ioclRows.length === 0) ioclRows.push(["-", "-", "-", "-"]);
             wy+=35;
         });
         doc.y = wy+20;
+        if(doc.y > 650) { 
+            doc.addPage(); 
+            drawHeaderOnAll(); 
+            doc.y = 135; 
+        }
 
         doc.font('Helvetica-Bold').text("SIGNATURES",30,doc.y); doc.y+=15; const sY=doc.y;
         doc.rect(30,sY,178,40).stroke().text(`REQ: ${d.RequesterName} on ${d.CreatedDate||'-'}`,35,sY+5);

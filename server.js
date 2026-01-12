@@ -328,19 +328,25 @@ app.post('/api/update-status', async (req, res) => {
         if(action==='reject') { st='Rejected'; }
         else if(role==='Reviewer' && action==='review') { st='Pending Approval'; d.Reviewer_Sig=`${user} on ${now}`; }
         else if(role==='Approver' && action==='approve') { 
-            // Fix F: Closure Logic
-            if(st.includes('Closure Pending Approval')) {
+            // Fix F: Ensure Status Transition Logic for Closure
+            if (st.includes('Closure Pending Approval')) {
                 st = 'Closed'; 
-                d.Closure_Issuer_Sig=`${user} on ${now}`; 
-                d.Closure_Approver_Date=now; 
+                d.Closure_Issuer_Sig = `${user} on ${now}`; 
+                d.Closure_Approver_Date = now;
             } else {
                 st = 'Active'; 
-                d.Approver_Sig=`${user} on ${now}`; 
+                d.Approver_Sig = `${user} on ${now}`; 
             }
         }
         else if(action==='initiate_closure') { st='Closure Pending Review'; d.Closure_Requestor_Date=now; d.Closure_Receiver_Sig=`${user} on ${now}`; }
+        // FIX C: Reviewer Rejection moves back to Active
         else if(action==='reject_closure') { st='Active'; }
-        else if(action==='approve_closure') { st = 'Closure Pending Approval'; d.Closure_Reviewer_Sig=`${user} on ${now}`; d.Closure_Reviewer_Date=now; }
+        // FIX C: Reviewer Approval moves to Approver
+        else if(action==='approve_closure') { 
+            st = 'Closure Pending Approval'; 
+            d.Closure_Reviewer_Sig=`${user} on ${now}`; 
+            d.Closure_Reviewer_Date=now; 
+        }
         
         await pool.request().input('p', PermitID).input('s', st).input('j', JSON.stringify(d)).query("UPDATE Permits SET Status=@s, FullDataJSON=@j WHERE PermitID=@p");
         res.json({success:true});
@@ -368,10 +374,24 @@ app.post('/api/renewal', async (req, res) => {
                  if(last.status !== 'rejected' && last.status !== 'approved') return res.status(400).json({error: "Previous renewal pending"});
                  if(last.status !== 'rejected' && rs < new Date(last.valid_till)) return res.status(400).json({error: "Overlap detected"});
              }
-             r.push({ status: 'pending_review', valid_from: data.RenewalValidFrom, valid_till: data.RenewalValidTo, hc: data.hc, toxic: data.toxic, oxygen: data.oxygen, precautions: data.precautions, req_name: userName, req_at: now, worker_list: renewalWorkers || [] });
+             r.push({ 
+                 status: 'pending_review', 
+                 valid_from: data.RenewalValidFrom, 
+                 valid_till: data.RenewalValidTo, 
+                 hc: data.hc, toxic: data.toxic, oxygen: data.oxygen, precautions: data.precautions, 
+                 req_name: userName, 
+                 req_at: now,
+                 worker_list: renewalWorkers || [] // Save specific workers for this renewal
+             });
         } else {
             const last = r[r.length-1];
-            if (action === 'reject') { last.status = 'rejected'; last.rej_by = userName; last.rej_at = now; last.rej_reason = rejectionReason; last.rej_role = userRole; }
+            if (action === 'reject') { 
+                last.status = 'rejected'; 
+                last.rej_by = userName; 
+                last.rej_at = now; 
+                last.rej_reason = rejectionReason; 
+                last.rej_role = userRole; 
+            }
             else { 
                 last.status = userRole==='Reviewer'?'pending_approval':'approved'; 
                 if(userRole==='Reviewer') { last.rev_name = userName; last.rev_at = now; last.rev_rem = rejectionReason; }
@@ -440,27 +460,28 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.text(`Work Order: ${d.WorkOrder||'-'}`, 30, doc.y); doc.y+=20;
 
         // --- AUTHORIZED SUPERVISORS TABLES (FIXED GAP AND AUDIT TRAIL) ---
+        // FIX B: Removed gap between header and row by controlling doc.y
         const drawSupTable = (title, headers, dataRows) => {
              if(doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
              doc.font('Helvetica-Bold').text(title, 30, doc.y); 
-             doc.y+=5; // Fix E: Minimized gap between Title and Header
+             doc.y+=5; // Reduced gap
              
              // Headers
              let hx = 30;
              const headerY = doc.y;
              headers.forEach(h => { doc.rect(hx, headerY, h.w, 15).stroke(); doc.text(h.t, hx+2, headerY+4); hx += h.w; });
-             doc.y += 15; // No gap after header row
+             doc.y = headerY + 15; // FORCE START Y for rows immediately after header
              
              // Rows
              doc.font('Helvetica');
              dataRows.forEach(row => {
                  if(doc.y > 700) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
                  let rx = 30;
-                 const rowY = doc.y; // Fix Y for the whole row
-                 const rowH = 15; // Fixed height per row
+                 const rowY = doc.y; 
+                 const rowH = 15; 
                  
                  row.forEach((cell, idx) => {
-                     doc.rect(rx, rowY, headers[idx].w, rowH).stroke(); // Draw box
+                     doc.rect(rx, rowY, headers[idx].w, rowH).stroke(); 
                      // Truncate text to fit
                      doc.text(cell, rx+2, rowY+4, {width: headers[idx].w - 4, lineBreak: false, ellipsis: true}); 
                      rx += headers[idx].w;
@@ -472,7 +493,6 @@ app.get('/api/download-pdf/:id', async (req, res) => {
 
         // 1. IOCL Supervisors (Dynamic with Audit Trail)
         const ioclSups = d.IOCLSupervisors || [];
-        // Map all items, including deleted ones (Requirement A: keep name but show audit trail)
         let ioclRows = ioclSups.map(s => {
             let auditText = `Added by ${s.added_by||'-'} on ${s.added_at||'-'}`;
             if(s.is_deleted) auditText = `DELETED by ${s.deleted_by} on ${s.deleted_at}`;

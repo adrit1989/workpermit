@@ -120,7 +120,7 @@ function drawHeader(doc, bgColor) {
     doc.font('Helvetica-Bold').fontSize(11).fillColor('black').text('INDIAN OIL CORPORATION LIMITED', startX+80, startY+15, {width:320, align:'center'});
     doc.fontSize(9).text('EASTERN REGION PIPELINES', startX+80, startY+30, {width:320, align:'center'});
     doc.text('HSE DEPT.', startX+80, startY+45, {width:320, align:'center'});
-    doc.fontSize(8).text('COMPOSITE WORK PERMIT (OISD-105)', startX+80, startY+65, {width:320, align:'center'});
+    doc.fontSize(8).text('COMPOSITE WORK/ COLD WORK/HOT WORK/ENTRY TO CONFINED SPACE/VEHICLE ENTRY / EXCAVATION WORK AT MAINLINE/RCP/SV', startX+80, startY+65, {width:320, align:'center'});
     doc.rect(startX+400,startY,135,95).stroke();
     doc.fontSize(8).font('Helvetica');
     doc.text('Doc No: ERPL/HS&E/25-26', startX+405, startY+60);
@@ -526,7 +526,7 @@ app.get('/api/download-pdf/:id', async (req, res) => {
 
         // Closure Table
         if(doc.y>650){doc.addPage(); drawHeaderOnAll(); doc.y=135;}
-        doc.font('Helvetica-Bold').text("CLOSURE OF WORK PERMIT",30,doc.y); doc.y+=15;
+        doc.font('Helvetica-Bold').text("CLOSURE OF WORK PERMIT: Certification that the subject work has been completed/stopped and area cleared and Verified.",30,doc.y); doc.y+=15;
         let cy = doc.y;
         doc.rect(30,cy,80,20).stroke().text("Stage",35,cy+5); doc.rect(110,cy,120,20).stroke().text("Name/Sig",115,cy+5); doc.rect(230,cy,100,20).stroke().text("Date/Time",235,cy+5); doc.rect(330,cy,235,20).stroke().text("Remarks",335,cy+5); cy+=20;
         

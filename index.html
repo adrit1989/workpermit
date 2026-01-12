@@ -1085,13 +1085,14 @@
                 bgColor: getVal("PdfBgColor")
             };
             
-            // Fix B: Explicitly capture Reviewer Text Fields
+            // Fix B: Explicitly capture Reviewer Text Fields and REMARKS
             if(currentUser.Role === 'Reviewer' && act === 'review') {
                  const fd = new FormData(document.getElementById("pf"));
                  document.querySelectorAll('#hazards-section input[type=checkbox]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
                  document.querySelectorAll('#ppe-container input[type=checkbox]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
                  
                  // Explicitly grab the text values for Reviewer
+                 body.Reviewer_Remarks = getVal("Reviewer_Remarks"); // ADDED THIS LINE
                  body.AdditionalPrecautions = getVal("AdditionalPrecautions");
                  if(document.getElementById("H_Others_Detail")) {
                      body.H_Others_Detail = document.getElementById("H_Others_Detail").value;

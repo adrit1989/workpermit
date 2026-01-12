@@ -46,77 +46,37 @@ function formatDate(dateStr) {
     }).replace(',', '');
 }
 
+// --- NEW HELPER: FIX DATE FORMAT (DD-MM-YYYY to ISO) ---
+function parseInputDate(dateStr) {
+    if (!dateStr) return null;
+    // Check if format is DD-MM-YYYY HH:mm (e.g., 13-01-2026 00:10)
+    if (dateStr.indexOf('-') === 2) {
+        const [datePart, timePart] = dateStr.split(' ');
+        const [d, m, y] = datePart.split('-');
+        const isoStr = `${y}-${m}-${d}T${timePart || '00:00'}:00`;
+        return new Date(isoStr);
+    }
+    // Fallback for standard ISO
+    return new Date(dateStr);
+}
+
 // --- CHECKLIST DATA ---
 const CHECKLIST_DATA = {
-    A: [
-        "1. Equipment / Work Area inspected.",
-        "2. Surrounding area checked, cleaned and covered. Oil/RAGS/Grass Etc removed.",
-        "3. Manholes, Sewers, CBD etc. and hot nearby surface covered.",
-        "4. Considered hazards from other routine, non-routine operations and concerned person alerted.",
-        "5. Equipment blinded/ disconnected/ closed/ isolated/ wedge opened.",
-        "6. Equipment properly drained and depressurized.",
-        "7. Equipment properly steamed/purged.",
-        "8. Equipment water flushed.",
-        "9. Access for Free approach of Fire Tender.",
-        "10. Iron Sulfide removed/ Kept wet.",
-        "11. Equipment electrically isolated and tagged vide Permit no.",
-        "12. Gas Test: HC / Toxic / O2 checked.",
-        "13. Running water hose / Fire extinguisher provided. Fire water system available.",
-        "14. Area cordoned off and Precautionary tag/Board provided.",
-        "15. CCTV monitoring facility available at site.",
-        "16. Proper ventilation and Lighting provided."
-    ],
-    B: [
-        "1. Proper means of exit / escape provided.",
-        "2. Standby personnel provided from Mainline/ Maint. / Contractor/HSE.",
-        "3. Checked for oil and Gas trapped behind the lining in equipment.",
-        "4. Shield provided against spark.",
-        "5. Portable equipment / nozzle properly grounded.",
-        "6. Standby persons provided for entry to confined space.",
-        "7. Adequate Communication Provided to Stand by Person.",
-        "8. Attendant Trained Provided With Rescue Equipment/SCABA.",
-        "9. Space Adequately Cooled for Safe Entry Of Person.",
-        "10. Continuous Inert Gas Flow Arranged.",
-        "11. Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding.",
-        "12. Gas Cylinders are kept outside the confined Space.",
-        "13. Spark arrestor Checked on mobile Equipments.",
-        "14. Welding Machine Checked for Safe Location.",
-        "15. Permit taken for working at height Vide Permit No."
-    ],
+    A: [ "1. Equipment / Work Area inspected.", "2. Surrounding area checked, cleaned and covered. Oil/RAGS/Grass Etc removed.", "3. Manholes, Sewers, CBD etc. and hot nearby surface covered.", "4. Considered hazards from other routine, non-routine operations and concerned person alerted.", "5. Equipment blinded/ disconnected/ closed/ isolated/ wedge opened.", "6. Equipment properly drained and depressurized.", "7. Equipment properly steamed/purged.", "8. Equipment water flushed.", "9. Access for Free approach of Fire Tender.", "10. Iron Sulfide removed/ Kept wet.", "11. Equipment electrically isolated and tagged vide Permit no.", "12. Gas Test: HC / Toxic / O2 checked.", "13. Running water hose / Fire extinguisher provided. Fire water system available.", "14. Area cordoned off and Precautionary tag/Board provided.", "15. CCTV monitoring facility available at site.", "16. Proper ventilation and Lighting provided." ],
+    B: [ "1. Proper means of exit / escape provided.", "2. Standby personnel provided from Mainline/ Maint. / Contractor/HSE.", "3. Checked for oil and Gas trapped behind the lining in equipment.", "4. Shield provided against spark.", "5. Portable equipment / nozzle properly grounded.", "6. Standby persons provided for entry to confined space.", "7. Adequate Communication Provided to Stand by Person.", "8. Attendant Trained Provided With Rescue Equipment/SCABA.", "9. Space Adequately Cooled for Safe Entry Of Person.", "10. Continuous Inert Gas Flow Arranged.", "11. Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding.", "12. Gas Cylinders are kept outside the confined Space.", "13. Spark arrestor Checked on mobile Equipments.", "14. Welding Machine Checked for Safe Location.", "15. Permit taken for working at height Vide Permit No." ],
     C: ["1. PESO approved spark elimination system provided on the mobile equipment/ vehicle provided."],
-    D: [
-        "1. For excavated trench/ pit proper slop/ shoring/ shuttering provided to prevent soil collapse.",
-        "2. Excavated soil kept at safe distance from trench/pit edge (min. pit depth).",
-        "3. Safe means of access provided inside trench/pit.",
-        "4. Movement of heavy vehicle prohibited."
-    ]
+    D: [ "1. For excavated trench/ pit proper slop/ shoring/ shuttering provided to prevent soil collapse.", "2. Excavated soil kept at safe distance from trench/pit edge (min. pit depth).", "3. Safe means of access provided inside trench/pit.", "4. Movement of heavy vehicle prohibited." ]
 };
 
 // --- PDF DRAWING ---
 function drawHeader(doc, bgColor) {
     if(bgColor && bgColor !== 'Auto' && bgColor !== 'White') {
         const colorMap = { 'Red': '#fee2e2', 'Green': '#dcfce7', 'Yellow': '#fef9c3' };
-        doc.save();
-        doc.fillColor(colorMap[bgColor] || 'white');
-        doc.rect(0, 0, doc.page.width, doc.page.height).fill();
-        doc.restore();
+        doc.save(); doc.fillColor(colorMap[bgColor] || 'white'); doc.rect(0, 0, doc.page.width, doc.page.height).fill(); doc.restore();
     }
     const startX=30, startY=30;
-    doc.lineWidth(1);
-    doc.rect(startX,startY,535,95).stroke();
-    
-    // Logo Box (Left)
-    doc.rect(startX,startY,80,95).stroke();
-    
-    // --- LOGO INSERTION LOGIC ---
-    if (fs.existsSync('logo.png')) {
-        try {
-            doc.image('logo.png', startX, startY, { fit: [80, 95], align: 'center', valign: 'center' });
-        } catch (err) {
-            console.error("Error loading logo:", err.message);
-        }
-    }
-
+    doc.lineWidth(1); doc.rect(startX,startY,535,95).stroke(); doc.rect(startX,startY,80,95).stroke();
+    if (fs.existsSync('logo.png')) { try { doc.image('logo.png', startX, startY, { fit: [80, 95], align: 'center', valign: 'center' }); } catch (err) {} }
     doc.rect(startX+80,startY,320,95).stroke();
     doc.font('Helvetica-Bold').fontSize(11).fillColor('black').text('INDIAN OIL CORPORATION LIMITED', startX+80, startY+15, {width:320, align:'center'});
     doc.fontSize(9).text('EASTERN REGION PIPELINES', startX+80, startY+30, {width:320, align:'center'});
@@ -124,161 +84,50 @@ function drawHeader(doc, bgColor) {
     doc.fontSize(8).text('COMPOSITE WORK/ COLD WORK/HOT WORK/ENTRY TO CONFINED SPACE/VEHICLE ENTRY / EXCAVATION WORK AT MAINLINE/RCP/SV', startX+80, startY+65, {width:320, align:'center'});
     doc.rect(startX+400,startY,135,95).stroke();
     doc.fontSize(8).font('Helvetica');
-    doc.text('Doc No: ERPL/HS&E/25-26', startX+405, startY+60);
-    doc.text('Issue No: 01', startX+405, startY+70);
-    doc.text('Date: 01.09.2025', startX+405, startY+80);
+    doc.text('Doc No: ERPL/HS&E/25-26', startX+405, startY+60); doc.text('Issue No: 01', startX+405, startY+70); doc.text('Date: 01.09.2025', startX+405, startY+80);
 }
 
 // --- API ROUTES ---
 
-app.post('/api/login', async (req, res) => {
-    try {
-        const pool = await getConnection();
-        const r = await pool.request().input('r', sql.NVarChar, req.body.role).input('e', sql.NVarChar, req.body.name).input('p', sql.NVarChar, req.body.password).query('SELECT * FROM Users WHERE Role=@r AND Email=@e AND Password=@p');
-        if(r.recordset.length) res.json({success:true, user:{Name: r.recordset[0].Name, Email: r.recordset[0].Email, Role: r.recordset[0].Role}}); 
-        else res.json({success:false});
-    } catch(e){res.status(500).json({error:e.message})} 
-});
+app.post('/api/login', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().input('r', sql.NVarChar, req.body.role).input('e', sql.NVarChar, req.body.name).input('p', sql.NVarChar, req.body.password).query('SELECT * FROM Users WHERE Role=@r AND Email=@e AND Password=@p'); if(r.recordset.length) res.json({success:true, user:{Name: r.recordset[0].Name, Email: r.recordset[0].Email, Role: r.recordset[0].Role}}); else res.json({success:false}); } catch(e){res.status(500).json({error:e.message})} });
+app.get('/api/users', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().query('SELECT Name, Email, Role FROM Users'); const mapU = u => ({name: u.Name, email: u.Email, role: u.Role}); res.json({ Requesters: r.recordset.filter(u=>u.Role==='Requester').map(mapU), Reviewers: r.recordset.filter(u=>u.Role==='Reviewer').map(mapU), Approvers: r.recordset.filter(u=>u.Role==='Approver').map(mapU) }); } catch(e){res.status(500).json({error:e.message})} });
+app.post('/api/add-user', async (req, res) => { try { const pool = await getConnection(); const check = await pool.request().input('e', req.body.email).query("SELECT * FROM Users WHERE Email=@e"); if(check.recordset.length) return res.status(400).json({error:"User Exists"}); await pool.request().input('n', req.body.name).input('e', req.body.email).input('r', req.body.role).input('p', req.body.password).query("INSERT INTO Users (Name,Email,Role,Password) VALUES (@n,@e,@r,@p)"); res.json({success:true}); } catch(e){res.status(500).json({error:e.message})} });
+app.post('/api/save-worker', async (req, res) => { try { const { WorkerID, Action, Role, Details, RequestorEmail, RequestorName, ApproverName } = req.body; const pool = await getConnection(); if ((Action === 'create' || Action === 'edit_request') && Details && parseInt(Details.Age) < 18) return res.status(400).json({error: "Worker must be 18+"}); if (Action === 'create') { const idRes = await pool.request().query("SELECT TOP 1 WorkerID FROM Workers ORDER BY WorkerID DESC"); const wid = `W-${parseInt(idRes.recordset.length > 0 ? idRes.recordset[0].WorkerID.split('-')[1] : 1000) + 1}`; const dataObj = { Current: {}, Pending: { ...Details, RequestorName: RequestorName } }; await pool.request().input('w', wid).input('s', 'Pending Review').input('r', RequestorEmail).input('j', JSON.stringify(dataObj)).input('idt', sql.NVarChar, Details.IDType).query("INSERT INTO Workers (WorkerID, Status, RequestorEmail, DataJSON, IDType) VALUES (@w, @s, @r, @j, @idt)"); res.json({success:true}); } else if (Action === 'edit_request') { const cur = await pool.request().input('w', WorkerID).query("SELECT DataJSON FROM Workers WHERE WorkerID=@w"); if(cur.recordset.length === 0) return res.status(404).json({error:"Worker not found"}); let dataObj = JSON.parse(cur.recordset[0].DataJSON); dataObj.Pending = { ...dataObj.Current, ...Details, RequestorName: RequestorName || dataObj.Current.RequestorName }; await pool.request().input('w', WorkerID).input('s', 'Edit Pending Review').input('j', JSON.stringify(dataObj)).input('idt', sql.NVarChar, Details.IDType).query("UPDATE Workers SET Status=@s, DataJSON=@j, IDType=@idt WHERE WorkerID=@w"); res.json({success:true}); } else if (Action === 'delete') { await pool.request().input('w', WorkerID).query("DELETE FROM Workers WHERE WorkerID=@w"); res.json({success:true}); } else { const cur = await pool.request().input('w', WorkerID).query("SELECT Status, DataJSON FROM Workers WHERE WorkerID=@w"); if(cur.recordset.length === 0) return res.status(404).json({error:"Worker not found"}); let st = cur.recordset[0].Status; let dataObj = JSON.parse(cur.recordset[0].DataJSON); let appBy = null; let appOn = null; if (Action === 'approve') { if (st.includes('Pending Review')) st = st.replace('Review', 'Approval'); else if (st.includes('Pending Approval')) { st = 'Approved'; appBy = ApproverName; appOn = getNowIST(); dataObj.Current = { ...dataObj.Pending, ApprovedBy: appBy, ApprovedAt: appOn }; dataObj.Pending = null; } } else if (Action === 'reject') { st = 'Rejected'; dataObj.Pending = null; } await pool.request().input('w', WorkerID).input('s', st).input('j', JSON.stringify(dataObj)).input('aby', sql.NVarChar, appBy).input('aon', sql.NVarChar, appOn).query("UPDATE Workers SET Status=@s, DataJSON=@j, ApprovedBy=@aby, ApprovedOn=@aon WHERE WorkerID=@w"); res.json({success:true}); } } catch(e) { res.status(500).json({error: e.message}); } });
+app.post('/api/get-workers', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().query("SELECT * FROM Workers"); const list = r.recordset.map(w => { const d = JSON.parse(w.DataJSON); const details = d.Pending || d.Current || {}; details.IDType = w.IDType || details.IDType; details.ApprovedBy = w.ApprovedBy || details.ApprovedBy; details.ApprovedAt = w.ApprovedOn || details.ApprovedAt; return { ...details, WorkerID: w.WorkerID, Status: w.Status, RequestorEmail: w.RequestorEmail, IsEdit: w.Status.includes('Edit') }; }); if(req.body.context === 'permit_dropdown') res.json(list.filter(w => w.Status === 'Approved')); else { if(req.body.role === 'Requester') res.json(list.filter(w => w.RequestorEmail === req.body.email || w.Status === 'Approved')); else res.json(list); } } catch(e) { res.status(500).json({error: e.message}); } });
+app.post('/api/dashboard', async (req, res) => { try { const { role, email } = req.body; const pool = await getConnection(); const r = await pool.request().query("SELECT PermitID, Status, ValidFrom, ValidTo, RequesterEmail, ReviewerEmail, ApproverEmail, FullDataJSON FROM Permits"); const p = r.recordset.map(x=>({...JSON.parse(x.FullDataJSON), PermitID:x.PermitID, Status:x.Status, ValidFrom:x.ValidFrom})); const f = p.filter(x => (role==='Requester'?x.RequesterEmail===email : true)); res.json(f.sort((a,b)=>b.PermitID.localeCompare(a.PermitID))); } catch(e){res.status(500).json({error:e.message})} });
 
-app.get('/api/users', async (req, res) => {
-    try {
-        const pool = await getConnection();
-        const r = await pool.request().query('SELECT Name, Email, Role FROM Users');
-        const mapU = u => ({name: u.Name, email: u.Email, role: u.Role});
-        res.json({
-            Requesters: r.recordset.filter(u=>u.Role==='Requester').map(mapU),
-            Reviewers: r.recordset.filter(u=>u.Role==='Reviewer').map(mapU),
-            Approvers: r.recordset.filter(u=>u.Role==='Approver').map(mapU)
-        });
-    } catch(e){res.status(500).json({error:e.message})} 
-});
-
-app.post('/api/add-user', async (req, res) => {
-    try {
-        const pool = await getConnection();
-        const check = await pool.request().input('e', req.body.email).query("SELECT * FROM Users WHERE Email=@e");
-        if(check.recordset.length) return res.status(400).json({error:"User Exists"});
-        await pool.request().input('n', req.body.name).input('e', req.body.email).input('r', req.body.role).input('p', req.body.password).query("INSERT INTO Users (Name,Email,Role,Password) VALUES (@n,@e,@r,@p)");
-        res.json({success:true});
-    } catch(e){res.status(500).json({error:e.message})} 
-});
-
-// WORKER MANAGEMENT
-app.post('/api/save-worker', async (req, res) => {
-    try {
-        const { WorkerID, Action, Role, Details, RequestorEmail, RequestorName, ApproverName } = req.body;
-        const pool = await getConnection();
-        if ((Action === 'create' || Action === 'edit_request') && Details && parseInt(Details.Age) < 18) return res.status(400).json({error: "Worker must be 18+"});
-
-        if (Action === 'create') {
-            const idRes = await pool.request().query("SELECT TOP 1 WorkerID FROM Workers ORDER BY WorkerID DESC");
-            const wid = `W-${parseInt(idRes.recordset.length > 0 ? idRes.recordset[0].WorkerID.split('-')[1] : 1000) + 1}`;
-            const dataObj = { Current: {}, Pending: { ...Details, RequestorName: RequestorName } }; 
-            
-            await pool.request()
-                .input('w', wid).input('s', 'Pending Review').input('r', RequestorEmail)
-                .input('j', JSON.stringify(dataObj))
-                .input('idt', sql.NVarChar, Details.IDType) 
-                .query("INSERT INTO Workers (WorkerID, Status, RequestorEmail, DataJSON, IDType) VALUES (@w, @s, @r, @j, @idt)");
-            res.json({success:true});
-        } 
-        else if (Action === 'edit_request') {
-            const cur = await pool.request().input('w', WorkerID).query("SELECT DataJSON FROM Workers WHERE WorkerID=@w");
-            if(cur.recordset.length === 0) return res.status(404).json({error:"Worker not found"});
-            let dataObj = JSON.parse(cur.recordset[0].DataJSON);
-            dataObj.Pending = { ...dataObj.Current, ...Details, RequestorName: RequestorName || dataObj.Current.RequestorName };
-            
-            await pool.request()
-                .input('w', WorkerID).input('s', 'Edit Pending Review').input('j', JSON.stringify(dataObj))
-                .input('idt', sql.NVarChar, Details.IDType)
-                .query("UPDATE Workers SET Status=@s, DataJSON=@j, IDType=@idt WHERE WorkerID=@w");
-            res.json({success:true});
-        }
-        else if (Action === 'delete') {
-            await pool.request().input('w', WorkerID).query("DELETE FROM Workers WHERE WorkerID=@w");
-            res.json({success:true});
-        }
-        else {
-            const cur = await pool.request().input('w', WorkerID).query("SELECT Status, DataJSON FROM Workers WHERE WorkerID=@w");
-            if(cur.recordset.length === 0) return res.status(404).json({error:"Worker not found"});
-            let st = cur.recordset[0].Status;
-            let dataObj = JSON.parse(cur.recordset[0].DataJSON);
-
-            let appBy = null; let appOn = null;
-
-            if (Action === 'approve') {
-                if (st.includes('Pending Review')) st = st.replace('Review', 'Approval');
-                else if (st.includes('Pending Approval')) { 
-                    st = 'Approved'; 
-                    appBy = ApproverName;
-                    appOn = getNowIST();
-                    dataObj.Current = { ...dataObj.Pending, ApprovedBy: appBy, ApprovedAt: appOn }; 
-                    dataObj.Pending = null; 
-                }
-            } else if (Action === 'reject') { st = 'Rejected'; dataObj.Pending = null; }
-            
-            await pool.request()
-                .input('w', WorkerID).input('s', st).input('j', JSON.stringify(dataObj))
-                .input('aby', sql.NVarChar, appBy).input('aon', sql.NVarChar, appOn)
-                .query("UPDATE Workers SET Status=@s, DataJSON=@j, ApprovedBy=@aby, ApprovedOn=@aon WHERE WorkerID=@w");
-            res.json({success:true});
-        }
-    } catch(e) { res.status(500).json({error: e.message}); }
-});
-
-app.post('/api/get-workers', async (req, res) => {
-    try {
-        const pool = await getConnection();
-        const r = await pool.request().query("SELECT * FROM Workers");
-        const list = r.recordset.map(w => {
-            const d = JSON.parse(w.DataJSON);
-            const details = d.Pending || d.Current || {};
-            details.IDType = w.IDType || details.IDType;
-            details.ApprovedBy = w.ApprovedBy || details.ApprovedBy;
-            details.ApprovedAt = w.ApprovedOn || details.ApprovedAt;
-            return { ...details, WorkerID: w.WorkerID, Status: w.Status, RequestorEmail: w.RequestorEmail, IsEdit: w.Status.includes('Edit') };
-        });
-        if(req.body.context === 'permit_dropdown') res.json(list.filter(w => w.Status === 'Approved'));
-        else {
-            if(req.body.role === 'Requester') res.json(list.filter(w => w.RequestorEmail === req.body.email || w.Status === 'Approved'));
-            else res.json(list);
-        }
-    } catch(e) { res.status(500).json({error: e.message}); }
-});
-
-app.post('/api/dashboard', async (req, res) => {
-    try {
-        const { role, email } = req.body;
-        const pool = await getConnection();
-        const r = await pool.request().query("SELECT PermitID, Status, ValidFrom, ValidTo, RequesterEmail, ReviewerEmail, ApproverEmail, FullDataJSON FROM Permits");
-        const p = r.recordset.map(x=>({...JSON.parse(x.FullDataJSON), PermitID:x.PermitID, Status:x.Status, ValidFrom:x.ValidFrom}));
-        const f = p.filter(x => (role==='Requester'?x.RequesterEmail===email : true));
-        res.json(f.sort((a,b)=>b.PermitID.localeCompare(a.PermitID)));
-    } catch(e){res.status(500).json({error:e.message})} 
-});
-
+// --- FIXED SAVE PERMIT ROUTE ---
 app.post('/api/save-permit', upload.single('file'), async (req, res) => {
     try {
-        const vf = new Date(req.body.ValidFrom); const vt = new Date(req.body.ValidTo);
+        if (!req.body.ValidFrom || !req.body.ValidTo) return res.status(400).json({ error: "Start and End dates are required." });
+        
+        // Use new parser to handle "13-01-2026 00:10" format
+        const vf = parseInputDate(req.body.ValidFrom);
+        const vt = parseInputDate(req.body.ValidTo);
+
+        if (isNaN(vf.getTime()) || isNaN(vt.getTime())) return res.status(400).json({ error: "Invalid Date Format. Please re-select dates." });
         if (vt <= vf) return res.status(400).json({ error: "End date must be after Start date" });
         if ((vt-vf)/(1000*60*60*24) > 7) return res.status(400).json({ error: "Max 7 days allowed" });
-        
+
         const pool = await getConnection();
         let pid = req.body.PermitID;
         if (!pid || pid === 'undefined' || pid === 'null' || pid === '') {
-            const idRes = await pool.request().query("SELECT TOP 1 PermitID FROM Permits ORDER BY Id DESC");
-            pid = `WP-${parseInt(idRes.recordset.length > 0 ? idRes.recordset[0].PermitID.split('-')[1] : 1000) + 1}`;
+            try {
+                const idRes = await pool.request().query("SELECT TOP 1 PermitID FROM Permits ORDER BY Id DESC");
+                if(idRes.recordset.length > 0) {
+                    const parts = idRes.recordset[0].PermitID.split('-');
+                    pid = `WP-${parseInt(parts[1] || 1000) + 1}`;
+                } else {
+                    pid = 'WP-1001';
+                }
+            } catch(e) { pid = `WP-${Date.now()}`; }
         }
-        const chk = await pool.request().input('p', pid).query("SELECT Status FROM Permits WHERE PermitID=@p");
         
+        const chk = await pool.request().input('p', pid).query("SELECT Status FROM Permits WHERE PermitID=@p");
         if(chk.recordset.length > 0) {
              const status = chk.recordset[0].Status;
-             if (status === 'Closed' || status.includes('Closed')) {
-                 return res.status(400).json({error: "Permit is CLOSED. Editing denied."});
-             }
-             if (status !== 'Pending Review' && status !== 'New') { 
-                 return res.status(400).json({error: "Cannot edit active permit"}); 
-             }
+             if (status === 'Closed' || status.includes('Closed')) return res.status(400).json({error: "Permit is CLOSED. Editing denied."});
+             if (status !== 'Pending Review' && status !== 'New') return res.status(400).json({error: "Cannot edit active permit"}); 
         }
         
         let workers = req.body.SelectedWorkers;
@@ -287,24 +136,19 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
         const data = { ...req.body, SelectedWorkers: workers, PermitID: pid, CreatedDate: getNowIST() }; 
         const q = pool.request().input('p', pid).input('s', 'Pending Review').input('w', req.body.WorkType).input('re', req.body.RequesterEmail).input('rv', req.body.ReviewerEmail).input('ap', req.body.ApproverEmail).input('vf', vf).input('vt', vt).input('j', JSON.stringify(data));
         
-        let lat = req.body.Latitude;
-        let lng = req.body.Longitude;
-        
-        const cleanGeo = (val) => {
-            if (!val || val === 'undefined' || val === 'null' || String(val).trim() === '') return ''; 
-            return String(val); 
-        };
-
-        lat = cleanGeo(lat);
-        lng = cleanGeo(lng);
-
-        q.input('lat', sql.NVarChar(50), lat).input('lng', sql.NVarChar(50), lng);
+        // Handle Geo - Ensure empty strings are handled safely
+        let lat = req.body.Latitude || '';
+        let lng = req.body.Longitude || '';
+        q.input('lat', sql.NVarChar(50), String(lat)).input('lng', sql.NVarChar(50), String(lng));
 
         if (chk.recordset.length > 0) await q.query("UPDATE Permits SET FullDataJSON=@j, WorkType=@w, ValidFrom=@vf, ValidTo=@vt, Latitude=@lat, Longitude=@lng WHERE PermitID=@p");
         else await q.query("INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, FullDataJSON, RenewalsJSON) VALUES (@p, @s, @w, @re, @rv, @ap, @vf, @vt, @lat, @lng, @j, '[]')");
         
         res.json({ success: true, permitId: pid });
-    } catch (e) { console.error("SAVE ERROR:", e); res.status(500).json({ error: e.message }); }
+    } catch (e) { 
+        console.error("SAVE ERROR:", e); 
+        res.status(500).json({ error: "Server Error: " + e.message }); 
+    }
 });
 
 app.post('/api/update-status', async (req, res) => {
@@ -316,9 +160,7 @@ app.post('/api/update-status', async (req, res) => {
         if(cur.recordset.length === 0) return res.json({error: "Not found"});
         
         let st = cur.recordset[0].Status;
-        if (st === 'Closed') {
-             return res.status(400).json({error: "Permit is strictly CLOSED. No further actions allowed."});
-        }
+        if (st === 'Closed') return res.status(400).json({error: "Permit is strictly CLOSED. No further actions allowed."});
         
         let d = JSON.parse(cur.recordset[0].FullDataJSON);
         Object.assign(d, extras);
@@ -326,7 +168,6 @@ app.post('/api/update-status', async (req, res) => {
         if (IOCLSupervisors) d.IOCLSupervisors = IOCLSupervisors;
         if(req.body.Site_Restored_Check) d.Site_Restored_Check = req.body.Site_Restored_Check;
 
-        // Save remarks based on role
         if(comment) {
             if(role === 'Reviewer') d.Reviewer_Remarks = comment;
             if(role === 'Approver') d.Approver_Remarks = comment;
@@ -337,101 +178,31 @@ app.post('/api/update-status', async (req, res) => {
 
         const now = getNowIST();
 
-        // --- CLOSURE FLOW ---
-        if(action === 'reject_closure') {
-            st = 'Active'; 
-        }
+        if(action === 'reject_closure') { st = 'Active'; }
         else if(action === 'approve_closure' && role === 'Reviewer') {
-            st = 'Closure Pending Approval'; 
-            d.Closure_Reviewer_Sig = `${user} on ${now}`;
-            d.Closure_Reviewer_Date = now;
+            st = 'Closure Pending Approval'; d.Closure_Reviewer_Sig = `${user} on ${now}`; d.Closure_Reviewer_Date = now;
         }
         else if(action === 'approve' && role === 'Approver') {
             if(st.includes('Closure Pending Approval')) {
-                st = 'Closed';
-                d.Closure_Issuer_Sig = `${user} on ${now}`;
-                d.Closure_Approver_Date = now;
+                st = 'Closed'; d.Closure_Issuer_Sig = `${user} on ${now}`; d.Closure_Approver_Date = now;
             } else {
-                st = 'Active';
-                d.Approver_Sig = `${user} on ${now}`;
+                st = 'Active'; d.Approver_Sig = `${user} on ${now}`;
             }
         }
         else if(action === 'initiate_closure') {
-             st = 'Closure Pending Review';
-             d.Closure_Requestor_Date = now;
-             d.Closure_Receiver_Sig = `${user} on ${now}`;
+             st = 'Closure Pending Review'; d.Closure_Requestor_Date = now; d.Closure_Receiver_Sig = `${user} on ${now}`;
         }
-        else if(action === 'reject') {
-             st = 'Rejected';
-        }
+        else if(action === 'reject') { st = 'Rejected'; }
         else if(role === 'Reviewer' && action === 'review') {
-             st = 'Pending Approval';
-             d.Reviewer_Sig = `${user} on ${now}`;
+             st = 'Pending Approval'; d.Reviewer_Sig = `${user} on ${now}`;
         }
         
         await pool.request().input('p', PermitID).input('s', st).input('j', JSON.stringify(d)).query("UPDATE Permits SET Status=@s, FullDataJSON=@j WHERE PermitID=@p");
         res.json({success:true});
-    } catch(e){
-        res.status(500).json({error:e.message});
-    } 
+    } catch(e){ res.status(500).json({error:e.message}); } 
 });
 
-app.post('/api/renewal', async (req, res) => {
-    try {
-        const { PermitID, userRole, userName, action, rejectionReason, renewalWorkers, ...data } = req.body;
-        const pool = await getConnection();
-        const cur = await pool.request().input('p', PermitID).query("SELECT RenewalsJSON, Status, ValidFrom, ValidTo FROM Permits WHERE PermitID=@p");
-        
-        if (cur.recordset[0].Status === 'Closed') {
-             return res.status(400).json({error: "Permit is CLOSED. Renewals are disabled."});
-        }
-        
-        let r = JSON.parse(cur.recordset[0].RenewalsJSON||"[]"); 
-        const now = getNowIST();
-
-        if (userRole === 'Requester') {
-             const rs = new Date(data.RenewalValidFrom); const re = new Date(data.RenewalValidTo);
-             const pS = new Date(cur.recordset[0].ValidFrom); const pE = new Date(cur.recordset[0].ValidTo);
-             
-             if (re <= rs) return res.status(400).json({error: "Renewal End time must be later than Start time"});
-             if (rs < pS || re > pE) return res.status(400).json({error: "Renewal must be within permit validity"});
-             if ((re - rs) / 36e5 > 8) return res.status(400).json({error: "Max 8 hours per clearance"});
-             
-             if(r.length > 0) {
-                 const last = r[r.length-1];
-                 if(last.status !== 'rejected' && last.status !== 'approved') return res.status(400).json({error: "Previous renewal pending"});
-                 if(last.status !== 'rejected' && rs < new Date(last.valid_till)) return res.status(400).json({error: "Overlap detected"});
-             }
-             r.push({ 
-                 status: 'pending_review', 
-                 valid_from: data.RenewalValidFrom, 
-                 valid_till: data.RenewalValidTo, 
-                 hc: data.hc, toxic: data.toxic, oxygen: data.oxygen, precautions: data.precautions, 
-                 req_name: userName, 
-                 req_at: now,
-                 worker_list: renewalWorkers || [] 
-             });
-        } else {
-            const last = r[r.length-1];
-            if (action === 'reject') { 
-                last.status = 'rejected'; 
-                last.rej_by = userName; 
-                last.rej_at = now; 
-                last.rej_reason = rejectionReason; 
-                last.rej_role = userRole; 
-            }
-            else { 
-                last.status = userRole==='Reviewer'?'pending_approval':'approved'; 
-                if(userRole==='Reviewer') { last.rev_name = userName; last.rev_at = now; last.rev_rem = rejectionReason; }
-                if(userRole==='Approver') { last.app_name = userName; last.app_at = now; last.app_rem = rejectionReason; }
-            }
-        }
-        let newStatus = r[r.length-1].status==='approved'?'Active':(r[r.length-1].status==='rejected'?'Active':'Renewal Pending ' + (userRole==='Requester'?'Review':'Approval'));
-        await pool.request().input('p', PermitID).input('r', JSON.stringify(r)).input('s', newStatus).query("UPDATE Permits SET RenewalsJSON=@r, Status=@s WHERE PermitID=@p");
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
+app.post('/api/renewal', async (req, res) => { try { const { PermitID, userRole, userName, action, rejectionReason, renewalWorkers, ...data } = req.body; const pool = await getConnection(); const cur = await pool.request().input('p', PermitID).query("SELECT RenewalsJSON, Status, ValidFrom, ValidTo FROM Permits WHERE PermitID=@p"); if (cur.recordset[0].Status === 'Closed') { return res.status(400).json({error: "Permit is CLOSED. Renewals are disabled."}); } let r = JSON.parse(cur.recordset[0].RenewalsJSON||"[]"); const now = getNowIST(); if (userRole === 'Requester') { const rs = new Date(data.RenewalValidFrom); const re = new Date(data.RenewalValidTo); const pS = new Date(cur.recordset[0].ValidFrom); const pE = new Date(cur.recordset[0].ValidTo); if (re <= rs) return res.status(400).json({error: "End time > Start time"}); if (rs < pS || re > pE) return res.status(400).json({error: "Must be within permit validity"}); if ((re - rs) / 36e5 > 8) return res.status(400).json({error: "Max 8 hours"}); if(r.length > 0) { const last = r[r.length-1]; if(last.status !== 'rejected' && last.status !== 'approved') return res.status(400).json({error: "Pending renewal exists"}); if(last.status !== 'rejected' && rs < new Date(last.valid_till)) return res.status(400).json({error: "Overlap"}); } r.push({ status: 'pending_review', valid_from: data.RenewalValidFrom, valid_till: data.RenewalValidTo, hc: data.hc, toxic: data.toxic, oxygen: data.oxygen, precautions: data.precautions, req_name: userName, req_at: now, worker_list: renewalWorkers || [] }); } else { const last = r[r.length-1]; if (action === 'reject') { last.status = 'rejected'; last.rej_by = userName; last.rej_at = now; last.rej_reason = rejectionReason; last.rej_role = userRole; } else { last.status = userRole==='Reviewer'?'pending_approval':'approved'; if(userRole==='Reviewer') { last.rev_name = userName; last.rev_at = now; last.rev_rem = rejectionReason; } if(userRole==='Approver') { last.app_name = userName; last.app_at = now; last.app_rem = rejectionReason; } } } let newStatus = r[r.length-1].status==='approved'?'Active':(r[r.length-1].status==='rejected'?'Active':'Renewal Pending ' + (userRole==='Requester'?'Review':'Approval')); await pool.request().input('p', PermitID).input('r', JSON.stringify(r)).input('s', newStatus).query("UPDATE Permits SET RenewalsJSON=@r, Status=@s WHERE PermitID=@p"); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
 app.post('/api/permit-data', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().input('p', sql.NVarChar, req.body.permitId).query("SELECT * FROM Permits WHERE PermitID=@p"); if(r.recordset.length) res.json({...JSON.parse(r.recordset[0].FullDataJSON), Status:r.recordset[0].Status, RenewalsJSON:r.recordset[0].RenewalsJSON, FullDataJSON:null}); else res.json({error:"404"}); } catch(e){res.status(500).json({error:e.message})} });
 app.post('/api/map-data', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().query("SELECT PermitID, FullDataJSON, Latitude, Longitude FROM Permits WHERE Status='Active'"); res.json(r.recordset.map(x=>({PermitID:x.PermitID, lat:parseFloat(x.Latitude), lng:parseFloat(x.Longitude), ...JSON.parse(x.FullDataJSON)}))); } catch(e){res.status(500).json({error:e.message})} });
 app.post('/api/stats', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().query("SELECT Status, WorkType FROM Permits"); const s={}, t={}; r.recordset.forEach(x=>{s[x.Status]=(s[x.Status]||0)+1; t[x.WorkType]=(t[x.WorkType]||0)+1;}); res.json({success:true, statusCounts:s, typeCounts:t}); } catch(e){res.status(500).json({error:e.message})} });
@@ -487,17 +258,13 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.text(`IOCL Equipment: ${d.IoclEquip||'-'} | Contractor Equipment: ${d.ContEquip||'-'}`, 30, doc.y); doc.y+=12;
         doc.text(`Work Order: ${d.WorkOrder||'-'}`, 30, doc.y); doc.y+=20;
 
-        // --- DYNAMIC SUPERVISORS TABLE ---
+        // Supervisors Table (Dynamic)
         const drawSupTable = (title, headers, dataRows) => {
              if(doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
-             
              doc.font('Helvetica-Bold').text(title, 30, doc.y);
              doc.y += 15; 
-
              const headerHeight = 20; 
              let currentY = doc.y;
-
-             // Header Row
              let currentX = 30;
              headers.forEach(h => {
                  doc.rect(currentX, currentY, h.w, headerHeight).stroke();
@@ -505,23 +272,19 @@ app.get('/api/download-pdf/:id', async (req, res) => {
                  currentX += h.w;
              });
              currentY += headerHeight;
-
-             // Data Rows
              doc.font('Helvetica');
              dataRows.forEach(row => {
-                 let maxRowHeight = 20; // default
+                 let maxRowHeight = 20; 
                  row.forEach((cell, idx) => {
                      const cellWidth = headers[idx].w - 4;
                      const textHeight = doc.heightOfString(cell, { width: cellWidth, align: 'left' });
                      if (textHeight + 10 > maxRowHeight) maxRowHeight = textHeight + 10;
                  });
-
                  if(currentY + maxRowHeight > 750) { 
                      doc.addPage(); 
                      drawHeaderOnAll(); 
                      currentY = 135; 
                  }
-
                  let rowX = 30;
                  row.forEach((cell, idx) => {
                      doc.rect(rowX, currentY, headers[idx].w, maxRowHeight).stroke();
@@ -540,7 +303,6 @@ app.get('/api/download-pdf/:id', async (req, res) => {
             return [s.name, s.desig, s.contact, auditText];
         });
         if(ioclRows.length === 0) ioclRows.push(["-", "-", "-", "-"]);
-        
         drawSupTable("Authorized Work Supervisor (IOCL)", [{t:"Name", w:130}, {t:"Designation", w:130}, {t:"Contact", w:100}, {t:"Audit Trail", w:175}], ioclRows);
         const contRows = [[d.RequesterName || '-', "Site In-Charge / Requester", d.EmergencyContact || '-']];
         drawSupTable("Authorized Work Supervisor (Contractor)", [{t:"Name", w:180}, {t:"Designation", w:180}, {t:"Contact", w:175}], contRows);
@@ -581,14 +343,9 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         });
         doc.y = wy+20;
 
-        // Signatures (WITH FIX)
-        if(doc.y > 650) { 
-            doc.addPage(); 
-            drawHeaderOnAll(); 
-            doc.y = 135; 
-        }
-        doc.font('Helvetica-Bold').text("SIGNATURES",30,doc.y); 
-        doc.y+=15; 
+        // Signatures (Fixed Page Break)
+        if(doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; }
+        doc.font('Helvetica-Bold').text("SIGNATURES",30,doc.y); doc.y+=15; 
         const sY=doc.y;
         doc.rect(30,sY,178,40).stroke().text(`REQ: ${d.RequesterName} on ${d.CreatedDate||'-'}`,35,sY+5);
         doc.rect(208,sY,178,40).stroke().text(`REV: ${d.Reviewer_Sig||'-'}\nRem: ${d.Reviewer_Remarks||'-'}`, 213, sY+5, {width:168});
@@ -619,13 +376,9 @@ app.get('/api/download-pdf/:id', async (req, res) => {
              const wList = r.worker_list ? r.worker_list.join(', ') : 'All';
              doc.rect(260,ry,70,55).stroke().text(wList, 262, ry+5, {width:68});
              doc.rect(330,ry,75,55).stroke().text(`${r.req_name}\n${r.req_at}`, 332, ry+5, {width:73});
-             
              let revText = `${r.rev_name||'-'}\n${r.rev_at||'-'}\nRem: ${r.rev_rem||'-'}`;
              let appText = `${r.app_name||'-'}\n${r.app_at||'-'}\nRem: ${r.app_rem||'-'}`;
-             if (r.status === 'rejected') {
-                 const rejText = `REJECTED BY:\n${r.rej_by}\n${r.rej_at}\nReason: ${r.rej_reason}`;
-                 if (r.rej_role === 'Reviewer') revText = rejText; else appText = rejText;
-             }
+             if (r.status === 'rejected') { const rejText = `REJECTED BY:\n${r.rej_by}\n${r.rej_at}\nReason: ${r.rej_reason}`; if (r.rej_role === 'Reviewer') revText = rejText; else appText = rejText; }
              doc.rect(405,ry,75,55).stroke().text(revText, 407, ry+5, {width:73});
              doc.rect(480,ry,75,55).stroke().text(appText, 482, ry+5, {width:73});
              ry += 55;
@@ -644,11 +397,7 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         ];
         doc.font('Helvetica').fontSize(8);
         closureSteps.forEach(s => {
-            doc.rect(30,cy,80,30).stroke().text(s.role,35,cy+5); 
-            doc.rect(110,cy,120,30).stroke().text(s.name||'-',115,cy+5, {width:110}); 
-            doc.rect(230,cy,100,30).stroke().text(s.date||'-',235,cy+5, {width:90}); 
-            doc.rect(330,cy,235,30).stroke().text(s.rem||'-',335,cy+5, {width:225});
-            cy+=30;
+            doc.rect(30,cy,80,30).stroke().text(s.role,35,cy+5); doc.rect(110,cy,120,30).stroke().text(s.name||'-',115,cy+5, {width:110}); doc.rect(230,cy,100,30).stroke().text(s.date||'-',235,cy+5, {width:90}); doc.rect(330,cy,235,30).stroke().text(s.rem||'-',335,cy+5, {width:225}); cy+=30;
         });
         doc.y = cy + 20;
 
@@ -660,15 +409,14 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         const instructions = ["1. The work permit shall be filled up carefully.", "2. Appropriate safeguards and PPEs shall be determined.", "3. Requirement of standby personnel shall be mentioned.", "4. Means of communication must be available.", "5. Shift-wise communication to Main Control Room.", "6. Only certified vehicles and electrical equipment allowed.", "7. Welding machines shall be placed in ventilated areas.", "8. No hot work unless explosive meter reading is Zero.", "9. Standby person mandatory for confined space.", "10. Compressed gas cylinders not allowed inside.", "11. While filling trench, men/equipment must be outside.", "12. For renewal, issuer must ensure conditions are satisfactory.", "13. Max renewal up to 7 calendar days.", "14. Permit must be available at site.", "15. On completion, permit must be closed.", "16. Follow latest SOP for Trenching.", "17. CCTV and gas monitoring should be utilized.", "18. Refer to PLHO guidelines for details.", "19. This original permit must always be available with permit receiver.", "20. On completion of the work, the permit must be closed and the original copy of TBT, JSA, Permission etc. associated with permit to be handed over to Permit issuer", "21. A group shall be made for every work with SIC, EIC, permit issuer, Permit receiver, Mainline In charge and authorized contractor supervisor for digital platform", "22. The renewal of permits shall be done through confirmation by digital platform. However, the regularization on permits for renewal shall be done before closure of permit.", "23. No additional worker/supervisor to be engaged unless approved by Permit Receiver."]; 
         instructions.forEach(i => { doc.text(i, 30, doc.y); doc.y += 12; }); 
 
-        // --- AGREEMENT LINE ADDITION ---
+        // --- AGREEMENT LINE ---
         if (d.SafetyRulesAgreed === 'Y') {
             doc.moveDown(0.5);
-            doc.font('Helvetica-Bold').fontSize(9).fillColor('#c2410c'); // Orange-red color
+            doc.font('Helvetica-Bold').fontSize(9).fillColor('#c2410c');
             doc.text(`Requestor (${d.RequesterName} of ${d.Vendor}) has agreed to Golden Safety Rules and all its Terms, penalties and rules.`, 30, doc.y, {align: 'center'});
-            doc.fillColor('black'); // Reset color
+            doc.fillColor('black');
             doc.moveDown(0.5);
         }
-        // -------------------------------
 
         // --- SAFETY BANNER LOGIC ---
         if (fs.existsSync('safety_banner.png')) {

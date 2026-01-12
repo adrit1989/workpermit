@@ -270,7 +270,6 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
         }
         const chk = await pool.request().input('p', pid).query("SELECT Status FROM Permits WHERE PermitID=@p");
         
-        // CHECK: Ensure permit is editable
         if(chk.recordset.length > 0) {
              const status = chk.recordset[0].Status;
              if (status === 'Closed' || status.includes('Closed')) {
@@ -337,11 +336,11 @@ app.post('/api/update-status', async (req, res) => {
 
         const now = getNowIST();
 
-        // ---------------- FIXED LOGIC BLOCK START ----------------
-        // Order matters. Check specific actions before general role checks.
+        // ---------------- FIXED LOGIC BLOCK START (Fix C & A) ----------------
+        // Priority checks for Closure & Specific Actions first
         
         if(action === 'reject_closure') {
-            st = 'Active'; // Reset to Active
+            st = 'Active'; // Revert to Active
         }
         else if(action === 'approve_closure') {
             st = 'Closure Pending Approval'; 
@@ -361,12 +360,13 @@ app.post('/api/update-status', async (req, res) => {
              d.Reviewer_Sig = `${user} on ${now}`;
         }
         else if(role === 'Approver' && action === 'approve') { 
-            // FIX: If closing vs just approving permit
+            // Final Closure Check
             if(st.includes('Closure Pending Approval')) {
                 st = 'Closed'; 
                 d.Closure_Issuer_Sig = `${user} on ${now}`; 
                 d.Closure_Approver_Date = now; 
             } else {
+                // Normal Approval
                 st = 'Active'; 
                 d.Approver_Sig = `${user} on ${now}`; 
             }
@@ -489,7 +489,7 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.text(`IOCL Equipment: ${d.IoclEquip||'-'} | Contractor Equipment: ${d.ContEquip||'-'}`, 30, doc.y); doc.y+=12;
         doc.text(`Work Order: ${d.WorkOrder||'-'}`, 30, doc.y); doc.y+=20;
 
-        // --- AUTHORIZED SUPERVISORS TABLES (FIXED GAP) ---
+        // --- AUTHORIZED SUPERVISORS TABLES ---
         const drawSupTable = (title, headers, dataRows) => {
              if(doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
              doc.font('Helvetica-Bold').text(title, 30, doc.y); 
@@ -500,16 +500,16 @@ app.get('/api/download-pdf/:id', async (req, res) => {
              let hx = 30;
              const headerY = doc.y;
              headers.forEach(h => { doc.rect(hx, headerY, h.w, 15).stroke(); doc.text(h.t, hx+2, headerY+4); hx += h.w; });
-             // FIX B: Force start Y
-             doc.y = headerY + 15; 
+             // FIX B: Force start Y for rows to be immediately below header
+             doc.y = headerY + 15;
              
              // Rows
              doc.font('Helvetica');
              dataRows.forEach(row => {
                  if(doc.y > 700) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
                  let rx = 30;
-                 const rowY = doc.y;
-                 const rowH = 15;
+                 const rowY = doc.y; 
+                 const rowH = 15; 
                  
                  row.forEach((cell, idx) => {
                      doc.rect(rx, rowY, headers[idx].w, rowH).stroke(); 

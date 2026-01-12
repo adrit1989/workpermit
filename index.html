@@ -1092,12 +1092,18 @@
                  document.querySelectorAll('#ppe-container input[type=checkbox]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
                  
                  // Explicitly grab the text values for Reviewer
-                 body.Reviewer_Remarks = getVal("Reviewer_Remarks"); // ADDED THIS LINE
+                 body.Reviewer_Remarks = getVal("Reviewer_Remarks"); 
                  body.AdditionalPrecautions = getVal("AdditionalPrecautions");
                  if(document.getElementById("H_Others_Detail")) {
                      body.H_Others_Detail = document.getElementById("H_Others_Detail").value;
                  }
             }
+            
+            // NEW: Explicitly capture Approver Remarks
+            if(currentUser.Role === 'Approver' && act === 'approve') {
+                body.Approver_Remarks = getVal("Approver_Remarks");
+            }
+            
             const res = await apiCall('/update-status', 'POST', body);
             if(res.success) showDashboard(); else alert(res.error);
         }

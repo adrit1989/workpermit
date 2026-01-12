@@ -11,244 +11,52 @@
     
     <style>
         /* GLOBAL STYLES */
-        body { 
-            background-color: #f3f4f6; 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-            font-size: 16px; 
-            -webkit-tap-highlight-color: transparent; 
-        }
-      
-        /* GLASS CARD EFFECT */
-        .glass { 
-            background: white; 
-            padding: 1rem; 
-            border-radius: 12px; 
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
-            margin-bottom: 1rem; 
-            border: 1px solid #e5e7eb; 
-        }
-      
-        /* FORM ELEMENTS */
-        input, select, textarea { 
-            width: 100%; 
-            border: 1px solid #d1d5db; 
-            padding: 10px 12px; 
-            border-radius: 8px; 
-            font-size: 1rem; 
-            background: #fff; 
-            margin-bottom: 0.5rem; 
-        }
+        body { background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 16px; -webkit-tap-highlight-color: transparent; }
+        .glass { background: white; padding: 1rem; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 1rem; border: 1px solid #e5e7eb; }
+        input, select, textarea { width: 100%; border: 1px solid #d1d5db; padding: 10px 12px; border-radius: 8px; font-size: 1rem; background: #fff; margin-bottom: 0.5rem; }
+        input:focus, select:focus, textarea:focus { border-color: #ea580c; outline: none; ring: 2px solid #fdba74; }
+        input:disabled, select:disabled, textarea:disabled { background-color: #f9fafb; color: #6b7280; border-color: #e5e7eb; }
+        button { touch-action: manipulation; transition: transform 0.1s; }
+        button:active { transform: scale(0.98); }
+        .section-title { font-weight: 800; color: #c2410c; margin: 1.5rem 0 1rem 0; border-bottom: 2px solid #fdba74; padding-bottom: 0.5rem; font-size: 1.1rem; }
+        .loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); display: none; justify-content: center; align-items: center; z-index: 2000; font-size: 1.5rem; color: #ea580c; font-weight: bold; flex-direction: column; gap: 10px; }
 
-        input:focus, select:focus, textarea:focus { 
-            border-color: #ea580c; 
-            outline: none; 
-            ring: 2px solid #fdba74; 
-        }
-
-        input:disabled, select:disabled, textarea:disabled { 
-            background-color: #f9fafb; 
-            color: #6b7280; 
-            border-color: #e5e7eb; 
-        }
-
-        button { 
-            touch-action: manipulation; 
-            transition: transform 0.1s; 
-        }
-
-        button:active { 
-            transform: scale(0.98); 
-        }
-
-        /* TYPOGRAPHY */
-        .section-title { 
-            font-weight: 800; 
-            color: #c2410c; 
-            margin: 1.5rem 0 1rem 0; 
-            border-bottom: 2px solid #fdba74; 
-            padding-bottom: 0.5rem; 
-            font-size: 1.1rem; 
-        }
-
-        /* LOADER OVERLAY */
-        .loader { 
-            position: fixed; 
-            top: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 100%; 
-            background: rgba(255,255,255,0.9); 
-            display: none; 
-            justify-content: center; 
-            align-items: center; 
-            z-index: 2000; 
-            font-size: 1.5rem; 
-            color: #ea580c; 
-            font-weight: bold; 
-            flex-direction: column; 
-            gap: 10px; 
-        }
-
-        /* --- RESPONSIVE TABLE STYLES (Mobile First) --- */
+        /* RESPONSIVE TABLE STYLES (Mobile First) */
         @media (max-width: 768px) {
-            .mobile-table thead { 
-                display: none; 
-            }
-            
-            .mobile-table tr { 
-                display: block; 
-                margin-bottom: 1rem; 
-                background: white; 
-                border: 1px solid #e5e7eb; 
-                border-radius: 12px; 
-                padding: 1rem; 
-                box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
-                position: relative; 
-            }
-            
-            .mobile-table td { 
-                display: flex; 
-                justify-content: space-between; 
-                align-items: center; 
-                border-bottom: 1px solid #f3f4f6; 
-                padding: 0.75rem 0; 
-                text-align: right; 
-            }
-            
-            .mobile-table td:last-child { 
-                border-bottom: none; 
-                padding-bottom: 0; 
-            }
-            
-            .mobile-table td::before { 
-                content: attr(data-label); 
-                font-weight: 600; 
-                color: #6b7280; 
-                text-align: left; 
-                margin-right: 1rem; 
-                flex-shrink: 0; 
-            }
+            .mobile-table thead { display: none; }
+            .mobile-table tr { display: block; margin-bottom: 1rem; background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); position: relative; }
+            .mobile-table td { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f3f4f6; padding: 0.75rem 0; text-align: right; }
+            .mobile-table td:last-child { border-bottom: none; padding-bottom: 0; }
+            .mobile-table td::before { content: attr(data-label); font-weight: 600; color: #6b7280; text-align: left; margin-right: 1rem; flex-shrink: 0; }
             
             /* Checklist Tweaks */
-            .checklist-row { 
-                flex-direction: column; 
-                align-items: flex-start; 
-            }
-            
-            .checklist-options { 
-                width: 100%; 
-                display: flex; 
-                justify-content: space-between; 
-                margin-top: 0.5rem; 
-            }
+            .checklist-row { flex-direction: column; align-items: flex-start; }
+            .checklist-options { width: 100%; display: flex; justify-content: space-between; margin-top: 0.5rem; }
             
             /* Sticky Bottom Actions Bar */
-            #actions { 
-                position: fixed; 
-                bottom: 0; 
-                left: 0; 
-                right: 0; 
-                background: white; 
-                border-top: 1px solid #e5e7eb; 
-                padding: 1rem; 
-                box-shadow: 0 -4px 6px rgba(0,0,0,0.05); 
-                z-index: 100; 
-                flex-direction: column; 
-                gap: 0.5rem; 
-            }
-            
-            #actions button, #actions a { 
-                width: 100%; 
-                display: block; 
-                text-align: center; 
-                padding: 12px; 
-                font-size: 1.1rem; 
-            }
+            #actions { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid #e5e7eb; padding: 1rem; box-shadow: 0 -4px 6px rgba(0,0,0,0.05); z-index: 100; flex-direction: column; gap: 0.5rem; }
+            #actions button, #actions a { width: 100%; display: block; text-align: center; padding: 12px; font-size: 1.1rem; }
 
             /* Map View Mobile Layout */
-            #view-map { 
-                flex-direction: column; 
-            }
-            
-            #map-list { 
-                height: 35%; 
-                order: 2; 
-                width: 100%; 
-                border-top: 2px solid #ccc; 
-            }
-            
-            #map-container { 
-                height: 65%; 
-                order: 1; 
-                width: 100%; 
-            }
+            #view-map { flex-direction: column; }
+            #map-list { height: 35%; order: 2; width: 100%; border-top: 2px solid #ccc; }
+            #map-container { height: 65%; order: 1; width: 100%; }
         }
 
-        /* --- DESKTOP STYLES --- */
+        /* DESKTOP STYLES */
         @media (min-width: 769px) {
-            .desktop-container { 
-                max-width: 1200px; 
-                margin: 0 auto; 
-                padding: 20px; 
-            }
-
-            table.mobile-table { 
-                width: 100%; 
-                border-collapse: collapse; 
-                display: table; 
-            }
-
-            table.mobile-table thead { 
-                display: table-header-group; 
-                background: #ea580c; 
-                color: white; 
-            }
-
-            table.mobile-table tr { 
-                display: table-row; 
-                border: none; 
-                box-shadow: none; 
-                background: transparent; 
-            }
-
-            table.mobile-table th { 
-                background: #ea580c; 
-                color: white; 
-                padding: 12px; 
-                text-align: left; 
-                border-bottom: 2px solid #c2410c; 
-            }
-
-            table.mobile-table td { 
-                display: table-cell; 
-                border-bottom: 1px solid #e5e7eb; 
-                padding: 12px; 
-                text-align: left; 
-                vertical-align: top; 
-            }
-
-            table.mobile-table td::before { 
-                content: none; 
-            }
+            .desktop-container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+            table.mobile-table { width: 100%; border-collapse: collapse; display: table; }
+            table.mobile-table thead { display: table-header-group; background: #ea580c; color: white; }
+            table.mobile-table tr { display: table-row; border: none; box-shadow: none; background: transparent; }
+            table.mobile-table th { background: #ea580c; color: white; padding: 12px; text-align: left; border-bottom: 2px solid #c2410c; }
+            table.mobile-table td { display: table-cell; border-bottom: 1px solid #e5e7eb; padding: 12px; text-align: left; vertical-align: top; }
+            table.mobile-table td::before { content: none; }
             
             /* Map View Desktop Layout */
-            #view-map { 
-                flex-direction: row; 
-            }
-            
-            #map-list { 
-                width: 350px; 
-                height: 100%; 
-                border-right: 1px solid #ddd; 
-                overflow-y: auto; 
-                position: static; 
-            }
-            
-            #map-container { 
-                flex: 1; 
-                height: 100%; 
-                position: static; 
-            }
+            #view-map { flex-direction: row; }
+            #map-list { width: 350px; height: 100%; border-right: 1px solid #ddd; overflow-y: auto; position: static; }
+            #map-container { flex: 1; height: 100%; position: static; }
         }
     </style>
 </head>
@@ -970,12 +778,13 @@
             document.getElementById("pending-renewal-display").classList.add('hidden');
             document.getElementById("action-renewal").classList.add('hidden');
             document.getElementById("signature-history").classList.add('hidden');
-            document.getElementById("iocl-sup-display-section").classList.add('hidden'); // Hide default
-
+            
             // --- HANDLE IOCL SUPERVISORS DATA (REQ A) ---
-            const ioclData = p.IOCLSupervisors || [];
+            // Clear previous inputs
             document.getElementById("iocl-sup-container-rev").innerHTML = "";
             document.getElementById("iocl-sup-container-app").innerHTML = "";
+            
+            const ioclData = p.IOCLSupervisors || [];
             
             // Populate Input Fields
             ioclData.forEach(d => {
@@ -987,7 +796,8 @@
             const dispTable = document.querySelector('#table-iocl-display tbody');
             dispTable.innerHTML = ioclData.length ? ioclData.map(x => `<tr><td>${x.name}</td><td>${x.desig}</td><td>${x.contact}</td></tr>`).join('') : '<tr><td colspan="3" class="text-gray-400">No Supervisors Added</td></tr>';
             
-            // Show Read-only section by default, unless Reviewer/Approver are editing
+            // LOGIC: Default to showing the read-only section.
+            // ONLY hide it if a Reviewer or Approver is actively editing the permit.
             document.getElementById("iocl-sup-display-section").classList.remove('hidden');
 
             let btns = "";
@@ -1251,5 +1061,5 @@
             });
         }
     </script>
-  </body>
+</body>
 </html>

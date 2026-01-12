@@ -324,6 +324,7 @@ app.post('/api/update-status', async (req, res) => {
         Object.assign(d, extras);
         if(bgColor) d.PdfBgColor = bgColor;
         if (IOCLSupervisors) d.IOCLSupervisors = IOCLSupervisors;
+        if(req.body.Site_Restored_Check) d.Site_Restored_Check = req.body.Site_Restored_Check;
 
         // Save remarks based on role
         if(comment) {
@@ -339,13 +340,10 @@ app.post('/api/update-status', async (req, res) => {
         // --- MODIFIED LOGIC FOR CLOSURE FLOW ---
 
         // 1. Handle Closure Rejection (By Reviewer OR Approver)
-        // Requirement: "Closure reject by reviewer/approver > Goes to Active state"
         if(action === 'reject_closure') {
             st = 'Active'; 
-            // Note: Reverting to Active allows the Requester to address issues and re-initiate closure.
         }
         // 2. Handle Reviewer Closure Approval
-        // Requirement: "Closure approves by reviewer >> Goes to Approver"
         else if(action === 'approve_closure' && role === 'Reviewer') {
             st = 'Closure Pending Approval'; 
             d.Closure_Reviewer_Sig = `${user} on ${now}`;
@@ -353,13 +351,11 @@ app.post('/api/update-status', async (req, res) => {
         }
         // 3. Handle Approver Actions (Standard & Closure)
         else if(action === 'approve' && role === 'Approver') {
-            // Requirement: "Once approver receives closure request... Closure approves >> Goes to Closed state"
             if(st.includes('Closure Pending Approval')) {
                 st = 'Closed';
                 d.Closure_Issuer_Sig = `${user} on ${now}`;
                 d.Closure_Approver_Date = now;
             } else {
-                // Standard Permit Approval
                 st = 'Active';
                 d.Approver_Sig = `${user} on ${now}`;
             }
@@ -378,14 +374,13 @@ app.post('/api/update-status', async (req, res) => {
              d.Reviewer_Sig = `${user} on ${now}`;
         }
         
-        // --- END LOGIC ---
-
         await pool.request().input('p', PermitID).input('s', st).input('j', JSON.stringify(d)).query("UPDATE Permits SET Status=@s, FullDataJSON=@j WHERE PermitID=@p");
         res.json({success:true});
     } catch(e){
         res.status(500).json({error:e.message});
     } 
 });
+
 app.post('/api/renewal', async (req, res) => {
     try {
         const { PermitID, userRole, userName, action, rejectionReason, renewalWorkers, ...data } = req.body;
@@ -447,7 +442,7 @@ app.post('/api/map-data', async (req, res) => { try { const pool = await getConn
 app.post('/api/stats', async (req, res) => { try { const pool = await getConnection(); const r = await pool.request().query("SELECT Status, WorkType FROM Permits"); const s={}, t={}; r.recordset.forEach(x=>{s[x.Status]=(s[x.Status]||0)+1; t[x.WorkType]=(t[x.WorkType]||0)+1;}); res.json({success:true, statusCounts:s, typeCounts:t}); } catch(e){res.status(500).json({error:e.message})} });
 app.get('/api/download-excel', async (req, res) => { try { const pool = await getConnection(); const result = await pool.request().query("SELECT * FROM Permits ORDER BY Id DESC"); const workbook = new ExcelJS.Workbook(); const sheet = workbook.addWorksheet('Permits'); sheet.columns = [{header:'Permit ID',key:'id',width:15},{header:'Status',key:'status',width:20},{header:'Work',key:'wt',width:25},{header:'Requester',key:'req',width:25},{header:'Location',key:'loc',width:30},{header:'Vendor',key:'ven',width:20},{header:'Valid From',key:'vf',width:20},{header:'Valid To',key:'vt',width:20}]; sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 }; sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFED7D31' } }; result.recordset.forEach(r => { const d = JSON.parse(r.FullDataJSON || "{}"); sheet.addRow({ id: r.PermitID, status: r.Status, wt: d.WorkType, req: d.RequesterName, loc: d.ExactLocation, ven: d.Vendor, vf: formatDate(r.ValidFrom), vt: formatDate(r.ValidTo) }); }); res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); res.setHeader('Content-Disposition', 'attachment; filename=IndianOil_Permits.xlsx'); await workbook.xlsx.write(res); res.end(); } catch (e) { res.status(500).send(e.message); } });
 
-// 8. PDF GENERATION
+// --- PDF GENERATION ROUTE ---
 app.get('/api/download-pdf/:id', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -497,99 +492,61 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.text(`IOCL Equipment: ${d.IoclEquip||'-'} | Contractor Equipment: ${d.ContEquip||'-'}`, 30, doc.y); doc.y+=12;
         doc.text(`Work Order: ${d.WorkOrder||'-'}`, 30, doc.y); doc.y+=20;
 
-        // --- AUTHORIZED SUPERVISORS TABLES (FIXED GAP) ---
-// Replace the existing drawSupTable function with this one:
-// --- REPLACE THE drawSupTable FUNCTION IN server.js ---
-
-// --- REPLACE THE drawSupTable FUNCTION IN server.js WITH THIS ---
-
-const drawSupTable = (title, headers, dataRows) => {
-     // Check if we need a new page for the Title
-     if(doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
-     
-     // Draw Title
-     doc.font('Helvetica-Bold').text(title, 30, doc.y);
-     doc.y += 15; 
-
-     const headerHeight = 20; 
-     let currentY = doc.y;
-
-     // 1. Draw Header Row
-     let currentX = 30;
-     headers.forEach(h => {
-         doc.rect(currentX, currentY, h.w, headerHeight).stroke();
-         doc.text(h.t, currentX + 2, currentY + 6, { width: h.w - 4, align: 'left' });
-         currentX += h.w;
-     });
-     
-     currentY += headerHeight;
-
-     // 2. Draw Data Rows
-     doc.font('Helvetica');
-     dataRows.forEach(row => {
-         // --- STEP A: Calculate required height for this specific row ---
-         let maxRowHeight = 20; // Minimum default height
-         
-         row.forEach((cell, idx) => {
-             const cellWidth = headers[idx].w - 4;
-             // Calculate height of text given the column width
-             const textHeight = doc.heightOfString(cell, { width: cellWidth, align: 'left' });
-             // Add some padding (e.g., 10px total for top/bottom)
-             if (textHeight + 10 > maxRowHeight) {
-                 maxRowHeight = textHeight + 10;
-             }
-         });
-
-         // --- STEP B: Check Page Break with new calculated height ---
-         if(currentY + maxRowHeight > 750) { 
-             doc.addPage(); 
-             drawHeaderOnAll(); 
-             currentY = 135; 
-             // Optional: You could redraw headers here if you wanted
-         }
-
-         // --- STEP C: Draw the Row ---
-         let rowX = 30;
-         row.forEach((cell, idx) => {
-             // Draw Cell Box using the calculated maxRowHeight
-             doc.rect(rowX, currentY, headers[idx].w, maxRowHeight).stroke();
+        // --- DYNAMIC SUPERVISORS TABLE ---
+        const drawSupTable = (title, headers, dataRows) => {
+             if(doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
              
-             // Draw Cell Text
-             doc.text(cell, rowX + 2, currentY + 5, { 
-                 width: headers[idx].w - 4, 
-                 align: 'left'
+             doc.font('Helvetica-Bold').text(title, 30, doc.y);
+             doc.y += 15; 
+
+             const headerHeight = 20; 
+             let currentY = doc.y;
+
+             // Header Row
+             let currentX = 30;
+             headers.forEach(h => {
+                 doc.rect(currentX, currentY, h.w, headerHeight).stroke();
+                 doc.text(h.t, currentX + 2, currentY + 6, { width: h.w - 4, align: 'left' });
+                 currentX += h.w;
              });
-             
-             rowX += headers[idx].w;
-         });
-         
-         // Advance Y by the calculated height
-         currentY += maxRowHeight;
-     });
+             currentY += headerHeight;
 
-     // Update doc.y for the next section
-     doc.y = currentY + 15;
-};
+             // Data Rows
+             doc.font('Helvetica');
+             dataRows.forEach(row => {
+                 let maxRowHeight = 20; // default
+                 row.forEach((cell, idx) => {
+                     const cellWidth = headers[idx].w - 4;
+                     const textHeight = doc.heightOfString(cell, { width: cellWidth, align: 'left' });
+                     if (textHeight + 10 > maxRowHeight) maxRowHeight = textHeight + 10;
+                 });
+
+                 if(currentY + maxRowHeight > 750) { 
+                     doc.addPage(); 
+                     drawHeaderOnAll(); 
+                     currentY = 135; 
+                 }
+
+                 let rowX = 30;
+                 row.forEach((cell, idx) => {
+                     doc.rect(rowX, currentY, headers[idx].w, maxRowHeight).stroke();
+                     doc.text(cell, rowX + 2, currentY + 5, { width: headers[idx].w - 4, align: 'left' });
+                     rowX += headers[idx].w;
+                 });
+                 currentY += maxRowHeight;
+             });
+             doc.y = currentY + 15;
+        };
+
         const ioclSups = d.IOCLSupervisors || [];
-let ioclRows = ioclSups.map(s => {
-    // 1. Build the "Added" string
-    let auditText = `Add: ${s.added_by||'-'} (${s.added_at||'-'})`;
-    
-    // 2. Append "Deleted" string if it exists (using new line \n)
-    if(s.is_deleted) {
-        auditText += `\nDel: ${s.deleted_by} (${s.deleted_at})`;
-    }
-    
-    return [s.name, s.desig, s.contact, auditText];
-});
-
-if(ioclRows.length === 0) ioclRows.push(["-", "-", "-", "-"]);
+        let ioclRows = ioclSups.map(s => {
+            let auditText = `Add: ${s.added_by||'-'} (${s.added_at||'-'})`;
+            if(s.is_deleted) auditText += `\nDel: ${s.deleted_by} (${s.deleted_at})`;
+            return [s.name, s.desig, s.contact, auditText];
+        });
+        if(ioclRows.length === 0) ioclRows.push(["-", "-", "-", "-"]);
         
-        drawSupTable("Authorized Work Supervisor (IOCL)", 
-            [{t:"Name", w:130}, {t:"Designation", w:130}, {t:"Contact", w:100}, {t:"Audit Trail", w:175}], 
-            ioclRows
-        );
-
+        drawSupTable("Authorized Work Supervisor (IOCL)", [{t:"Name", w:130}, {t:"Designation", w:130}, {t:"Contact", w:100}, {t:"Audit Trail", w:175}], ioclRows);
         const contRows = [[d.RequesterName || '-', "Site In-Charge / Requester", d.EmergencyContact || '-']];
         drawSupTable("Authorized Work Supervisor (Contractor)", [{t:"Name", w:180}, {t:"Designation", w:180}, {t:"Contact", w:175}], contRows);
 
@@ -601,11 +558,7 @@ if(ioclRows.length === 0) ioclRows.push(["-", "-", "-", "-"]);
         doc.text(`Hazards: ${foundHaz.join(', ')}`,35,doc.y+5); 
         const ppeKeys = ["Helmet","Safety Shoes","Hand gloves","Boiler suit","Face Shield","Apron","Goggles","Dust Respirator","Fresh Air Mask","Lifeline","Safety Harness","Airline","Earmuff"];
         const foundPPE = ppeKeys.filter(k => d[`P_${k.replace(/ /g,'')}`] === 'Y');
-        
-        if(d.AdditionalPrecautions && d.AdditionalPrecautions.trim() !== '') {
-            foundPPE.push(`(Other: ${d.AdditionalPrecautions})`);
-        }
-        
+        if(d.AdditionalPrecautions && d.AdditionalPrecautions.trim() !== '') { foundPPE.push(`(Other: ${d.AdditionalPrecautions})`); }
         doc.text(`PPE: ${foundPPE.join(', ')}`,35,doc.y+25); doc.y+=70;
 
         // Workers Table
@@ -632,13 +585,16 @@ if(ioclRows.length === 0) ioclRows.push(["-", "-", "-", "-"]);
             wy+=35;
         });
         doc.y = wy+20;
+
+        // --- SIGNATURES (FIXED FOR PAGE BREAK) ---
         if(doc.y > 650) { 
             doc.addPage(); 
             drawHeaderOnAll(); 
             doc.y = 135; 
         }
-
-        doc.font('Helvetica-Bold').text("SIGNATURES",30,doc.y); doc.y+=15; const sY=doc.y;
+        doc.font('Helvetica-Bold').text("SIGNATURES",30,doc.y); 
+        doc.y+=15; 
+        const sY=doc.y;
         doc.rect(30,sY,178,40).stroke().text(`REQ: ${d.RequesterName} on ${d.CreatedDate||'-'}`,35,sY+5);
         doc.rect(208,sY,178,40).stroke().text(`REV: ${d.Reviewer_Sig||'-'}\nRem: ${d.Reviewer_Remarks||'-'}`, 213, sY+5, {width:168});
         doc.rect(386,sY,179,40).stroke().text(`APP: ${d.Approver_Sig||'-'}\nRem: ${d.Approver_Remarks||'-'}`, 391, sY+5, {width:169}); 
@@ -652,7 +608,7 @@ if(ioclRows.length === 0) ioclRows.push(["-", "-", "-", "-"]);
         doc.rect(80,ry,50,25).stroke().text("To",82,ry+5);
         doc.rect(130,ry,60,25).stroke().text("Gas",132,ry+5);
         doc.rect(190,ry,70,25).stroke().text("Precautions",192,ry+5);
-        doc.rect(260,ry,70,25).stroke().text("Workers",262,ry+5); // NEW COLUMN
+        doc.rect(260,ry,70,25).stroke().text("Workers",262,ry+5);
         doc.rect(330,ry,75,25).stroke().text("Req",332,ry+5);
         doc.rect(405,ry,75,25).stroke().text("Rev",407,ry+5);
         doc.rect(480,ry,75,25).stroke().text("App",482,ry+5);
@@ -661,43 +617,35 @@ if(ioclRows.length === 0) ioclRows.push(["-", "-", "-", "-"]);
         doc.font('Helvetica').fontSize(8);
         renewals.forEach(r => {
              if(ry>700){doc.addPage(); drawHeaderOnAll(); doc.y=135; ry=135;}
-             
              doc.rect(30,ry,50,55).stroke().text(r.valid_from.replace('T','\n'), 32, ry+5, {width:48});
              doc.rect(80,ry,50,55).stroke().text(r.valid_till.replace('T','\n'), 82, ry+5, {width:48});
              doc.rect(130,ry,60,55).stroke().text(`HC: ${r.hc}\nTox: ${r.toxic}\nO2: ${r.oxygen}`, 132, ry+5, {width:58});
              doc.rect(190,ry,70,55).stroke().text(r.precautions||'-', 192, ry+5, {width:68});
-             
              const wList = r.worker_list ? r.worker_list.join(', ') : 'All';
              doc.rect(260,ry,70,55).stroke().text(wList, 262, ry+5, {width:68});
-
              doc.rect(330,ry,75,55).stroke().text(`${r.req_name}\n${r.req_at}`, 332, ry+5, {width:73});
              
              let revText = `${r.rev_name||'-'}\n${r.rev_at||'-'}\nRem: ${r.rev_rem||'-'}`;
              let appText = `${r.app_name||'-'}\n${r.app_at||'-'}\nRem: ${r.app_rem||'-'}`;
-
              if (r.status === 'rejected') {
-                const rejText = `REJECTED BY:\n${r.rej_by}\n${r.rej_at}\nReason: ${r.rej_reason}`;
-                if (r.rej_role === 'Reviewer') revText = rejText;
-                else appText = rejText; 
+                 const rejText = `REJECTED BY:\n${r.rej_by}\n${r.rej_at}\nReason: ${r.rej_reason}`;
+                 if (r.rej_role === 'Reviewer') revText = rejText; else appText = rejText;
              }
-
              doc.rect(405,ry,75,55).stroke().text(revText, 407, ry+5, {width:73});
              doc.rect(480,ry,75,55).stroke().text(appText, 482, ry+5, {width:73});
-             
-             ry += 55; 
+             ry += 55;
         });
         doc.y = ry + 20;
 
-        // Closure Table
+        // Closure
         if(doc.y>650){doc.addPage(); drawHeaderOnAll(); doc.y=135;}
         doc.font('Helvetica-Bold').text("CLOSURE OF WORK PERMIT",30,doc.y); doc.y+=15;
         let cy = doc.y;
         doc.rect(30,cy,80,20).stroke().text("Stage",35,cy+5); doc.rect(110,cy,120,20).stroke().text("Name/Sig",115,cy+5); doc.rect(230,cy,100,20).stroke().text("Date/Time",235,cy+5); doc.rect(330,cy,235,20).stroke().text("Remarks",335,cy+5); cy+=20;
-        const getName = (sig) => (sig || '').split(' on ')[0]; 
         const closureSteps = [
-            {role:'Requestor', name:d.RequesterName, date:d.Closure_Requestor_Date, rem:d.Closure_Requestor_Remarks},
-            {role:'Reviewer', name: getName(d.Closure_Reviewer_Sig), date:d.Closure_Reviewer_Date, rem:d.Closure_Reviewer_Remarks},
-            {role:'Approver', name: getName(d.Closure_Issuer_Sig), date:d.Closure_Approver_Date, rem:d.Closure_Approver_Remarks}
+            {role:'Requestor', name: d.Closure_Requestor_Sig || d.RequesterName, date:d.Closure_Requestor_Date, rem:d.Closure_Requestor_Remarks},
+            {role:'Reviewer', name: d.Closure_Reviewer_Sig, date:d.Closure_Reviewer_Date, rem:d.Closure_Reviewer_Remarks},
+            {role:'Approver', name: d.Closure_Approver_Sig || d.Closure_Issuer_Sig, date:d.Closure_Approver_Date, rem:d.Closure_Approver_Remarks}
         ];
         doc.font('Helvetica').fontSize(8);
         closureSteps.forEach(s => {
@@ -708,16 +656,26 @@ if(ioclRows.length === 0) ioclRows.push(["-", "-", "-", "-"]);
             cy+=30;
         });
         doc.y = cy + 20;
-        
-        if(doc.y>500){doc.addPage(); drawHeaderOnAll(); doc.y=135;}
-        doc.font('Helvetica-Bold').fontSize(10).text("GENERAL INSTRUCTIONS", 30, doc.y); doc.y += 15; doc.font('Helvetica').fontSize(8);
-        const instructions = ["1. The work permit shall be filled up carefully.", "2. Appropriate safeguards and PPEs shall be determined.", "3. Requirement of standby personnel shall be mentioned.", "4. Means of communication must be available.", "5. Shift-wise communication to Main Control Room.", "6. Only certified vehicles and electrical equipment allowed.", "7. Welding machines shall be placed in ventilated areas.", "8. No hot work unless explosive meter reading is Zero.", "9. Standby person mandatory for confined space.", "10. Compressed gas cylinders not allowed inside.", "11. While filling trench, men/equipment must be outside.", "12. For renewal, issuer must ensure conditions are satisfactory.", "13. Max renewal up to 7 calendar days.", "14. Permit must be available at site.", "15. On completion, permit must be closed.", "16. Follow latest SOP for Trenching.", "17. CCTV and gas monitoring should be utilized.", "18. Refer to PLHO guidelines for details.", "19. This original permit must always be available with permit receiver.", "20. On completion of the work, the permit must be closed and the original copy of TBT, JSA, Permission etc. associated with permit to be handed over to Permit issuer", "21. A group shall be made for every work with SIC, EIC, permit issuer, Permit receiver, Mainline In charge and authorized contractor supervisor for digital platform", "22. The renewal of permits shall be done through confirmation by digital platform. However, the regularization on permits for renewal shall be done before closure of permit.", "23. No additional worker/supervisor to be engaged unless approved by Permit Receiver."];
-        instructions.forEach(i => { doc.text(i, 30, doc.y); doc.y += 12; });
 
-        const wm = p.Status.includes('Closed') ? 'CLOSED' : 'ACTIVE';
-        const color = p.Status.includes('Closed') ? '#ef4444' : '#22c55e';
-        const range = doc.bufferedPageRange();
-        for(let i=0; i<range.count; i++) { doc.switchToPage(i); doc.save(); doc.rotate(-45, {origin:[300,400]}); doc.fontSize(80).fillColor(color).opacity(0.15).text(wm, 100, 350, {align:'center'}); doc.restore(); }
+        // Footer Instructions & Safety Banner
+        if(doc.y>500){doc.addPage(); drawHeaderOnAll(); doc.y=135;} 
+        doc.font('Helvetica-Bold').fontSize(10).text("GENERAL INSTRUCTIONS", 30, doc.y); 
+        doc.y += 15; 
+        doc.font('Helvetica').fontSize(8); 
+        const instructions = ["1. The work permit shall be filled up carefully.", "2. Appropriate safeguards and PPEs shall be determined.", "3. Requirement of standby personnel shall be mentioned.", "4. Means of communication must be available.", "5. Shift-wise communication to Main Control Room.", "6. Only certified vehicles and electrical equipment allowed.", "7. Welding machines shall be placed in ventilated areas.", "8. No hot work unless explosive meter reading is Zero.", "9. Standby person mandatory for confined space.", "10. Compressed gas cylinders not allowed inside.", "11. While filling trench, men/equipment must be outside.", "12. For renewal, issuer must ensure conditions are satisfactory.", "13. Max renewal up to 7 calendar days.", "14. Permit must be available at site.", "15. On completion, permit must be closed.", "16. Follow latest SOP for Trenching.", "17. CCTV and gas monitoring should be utilized.", "18. Refer to PLHO guidelines for details.", "19. This original permit must always be available with permit receiver.", "20. On completion of the work, the permit must be closed and the original copy of TBT, JSA, Permission etc. associated with permit to be handed over to Permit issuer", "21. A group shall be made for every work with SIC, EIC, permit issuer, Permit receiver, Mainline In charge and authorized contractor supervisor for digital platform", "22. The renewal of permits shall be done through confirmation by digital platform. However, the regularization on permits for renewal shall be done before closure of permit.", "23. No additional worker/supervisor to be engaged unless approved by Permit Receiver."]; 
+        instructions.forEach(i => { doc.text(i, 30, doc.y); doc.y += 12; }); 
+
+        // --- SAFETY BANNER LOGIC ---
+        if (fs.existsSync('safety_banner.png')) {
+            const bannerHeight = 150; 
+            if (doc.y + bannerHeight > 750) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; } else { doc.moveDown(1); }
+            try { doc.image('safety_banner.png', 30, doc.y, { width: 535, align: 'center' }); } catch(err) { console.log("Error loading banner image:", err); }
+        }
+
+        const wm = p.Status.includes('Closed') ? 'CLOSED' : 'ACTIVE'; 
+        const color = p.Status.includes('Closed') ? '#ef4444' : '#22c55e'; 
+        const range = doc.bufferedPageRange(); 
+        for(let i=0; i<range.count; i++) { doc.switchToPage(i); doc.save(); doc.rotate(-45, {origin:[300,400]}); doc.fontSize(80).fillColor(color).opacity(0.15).text(wm, 100, 350, {align:'center'}); doc.restore(); } 
         doc.end();
     } catch (e) { res.status(500).send(e.message); }
 });

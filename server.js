@@ -551,13 +551,19 @@ const drawSupTable = (title, headers, dataRows) => {
 };
 
         const ioclSups = d.IOCLSupervisors || [];
-        let ioclRows = ioclSups.map(s => {
-            let auditText = `Added by ${s.added_by||'-'} on ${s.added_at||'-'}`;
-            if(s.is_deleted) auditText = `DELETED by ${s.deleted_by} on ${s.deleted_at}`;
-            return [s.name, s.desig, s.contact, auditText];
-        });
-        
-        if(ioclRows.length === 0) ioclRows.push(["-", "-", "-", "-"]);
+let ioclRows = ioclSups.map(s => {
+    // 1. Build the "Added" string
+    let auditText = `Add: ${s.added_by||'-'} (${s.added_at||'-'})`;
+    
+    // 2. Append "Deleted" string if it exists (using new line \n)
+    if(s.is_deleted) {
+        auditText += `\nDel: ${s.deleted_by} (${s.deleted_at})`;
+    }
+    
+    return [s.name, s.desig, s.contact, auditText];
+});
+
+if(ioclRows.length === 0) ioclRows.push(["-", "-", "-", "-"]);
         
         drawSupTable("Authorized Work Supervisor (IOCL)", 
             [{t:"Name", w:130}, {t:"Designation", w:130}, {t:"Contact", w:100}, {t:"Audit Trail", w:175}], 

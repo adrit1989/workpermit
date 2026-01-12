@@ -498,37 +498,57 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.text(`Work Order: ${d.WorkOrder||'-'}`, 30, doc.y); doc.y+=20;
 
         // --- AUTHORIZED SUPERVISORS TABLES (FIXED GAP) ---
-        const drawSupTable = (title, headers, dataRows) => {
-             if(doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
-             doc.font('Helvetica-Bold').text(title, 30, doc.y); 
-             // FIX B: Minimizing gap explicitly
-             doc.y+=5; 
-             
-             // Headers
-             let hx = 30;
-             const headerY = doc.y;
-             headers.forEach(h => { doc.rect(hx, headerY, h.w, 15).stroke(); doc.text(h.t, hx+2, headerY+4); hx += h.w; });
-             // FIX B: Force start Y
-             doc.y = headerY + 15;
-             
-             // Rows
-             doc.font('Helvetica');
-             dataRows.forEach(row => {
-                 if(doc.y > 700) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
-                 let rx = 30;
-                 const rowY = doc.y;
-                 const rowH = 15;
-                 
-                 row.forEach((cell, idx) => {
-                     doc.rect(rx, rowY, headers[idx].w, rowH).stroke(); 
-                     // Truncate text
-                     doc.text(cell, rx+2, rowY+4, {width: headers[idx].w - 4, lineBreak: false, ellipsis: true}); 
-                     rx += headers[idx].w;
-                 });
-                 doc.y += rowH;
-             });
-             doc.y += 10;
-        };
+// Replace the existing drawSupTable function with this one:
+const drawSupTable = (title, headers, dataRows) => {
+     if(doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
+     
+     // Title
+     doc.font('Helvetica-Bold').text(title, 30, doc.y);
+     doc.y += 15; // Space after title
+
+     // Define Row Height
+     const rowHeight = 20; // Increased slightly for better fit
+     let currentY = doc.y;
+
+     // 1. Draw Header Row
+     let currentX = 30;
+     headers.forEach(h => {
+         // Draw Header Box
+         doc.rect(currentX, currentY, h.w, rowHeight).stroke();
+         // Draw Header Text
+         doc.text(h.t, currentX + 2, currentY + 6, { width: h.w - 4, align: 'left' });
+         currentX += h.w;
+     });
+     
+     // Move Y down exactly by height to eliminate gap
+     currentY += rowHeight;
+
+     // 2. Draw Data Rows
+     doc.font('Helvetica');
+     dataRows.forEach(row => {
+         if(currentY > 750) { 
+             doc.addPage(); 
+             drawHeaderOnAll(); 
+             currentY = 135; 
+             // Optional: Redraw header on new page if desired, but sticking to simple rows here
+         }
+
+         let rowX = 30;
+         row.forEach((cell, idx) => {
+             // Draw Cell Box
+             doc.rect(rowX, currentY, headers[idx].w, rowHeight).stroke();
+             // Draw Cell Text
+             doc.text(cell, rowX + 2, currentY + 6, { width: headers[idx].w - 4, lineBreak: false, ellipsis: true });
+             rowX += headers[idx].w;
+         });
+         
+         // Move Y down exactly
+         currentY += rowHeight;
+     });
+
+     // Update doc.y for the next section
+     doc.y = currentY + 15;
+};
 
         const ioclSups = d.IOCLSupervisors || [];
         let ioclRows = ioclSups.map(s => {

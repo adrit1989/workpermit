@@ -615,10 +615,50 @@
         const loader = document.getElementById('loader');
 
         const CL_DATA = {
-            A: ["1. Equipment Check","2. Area Clean","3. Manholes Covered","4. Hazards","5. Blinded","6. Drained","7. Steamed","8. Flushed","9. Fire Access","10. Iron Sulfide","11. Electrical Isolation","12. Gas Test","13. Fire Ext","14. Cordoned","15. CCTV","16. Ventilation"],
-            B: ["1. Exit","2. Standby","3. Trapped Gas","4. Spark Shield","5. Grounding","6. Confined Standby","7. Communication","8. Rescue Equip","9. Cooling","10. Inert Gas","11. ELCB","12. Cylinders Out","13. Spark Arrestor","14. Welding Loc","15. Height"],
-            C: ["1. PESO Spark Arrestor"],
-            D: ["1. Shoring","2. Soil Dist","3. Safe Access","4. No Heavy Vehicle"]
+            A: [
+                "1. Equipment / Work Area inspected.", 
+                "2. Surrounding area checked, cleaned and covered. Oil/RAGS/Grass etc. removed.", 
+                "3. Sewers, Manholes, CBD etc. and nearby hot surface covered.", 
+                "4. Considered hazards from other routine/non-routine operations and concerned person alerted.", 
+                "5. Equipment blinded/ disconnected/ closed/ isolated/ wedge opened.", 
+                "6. Equipment properly drained and depressurized.", 
+                "7. Equipment properly steamed/purged.", 
+                "8. Equipment water flushed.", 
+                "9. Access for Free approach of Fire Tender.", 
+                "10. Iron Sulfide removed/ Kept wet.", 
+                "11. Equipment electrically isolated and tagged vide Permit no. __________.", 
+                "12. Gas test: % LEL HCs = ______, Toxic gas (PPM) = ______, O2 (%) = ______", 
+                "13. Running water hose / Fire extinguisher provided. Fire water system available.", 
+                "14. Area cordoned off and Precautionary tag/Board provided. CCTV monitoring facility available at site.", 
+                "15. PESO approved spark elimination system provided on the mobile equipment/ vehicle provided.", 
+                "16. Proper ventilation and Lighting provided."
+            ],
+            B: [
+                "1. Proper means of exit / escape provided.", 
+                "2. Standby personnel provided from Mainline/ Maint. / Contractor/ HSE.", 
+                "3. Checked for oil and Gas trapped behind the lining in equipment.", 
+                "4. Shield provided against spark.", 
+                "5. Portable equipment / nozzle properly grounded.", 
+                "6. Standby persons provided for entry to confined space.", 
+                "7. Adequate Communication Provided to Stand by Person.", 
+                "8. Attendant Trained Provided With Rescue Equipment/SCBA.", 
+                "9. Adequately Cooled Space for Safe Entry Of Person.", 
+                "10. Continuous Inert Gas Flow Arranged.", 
+                "11. Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding.", 
+                "12. Gas Cylinders are kept outside the confined Space.", 
+                "13. Spark arrestor Checked on mobile Equipments.", 
+                "14. Welding Machine Checked for Safe Location.", 
+                "15. Permit taken for working at height Vide Permit No. __________."
+            ],
+            C: [
+                "1. PESO approved spark elimination system provided on the mobile equipment/ vehicle provided."
+            ],
+            D: [
+                "1. For excavated trench/ pit proper slop/ shoring/ shuttering provided to prevent soil collapse.", 
+                "2. Excavated soil kept at safe distance from trench/pit edge (min. pit depth).", 
+                "3. Safe means of access provided inside trench/pit.", 
+                "4. Movement of heavy vehicle prohibited."
+            ]
         };
         const HAZARDS = ["Lack of Oxygen", "H2S", "Toxic Gases", "Combustible gases", "Pyrophoric Iron", "Corrosive Chemicals", "cave in formation", "Others"];
         const PPE = ["Helmet", "Safety Shoes", "Hand gloves", "Boiler suit", "Face Shield", "Apron", "Goggles", "Dust Respirator", "Fresh Air Mask", "Lifeline", "Safety Harness", "Airline", "Earmuff"];
@@ -1238,3 +1278,4 @@
     </script>
   </body>
 </html>
+

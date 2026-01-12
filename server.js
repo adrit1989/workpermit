@@ -501,16 +501,17 @@ app.get('/api/download-pdf/:id', async (req, res) => {
 // Replace the existing drawSupTable function with this one:
 // --- REPLACE THE drawSupTable FUNCTION IN server.js ---
 
+// --- REPLACE THE drawSupTable FUNCTION IN server.js WITH THIS ---
+
 const drawSupTable = (title, headers, dataRows) => {
+     // Check if we need a new page for the Title
      if(doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
      
-     // Title
+     // Draw Title
      doc.font('Helvetica-Bold').text(title, 30, doc.y);
      doc.y += 15; 
 
-     // --- FIX: Increased Height to 45 to fit multiple lines ---
-     const rowHeight = 45; 
-     const headerHeight = 20; // Headers can stay smaller
+     const headerHeight = 20; 
      let currentY = doc.y;
 
      // 1. Draw Header Row
@@ -526,36 +527,49 @@ const drawSupTable = (title, headers, dataRows) => {
      // 2. Draw Data Rows
      doc.font('Helvetica');
      dataRows.forEach(row => {
-         // Check if we need a new page
-         if(currentY > 750) { 
+         // --- STEP A: Calculate required height for this specific row ---
+         let maxRowHeight = 20; // Minimum default height
+         
+         row.forEach((cell, idx) => {
+             const cellWidth = headers[idx].w - 4;
+             // Calculate height of text given the column width
+             const textHeight = doc.heightOfString(cell, { width: cellWidth, align: 'left' });
+             // Add some padding (e.g., 10px total for top/bottom)
+             if (textHeight + 10 > maxRowHeight) {
+                 maxRowHeight = textHeight + 10;
+             }
+         });
+
+         // --- STEP B: Check Page Break with new calculated height ---
+         if(currentY + maxRowHeight > 750) { 
              doc.addPage(); 
              drawHeaderOnAll(); 
              currentY = 135; 
+             // Optional: You could redraw headers here if you wanted
          }
 
+         // --- STEP C: Draw the Row ---
          let rowX = 30;
          row.forEach((cell, idx) => {
-             // Draw Cell Box
-             doc.rect(rowX, currentY, headers[idx].w, rowHeight).stroke();
+             // Draw Cell Box using the calculated maxRowHeight
+             doc.rect(rowX, currentY, headers[idx].w, maxRowHeight).stroke();
              
-             // --- FIX: Removed 'lineBreak: false' so text can wrap ---
-             // Using a slightly smaller font for the Audit column if needed, or just standard 8
-             doc.text(cell, rowX + 2, currentY + 6, { 
+             // Draw Cell Text
+             doc.text(cell, rowX + 2, currentY + 5, { 
                  width: headers[idx].w - 4, 
                  align: 'left'
-                 // lineBreak defaults to true, which is what we want for \n to work
              });
              
              rowX += headers[idx].w;
          });
          
-         // Move Y down by the new larger height
-         currentY += rowHeight;
+         // Advance Y by the calculated height
+         currentY += maxRowHeight;
      });
 
+     // Update doc.y for the next section
      doc.y = currentY + 15;
 };
-
         const ioclSups = d.IOCLSupervisors || [];
 let ioclRows = ioclSups.map(s => {
     // 1. Build the "Added" string

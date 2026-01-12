@@ -107,8 +107,6 @@ function drawHeader(doc, bgColor) {
     
     // Logo Box (Left)
     doc.rect(startX,startY,80,95).stroke();
-    
-    // --- LOGO INSERTION LOGIC ---
     if (fs.existsSync('logo.png')) {
         try {
             doc.image('logo.png', startX, startY, { fit: [80, 95], align: 'center', valign: 'center' });
@@ -330,7 +328,17 @@ app.post('/api/update-status', async (req, res) => {
 
         if(action==='reject') { st='Rejected'; }
         else if(role==='Reviewer' && action==='review') { st='Pending Approval'; d.Reviewer_Sig=`${user} on ${now}`; }
-        else if(role==='Approver' && action==='approve') { st = st.includes('Closure') ? 'Closed' : 'Active'; if(st==='Closed') {d.Closure_Issuer_Sig=`${user} on ${now}`; d.Closure_Approver_Date=now; } else d.Approver_Sig=`${user} on ${now}`; }
+        else if(role==='Approver' && action==='approve') { 
+            // Fix F: Ensure Status Transition Logic for Closure
+            if (st.includes('Closure Pending Approval')) {
+                st = 'Closed';
+                d.Closure_Issuer_Sig = `${user} on ${now}`; 
+                d.Closure_Approver_Date = now;
+            } else {
+                st = 'Active';
+                d.Approver_Sig = `${user} on ${now}`;
+            }
+        }
         else if(action==='initiate_closure') { st='Closure Pending Review'; d.Closure_Requestor_Date=now; d.Closure_Receiver_Sig=`${user} on ${now}`; }
         else if(action==='reject_closure') { st='Active'; }
         else if(action==='approve_closure') { st = 'Closure Pending Approval'; d.Closure_Reviewer_Sig=`${user} on ${now}`; d.Closure_Reviewer_Date=now; }
@@ -449,7 +457,7 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.text(`IOCL Equipment / Machinery deployed at Site ${d.IoclEquip||'-'} | Contractor Equipment / Machinery deployed at Site ${d.ContEquip||'-'}`, 30, doc.y); doc.y+=12;
         doc.text(`Work Order: ${d.WorkOrder||'-'}`, 30, doc.y); doc.y+=20;
 
-        // --- AUTHORIZED SUPERVISORS TABLES ---
+        // --- AUTHORIZED SUPERVISORS TABLES (FIXED STRUCTURE) ---
         const drawSupTable = (title, headers, dataRows) => {
              if(doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
              doc.font('Helvetica-Bold').text(title, 30, doc.y); doc.y+=12;

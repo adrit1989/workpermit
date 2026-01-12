@@ -658,8 +658,8 @@
                 "11. Equipment electrically isolated and tagged vide Permit no.",
                 "12. Gas test: % LEL HCs = ______, Toxic gas (PPM) = ______, O2 (%) = ______",
                 "13. Running water hose / Fire extinguisher provided. Fire water system available.",
-                "14. Area cordoned off and Precautionary tag/Board provided.",
-                "15. CCTV monitoring facility available at site.",
+                "14. Area cordoned off and Precautionary tag/Board provided. CCTV monitoring facility available at site.",
+                "15. PESO approved spark elimination system provided on the mobile equipment/ vehicle provided.",
                 "16. Proper ventilation and Lighting provided."
             ],
             B: [
@@ -851,13 +851,16 @@
                 let pendingWith = "-";
                 if(p.Status.includes('Review')) pendingWith = p.ReviewerEmail ? p.ReviewerEmail.split('@')[0] : '-';
                 if(p.Status.includes('Approval')) pendingWith = p.ApproverEmail ? p.ApproverEmail.split('@')[0] : '-';
+                
                 const statusColor = p.Status.includes('Pending') ? 'text-red-600' : (p.Status==='Active' ? 'text-green-600' : 'text-gray-600');
                 const row = `<tr class="cursor-pointer hover:bg-orange-50 transition" onclick="window.openPermit('${p.PermitID}')"><td data-label="ID" class="font-bold text-blue-600 text-lg">${p.PermitID}</td><td data-label="Type" class="font-medium">${p.WorkType}</td><td data-label="Loc" class="text-gray-600">${p.LocationUnit}</td><td data-label="Status" class="font-bold ${statusColor}">${p.Status}</td><td data-label="With" class="text-sm text-gray-500">${pendingWith}</td><td data-label="Action"><span class="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-bold">OPEN</span></td></tr>`;
+                
                 let isAction = false;
                 const s = p.Status;
                 if(currentUser.Role === 'Reviewer') { if((s === 'Pending Review' || s === 'Renewal Pending Review' || s === 'Closure Pending Review') && p.ReviewerEmail === currentUser.Email) isAction = true; } 
                 else if(currentUser.Role === 'Approver') { if((s === 'Pending Approval' || s === 'Renewal Pending Approval' || s === 'Closure Pending Approval') && p.ApproverEmail === currentUser.Email) isAction = true; }
                 else if (currentUser.Role === 'Requester') { if (s.includes('Pending')) isAction = true; }
+
                 if(isAction) tP.innerHTML += row; else if(s === 'Active') tA.innerHTML += row; else tO.innerHTML += row;
             });
         }

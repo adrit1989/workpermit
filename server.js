@@ -312,7 +312,8 @@ app.post('/api/update-status', async (req, res) => {
         const { PermitID, action, role, user, comment, bgColor, IOCLSupervisors, ...extras } = req.body;
         const pool = await getConnection();
         const cur = await pool.request().input('p', PermitID).query("SELECT * FROM Permits WHERE PermitID=@p");
-        if(cur.recordset.length===0) return res.json({error:"Not found"});
+        
+        if(cur.recordset.length === 0) return res.json({error: "Not found"});
         
         let st = cur.recordset[0].Status;
         if (st === 'Closed') {
@@ -322,11 +323,9 @@ app.post('/api/update-status', async (req, res) => {
         let d = JSON.parse(cur.recordset[0].FullDataJSON);
         Object.assign(d, extras);
         if(bgColor) d.PdfBgColor = bgColor;
-        
-        if (IOCLSupervisors) {
-            d.IOCLSupervisors = IOCLSupervisors;
-        }
+        if (IOCLSupervisors) d.IOCLSupervisors = IOCLSupervisors;
 
+        // Save remarks based on role
         if(comment) {
             if(role === 'Reviewer') d.Reviewer_Remarks = comment;
             if(role === 'Approver') d.Approver_Remarks = comment;
@@ -337,47 +336,56 @@ app.post('/api/update-status', async (req, res) => {
 
         const now = getNowIST();
 
-        // --- RECTIFIED LOGIC ORDER: SPECIFIC CLOSURE ACTIONS FIRST ---
-        
+        // --- MODIFIED LOGIC FOR CLOSURE FLOW ---
+
+        // 1. Handle Closure Rejection (By Reviewer OR Approver)
+        // Requirement: "Closure reject by reviewer/approver > Goes to Active state"
         if(action === 'reject_closure') {
-            // Fix C & A: Rejecting closure reverts permit to Active state
             st = 'Active'; 
+            // Note: Reverting to Active allows the Requester to address issues and re-initiate closure.
         }
-        else if(action === 'approve_closure') {
-            // Fix C & A: Reviewer approving closure moves it to Approver
+        // 2. Handle Reviewer Closure Approval
+        // Requirement: "Closure approves by reviewer >> Goes to Approver"
+        else if(action === 'approve_closure' && role === 'Reviewer') {
             st = 'Closure Pending Approval'; 
-            d.Closure_Reviewer_Sig = `${user} on ${now}`; 
-            d.Closure_Reviewer_Date = now; 
+            d.Closure_Reviewer_Sig = `${user} on ${now}`;
+            d.Closure_Reviewer_Date = now;
         }
+        // 3. Handle Approver Actions (Standard & Closure)
+        else if(action === 'approve' && role === 'Approver') {
+            // Requirement: "Once approver receives closure request... Closure approves >> Goes to Closed state"
+            if(st.includes('Closure Pending Approval')) {
+                st = 'Closed';
+                d.Closure_Issuer_Sig = `${user} on ${now}`;
+                d.Closure_Approver_Date = now;
+            } else {
+                // Standard Permit Approval
+                st = 'Active';
+                d.Approver_Sig = `${user} on ${now}`;
+            }
+        }
+        // 4. Other Standard Actions
         else if(action === 'initiate_closure') {
-             st = 'Closure Pending Review'; 
-             d.Closure_Requestor_Date = now; 
-             d.Closure_Receiver_Sig = `${user} on ${now}`; 
+             st = 'Closure Pending Review';
+             d.Closure_Requestor_Date = now;
+             d.Closure_Receiver_Sig = `${user} on ${now}`;
         }
         else if(action === 'reject') {
              st = 'Rejected';
         }
         else if(role === 'Reviewer' && action === 'review') {
-             st = 'Pending Approval'; 
+             st = 'Pending Approval';
              d.Reviewer_Sig = `${user} on ${now}`;
         }
-        else if(role === 'Approver' && action === 'approve') { 
-            // Fix: Distinguish between Normal Approval and Closure Approval
-            if(st.includes('Closure Pending Approval')) {
-                st = 'Closed'; 
-                d.Closure_Issuer_Sig = `${user} on ${now}`; 
-                d.Closure_Approver_Date = now; 
-            } else {
-                st = 'Active'; 
-                d.Approver_Sig = `${user} on ${now}`; 
-            }
-        }
         
+        // --- END LOGIC ---
+
         await pool.request().input('p', PermitID).input('s', st).input('j', JSON.stringify(d)).query("UPDATE Permits SET Status=@s, FullDataJSON=@j WHERE PermitID=@p");
         res.json({success:true});
-    } catch(e){res.status(500).json({error:e.message})} 
+    } catch(e){
+        res.status(500).json({error:e.message});
+    } 
 });
-
 app.post('/api/renewal', async (req, res) => {
     try {
         const { PermitID, userRole, userName, action, rejectionReason, renewalWorkers, ...data } = req.body;

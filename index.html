@@ -519,6 +519,7 @@
                         <div id="iocl-sup-container-rev" class="space-y-2 mt-2"></div>
                         <button type="button" onclick="window.addIOCLRow('iocl-sup-container-rev')" class="mt-2 text-xs bg-gray-200 px-2 py-1 rounded hover:bg-gray-300 font-bold">+ Add Supervisor</button>
                      </div>
+
                      <div class="mb-2 font-bold text-sm text-gray-600">PPE Required:</div>
                      <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4" id="ppe-container"></div>
                      <textarea name="Reviewer_Remarks" id="Reviewer_Remarks" placeholder="Reviewer Remarks" class="w-full"></textarea>
@@ -533,8 +534,12 @@
                         <div id="iocl-sup-container-app" class="space-y-2 mt-2"></div>
                         <button type="button" onclick="window.addIOCLRow('iocl-sup-container-app')" class="mt-2 text-xs bg-gray-200 px-2 py-1 rounded hover:bg-gray-300 font-bold">+ Add Supervisor</button>
                      </div>
+
                      <textarea name="Approver_Remarks" id="Approver_Remarks" placeholder="Approver Remarks" class="w-full"></textarea>
-                     <div id="pdf-color-select" class="mt-2 hidden"><label>PDF Background:</label><select id="PdfBgColor"><option>White</option><option>Red</option><option>Green</option><option>Yellow</option><option>Auto</option></select></div>
+                     <div id="pdf-color-select" class="mt-2 hidden">
+                        <label>PDF Background:</label>
+                        <select id="PdfBgColor"><option>White</option><option>Red</option><option>Green</option><option>Yellow</option><option>Auto</option></select>
+                     </div>
                 </div>
 
                 <div id="iocl-sup-display-section" class="glass hidden">
@@ -547,7 +552,6 @@
 
                 <div id="renewals-section" class="glass hidden">
                     <h3 class="section-title">Renewals</h3>
-                    
                     <div id="pending-renewal-display" class="hidden bg-yellow-50 p-4 rounded-lg mb-4 border border-yellow-200">
                         <h4 class="font-bold text-yellow-800 text-sm uppercase">⚠️ Pending Renewal</h4>
                         <div class="text-sm grid grid-cols-1 gap-2 mt-2">
@@ -846,13 +850,16 @@
                 let pendingWith = "-";
                 if(p.Status.includes('Review')) pendingWith = p.ReviewerEmail ? p.ReviewerEmail.split('@')[0] : '-';
                 if(p.Status.includes('Approval')) pendingWith = p.ApproverEmail ? p.ApproverEmail.split('@')[0] : '-';
+                
                 const statusColor = p.Status.includes('Pending') ? 'text-red-600' : (p.Status==='Active' ? 'text-green-600' : 'text-gray-600');
                 const row = `<tr class="cursor-pointer hover:bg-orange-50 transition" onclick="window.openPermit('${p.PermitID}')"><td data-label="ID" class="font-bold text-blue-600 text-lg">${p.PermitID}</td><td data-label="Type" class="font-medium">${p.WorkType}</td><td data-label="Loc" class="text-gray-600">${p.LocationUnit}</td><td data-label="Status" class="font-bold ${statusColor}">${p.Status}</td><td data-label="With" class="text-sm text-gray-500">${pendingWith}</td><td data-label="Action"><span class="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-bold">OPEN</span></td></tr>`;
+                
                 let isAction = false;
                 const s = p.Status;
                 if(currentUser.Role === 'Reviewer') { if((s === 'Pending Review' || s === 'Renewal Pending Review' || s === 'Closure Pending Review') && p.ReviewerEmail === currentUser.Email) isAction = true; } 
                 else if(currentUser.Role === 'Approver') { if((s === 'Pending Approval' || s === 'Renewal Pending Approval' || s === 'Closure Pending Approval') && p.ApproverEmail === currentUser.Email) isAction = true; }
                 else if (currentUser.Role === 'Requester') { if (s.includes('Pending')) isAction = true; }
+
                 if(isAction) tP.innerHTML += row; else if(s === 'Active') tA.innerHTML += row; else tO.innerHTML += row;
             });
         }
@@ -1074,6 +1081,8 @@
                 if(r==='Reviewer') { 
                    document.getElementById("fs-reviewer-section").classList.remove('hidden');
                    document.querySelectorAll('#fs-reviewer-section *, #hazards-section input').forEach(e=>e.disabled=false);
+                   document.getElementById("iocl-sup-display-section").classList.add('hidden');
+                   document.getElementById("iocl-reviewer-wrapper").classList.remove('hidden'); 
                    btns=`<button type="button" onclick="window.upd('reject')" class="bg-red-600 text-white px-4 py-3 rounded-lg font-bold flex-1">Reject</button><button type="button" onclick="window.upd('review')" class="bg-green-600 text-white px-4 py-3 rounded-lg font-bold flex-1">Submit Review</button>`; 
                 }
             }
@@ -1082,6 +1091,8 @@
                if(r==='Approver') { 
                    document.getElementById("fs-approver-section").classList.remove('hidden');
                    document.getElementById("Approver_Remarks").disabled=false; 
+                   document.getElementById("iocl-sup-display-section").classList.add('hidden');
+                   document.getElementById("iocl-approver-wrapper").classList.remove('hidden');
                    btns=`<button type="button" onclick="window.upd('reject')" class="bg-red-600 text-white px-4 py-3 rounded-lg font-bold flex-1">Reject</button><button type="button" onclick="window.upd('approve')" class="bg-green-600 text-white px-4 py-3 rounded-lg font-bold flex-1">Approve</button>`; 
                }
             }
@@ -1195,9 +1206,17 @@
 
             const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
             let ioclData = [];
-            // Req B & C: Only fetch data from the container valid for the specific role
-            if(currentUser.Role === 'Reviewer') ioclData = window.getIOCLData('iocl-sup-container-rev');
-            if(currentUser.Role === 'Approver') ioclData = window.getIOCLData('iocl-sup-container-app');
+            
+            // KEY FIX: Default to existing data so we don't wipe it if we aren't editing
+            ioclData = window.currentPermitIOCLData || []; 
+
+            // Only fetch from DOM if the edit containers are visible for the user
+            if(currentUser.Role === 'Reviewer' && !document.getElementById('iocl-reviewer-wrapper').classList.contains('hidden')) {
+                 ioclData = window.getIOCLData('iocl-sup-container-rev');
+            }
+            if(currentUser.Role === 'Approver' && !document.getElementById('iocl-approver-wrapper').classList.contains('hidden')) {
+                 ioclData = window.getIOCLData('iocl-sup-container-app');
+            }
 
             const body = { 
                 PermitID: currentPermitId, action: act, role: currentUser.Role, user: currentUser.name,

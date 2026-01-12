@@ -108,6 +108,7 @@ function drawHeader(doc, bgColor) {
     // Logo Box (Left)
     doc.rect(startX,startY,80,95).stroke();
     
+    // --- LOGO INSERTION LOGIC ---
     if (fs.existsSync('logo.png')) {
         try {
             doc.image('logo.png', startX, startY, { fit: [80, 95], align: 'center', valign: 'center' });
@@ -336,13 +337,14 @@ app.post('/api/update-status', async (req, res) => {
 
         const now = getNowIST();
 
-        // ---------------- FIXED LOGIC BLOCK START (Fix C & A) ----------------
-        // Priority checks for Closure & Specific Actions first
+        // --- RECTIFIED LOGIC ORDER: SPECIFIC CLOSURE ACTIONS FIRST ---
         
         if(action === 'reject_closure') {
-            st = 'Active'; // Revert to Active
+            // Fix C & A: Rejecting closure reverts permit to Active state
+            st = 'Active'; 
         }
         else if(action === 'approve_closure') {
+            // Fix C & A: Reviewer approving closure moves it to Approver
             st = 'Closure Pending Approval'; 
             d.Closure_Reviewer_Sig = `${user} on ${now}`; 
             d.Closure_Reviewer_Date = now; 
@@ -360,18 +362,16 @@ app.post('/api/update-status', async (req, res) => {
              d.Reviewer_Sig = `${user} on ${now}`;
         }
         else if(role === 'Approver' && action === 'approve') { 
-            // Final Closure Check
+            // Fix: Distinguish between Normal Approval and Closure Approval
             if(st.includes('Closure Pending Approval')) {
                 st = 'Closed'; 
                 d.Closure_Issuer_Sig = `${user} on ${now}`; 
                 d.Closure_Approver_Date = now; 
             } else {
-                // Normal Approval
                 st = 'Active'; 
                 d.Approver_Sig = `${user} on ${now}`; 
             }
         }
-        // ---------------- FIXED LOGIC BLOCK END ----------------
         
         await pool.request().input('p', PermitID).input('s', st).input('j', JSON.stringify(d)).query("UPDATE Permits SET Status=@s, FullDataJSON=@j WHERE PermitID=@p");
         res.json({success:true});
@@ -489,18 +489,18 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.text(`IOCL Equipment: ${d.IoclEquip||'-'} | Contractor Equipment: ${d.ContEquip||'-'}`, 30, doc.y); doc.y+=12;
         doc.text(`Work Order: ${d.WorkOrder||'-'}`, 30, doc.y); doc.y+=20;
 
-        // --- AUTHORIZED SUPERVISORS TABLES ---
+        // --- AUTHORIZED SUPERVISORS TABLES (FIXED GAP) ---
         const drawSupTable = (title, headers, dataRows) => {
              if(doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
              doc.font('Helvetica-Bold').text(title, 30, doc.y); 
-             // FIX B: Minimizing gap
+             // FIX B: Minimizing gap explicitly
              doc.y+=5; 
              
              // Headers
              let hx = 30;
              const headerY = doc.y;
              headers.forEach(h => { doc.rect(hx, headerY, h.w, 15).stroke(); doc.text(h.t, hx+2, headerY+4); hx += h.w; });
-             // FIX B: Force start Y for rows to be immediately below header
+             // FIX B: Force start Y
              doc.y = headerY + 15;
              
              // Rows
@@ -508,11 +508,12 @@ app.get('/api/download-pdf/:id', async (req, res) => {
              dataRows.forEach(row => {
                  if(doc.y > 700) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
                  let rx = 30;
-                 const rowY = doc.y; 
-                 const rowH = 15; 
+                 const rowY = doc.y;
+                 const rowH = 15;
                  
                  row.forEach((cell, idx) => {
                      doc.rect(rx, rowY, headers[idx].w, rowH).stroke(); 
+                     // Truncate text
                      doc.text(cell, rx+2, rowY+4, {width: headers[idx].w - 4, lineBreak: false, ellipsis: true}); 
                      rx += headers[idx].w;
                  });

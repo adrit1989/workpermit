@@ -10,7 +10,7 @@
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyADwuqMDCwNSaZKBnWURDCYdqlMxfiWBnU"></script>
     
     <style>
-        /* GLOBAL STYLES */
+        /* --- GLOBAL STYLES --- */
         body { 
             background-color: #f3f4f6; 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
@@ -646,8 +646,8 @@
         const CL_DATA = {
             A: [
                 "1. Equipment / Work Area inspected.",
-                "2. Surrounding area checked, cleaned and covered. Oil/RAGS/Grass Etc removed.",
-                "3. Manholes, Sewers, CBD etc. and hot nearby surface covered.",
+                "2. Surrounding area checked, cleaned and covered. Oil/RAGS/Grass etc. removed.",
+                "3. Sewers, Manholes, CBD etc. and hot nearby surface covered.",
                 "4. Considered hazards from other routine, non-routine operations and concerned person alerted.",
                 "5. Equipment blinded/ disconnected/ closed/ isolated/ wedge opened.",
                 "6. Equipment properly drained and depressurized.",
@@ -664,20 +664,20 @@
             ],
             B: [
                 "1. Proper means of exit / escape provided.",
-                "2. Standby personnel provided from Mainline/ Maint. / Contractor/HSE.",
+                "2. Standby personnel provided from Mainline/ Maint. / Contractor/ HSE.",
                 "3. Checked for oil and Gas trapped behind the lining in equipment.",
                 "4. Shield provided against spark.",
                 "5. Portable equipment / nozzle properly grounded.",
                 "6. Standby persons provided for entry to confined space.",
                 "7. Adequate Communication Provided to Stand by Person.",
                 "8. Attendant Trained Provided With Rescue Equipment/SCABA.",
-                "9. Space Adequately Cooled for Safe Entry Of Person.",
+                "9. Adequately Cooled Space for Safe Entry Of Person.",
                 "10. Continuous Inert Gas Flow Arranged.",
                 "11. Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding.",
                 "12. Gas Cylinders are kept outside the confined Space.",
                 "13. Spark arrestor Checked on mobile Equipments.",
                 "14. Welding Machine Checked for Safe Location.",
-                "15. Permit taken for working at height Vide Permit No."
+                "15. Permit taken for working at height Vide Permit No. __________."
             ],
             C: [
                 "1. PESO approved spark elimination system provided on the mobile equipment/ vehicle provided."
@@ -851,16 +851,13 @@
                 let pendingWith = "-";
                 if(p.Status.includes('Review')) pendingWith = p.ReviewerEmail ? p.ReviewerEmail.split('@')[0] : '-';
                 if(p.Status.includes('Approval')) pendingWith = p.ApproverEmail ? p.ApproverEmail.split('@')[0] : '-';
-                
                 const statusColor = p.Status.includes('Pending') ? 'text-red-600' : (p.Status==='Active' ? 'text-green-600' : 'text-gray-600');
                 const row = `<tr class="cursor-pointer hover:bg-orange-50 transition" onclick="window.openPermit('${p.PermitID}')"><td data-label="ID" class="font-bold text-blue-600 text-lg">${p.PermitID}</td><td data-label="Type" class="font-medium">${p.WorkType}</td><td data-label="Loc" class="text-gray-600">${p.LocationUnit}</td><td data-label="Status" class="font-bold ${statusColor}">${p.Status}</td><td data-label="With" class="text-sm text-gray-500">${pendingWith}</td><td data-label="Action"><span class="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-bold">OPEN</span></td></tr>`;
-                
                 let isAction = false;
                 const s = p.Status;
                 if(currentUser.Role === 'Reviewer') { if((s === 'Pending Review' || s === 'Renewal Pending Review' || s === 'Closure Pending Review') && p.ReviewerEmail === currentUser.Email) isAction = true; } 
                 else if(currentUser.Role === 'Approver') { if((s === 'Pending Approval' || s === 'Renewal Pending Approval' || s === 'Closure Pending Approval') && p.ApproverEmail === currentUser.Email) isAction = true; }
                 else if (currentUser.Role === 'Requester') { if (s.includes('Pending')) isAction = true; }
-
                 if(isAction) tP.innerHTML += row; else if(s === 'Active') tA.innerHTML += row; else tO.innerHTML += row;
             });
         }
@@ -1082,6 +1079,9 @@
                 if(r==='Reviewer') { 
                    document.getElementById("fs-reviewer-section").classList.remove('hidden');
                    document.querySelectorAll('#fs-reviewer-section *, #hazards-section input').forEach(e=>e.disabled=false);
+                   // Reviewer Edit Mode
+                   document.getElementById("iocl-sup-display-section").classList.add('hidden');
+                   document.getElementById("iocl-reviewer-wrapper").classList.remove('hidden'); 
                    btns=`<button type="button" onclick="window.upd('reject')" class="bg-red-600 text-white px-4 py-3 rounded-lg font-bold flex-1">Reject</button><button type="button" onclick="window.upd('review')" class="bg-green-600 text-white px-4 py-3 rounded-lg font-bold flex-1">Submit Review</button>`; 
                 }
             }
@@ -1090,6 +1090,9 @@
                if(r==='Approver') { 
                    document.getElementById("fs-approver-section").classList.remove('hidden');
                    document.getElementById("Approver_Remarks").disabled=false; 
+                   // Approver Edit Mode
+                   document.getElementById("iocl-sup-display-section").classList.add('hidden');
+                   document.getElementById("iocl-approver-wrapper").classList.remove('hidden');
                    btns=`<button type="button" onclick="window.upd('reject')" class="bg-red-600 text-white px-4 py-3 rounded-lg font-bold flex-1">Reject</button><button type="button" onclick="window.upd('approve')" class="bg-green-600 text-white px-4 py-3 rounded-lg font-bold flex-1">Approve</button>`; 
                }
             }

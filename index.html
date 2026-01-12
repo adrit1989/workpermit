@@ -10,7 +10,7 @@
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyADwuqMDCwNSaZKBnWURDCYdqlMxfiWBnU"></script>
     
     <style>
-        /* --- GLOBAL STYLES --- */
+        /* GLOBAL STYLES */
         body { 
             background-color: #f3f4f6; 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
@@ -552,6 +552,7 @@
 
                 <div id="renewals-section" class="glass hidden">
                     <h3 class="section-title">Renewals</h3>
+                    
                     <div id="pending-renewal-display" class="hidden bg-yellow-50 p-4 rounded-lg mb-4 border border-yellow-200">
                         <h4 class="font-bold text-yellow-800 text-sm uppercase">⚠️ Pending Renewal</h4>
                         <div class="text-sm grid grid-cols-1 gap-2 mt-2">
@@ -639,14 +640,14 @@
         let mapInstance = null; 
         let chartS = null; 
         let chartT = null;
-        let currentPermitWorkers = []; // NEW: Store workers for renewal logic
+        let currentPermitWorkers = []; 
         const loader = document.getElementById('loader');
 
         const CL_DATA = {
             A: [
                 "1. Equipment / Work Area inspected.",
-                "2. Surrounding area checked, cleaned and covered. Oil/RAGS/Grass etc. removed.",
-                "3. Sewers, Manholes, CBD etc. and hot nearby surface covered.",
+                "2. Surrounding area checked, cleaned and covered. Oil/RAGS/Grass Etc removed.",
+                "3. Manholes, Sewers, CBD etc. and hot nearby surface covered.",
                 "4. Considered hazards from other routine, non-routine operations and concerned person alerted.",
                 "5. Equipment blinded/ disconnected/ closed/ isolated/ wedge opened.",
                 "6. Equipment properly drained and depressurized.",
@@ -657,26 +658,26 @@
                 "11. Equipment electrically isolated and tagged vide Permit no.",
                 "12. Gas test: % LEL HCs = ______, Toxic gas (PPM) = ______, O2 (%) = ______",
                 "13. Running water hose / Fire extinguisher provided. Fire water system available.",
-                "14. Area cordoned off and Precautionary tag/Board provided. CCTV monitoring facility available at site.",
-                "15. PESO approved spark elimination system provided on the mobile equipment/ vehicle provided.",
+                "14. Area cordoned off and Precautionary tag/Board provided.",
+                "15. CCTV monitoring facility available at site.",
                 "16. Proper ventilation and Lighting provided."
             ],
             B: [
                 "1. Proper means of exit / escape provided.",
-                "2. Standby personnel provided from Mainline/ Maint. / Contractor/ HSE.",
+                "2. Standby personnel provided from Mainline/ Maint. / Contractor/HSE.",
                 "3. Checked for oil and Gas trapped behind the lining in equipment.",
                 "4. Shield provided against spark.",
                 "5. Portable equipment / nozzle properly grounded.",
                 "6. Standby persons provided for entry to confined space.",
                 "7. Adequate Communication Provided to Stand by Person.",
                 "8. Attendant Trained Provided With Rescue Equipment/SCABA.",
-                "9. Adequately Cooled Space for Safe Entry Of Person.",
+                "9. Space Adequately Cooled for Safe Entry Of Person.",
                 "10. Continuous Inert Gas Flow Arranged.",
                 "11. Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding.",
                 "12. Gas Cylinders are kept outside the confined Space.",
                 "13. Spark arrestor Checked on mobile Equipments.",
                 "14. Welding Machine Checked for Safe Location.",
-                "15. Permit taken for working at height Vide Permit No. __________."
+                "15. Permit taken for working at height Vide Permit No."
             ],
             C: [
                 "1. PESO approved spark elimination system provided on the mobile equipment/ vehicle provided."
@@ -1081,8 +1082,6 @@
                 if(r==='Reviewer') { 
                    document.getElementById("fs-reviewer-section").classList.remove('hidden');
                    document.querySelectorAll('#fs-reviewer-section *, #hazards-section input').forEach(e=>e.disabled=false);
-                   document.getElementById("iocl-sup-display-section").classList.add('hidden');
-                   document.getElementById("iocl-reviewer-wrapper").classList.remove('hidden'); 
                    btns=`<button type="button" onclick="window.upd('reject')" class="bg-red-600 text-white px-4 py-3 rounded-lg font-bold flex-1">Reject</button><button type="button" onclick="window.upd('review')" class="bg-green-600 text-white px-4 py-3 rounded-lg font-bold flex-1">Submit Review</button>`; 
                 }
             }
@@ -1091,8 +1090,6 @@
                if(r==='Approver') { 
                    document.getElementById("fs-approver-section").classList.remove('hidden');
                    document.getElementById("Approver_Remarks").disabled=false; 
-                   document.getElementById("iocl-sup-display-section").classList.add('hidden');
-                   document.getElementById("iocl-approver-wrapper").classList.remove('hidden');
                    btns=`<button type="button" onclick="window.upd('reject')" class="bg-red-600 text-white px-4 py-3 rounded-lg font-bold flex-1">Reject</button><button type="button" onclick="window.upd('approve')" class="bg-green-600 text-white px-4 py-3 rounded-lg font-bold flex-1">Approve</button>`; 
                }
             }
@@ -1206,17 +1203,9 @@
 
             const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
             let ioclData = [];
-            
-            // KEY FIX: Default to existing data so we don't wipe it if we aren't editing
-            ioclData = window.currentPermitIOCLData || []; 
-
-            // Only fetch from DOM if the edit containers are visible for the user
-            if(currentUser.Role === 'Reviewer' && !document.getElementById('iocl-reviewer-wrapper').classList.contains('hidden')) {
-                 ioclData = window.getIOCLData('iocl-sup-container-rev');
-            }
-            if(currentUser.Role === 'Approver' && !document.getElementById('iocl-approver-wrapper').classList.contains('hidden')) {
-                 ioclData = window.getIOCLData('iocl-sup-container-app');
-            }
+            // Req B & C: Only fetch data from the container valid for the specific role
+            if(currentUser.Role === 'Reviewer') ioclData = window.getIOCLData('iocl-sup-container-rev');
+            if(currentUser.Role === 'Approver') ioclData = window.getIOCLData('iocl-sup-container-app');
 
             const body = { 
                 PermitID: currentPermitId, action: act, role: currentUser.Role, user: currentUser.name,

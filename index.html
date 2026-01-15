@@ -109,7 +109,7 @@
 
             <form id="pf" class="space-y-4">
                 <input type="hidden" id="PermitID" name="PermitID"><input type="hidden" id="Status" name="Status">
-                <input type="hidden" name="GSR_Accepted" value="Y"> <div class="glass"><h3 class="section-title">1. Permit Details</h3><div class="grid grid-cols-1 md:grid-cols-4 gap-4"><div><label class="text-xs font-bold text-gray-500">Work Type</label><select name="WorkType" id="WorkType"><option>Hot</option><option>Cold</option><option>Confined Space</option><option>Excavation</option></select></div><div><label class="text-xs font-bold text-gray-500">Specific Work</label><input name="WorkTypeOther" id="WorkTypeOther"></div><div><label class="text-xs font-bold text-gray-500">Location (GPS) - Optional</label><div class="flex gap-2"><input name="ExactLocation" id="ExactLocation" class="flex-1" placeholder="Coords (Optional)"><button type="button" onclick="window.getGeo()" class="bg-orange-100 text-orange-600 px-4 rounded-lg font-bold border border-orange-200" id="btn-get-geo">📍 GPS</button></div></div><input type="hidden" id="Latitude" name="Latitude"><input type="hidden" id="Longitude" name="Longitude"><div><label class="text-xs font-bold text-gray-500">Location Details</label><input name="WorkLocationDetail" id="WorkLocationDetail"></div><div><label class="text-xs font-bold text-gray-500">Section/Unit</label><input name="LocationUnit" id="LocationUnit" value="Pipeline"></div><div><label class="text-xs font-bold text-gray-500">Valid From</label><input type="datetime-local" name="ValidFrom" id="ValidFrom" onchange="window.checkDate()"></div><div><label class="text-xs font-bold text-gray-500">Valid To</label><input type="datetime-local" name="ValidTo" id="ValidTo" onchange="window.checkDate()"></div><div class="md:col-span-2"><label class="text-xs font-bold text-gray-500">Requester</label><input name="RequesterName" id="RequesterName"></div><div class="md:col-span-2"><label class="text-xs font-bold text-gray-500">Reviewer</label><select name="ReviewerEmail" id="ReviewerEmail"></select></div><div class="md:col-span-2"><label class="text-xs font-bold text-gray-500">Approver</label><select name="ApproverEmail" id="ApproverEmail"></select></div><div><label class="text-xs font-bold text-gray-500">Issued To Dept</label><input name="IssuedToDept" id="IssuedToDept"></div><div><label class="text-xs font-bold text-gray-500">Vendor</label><input name="Vendor" id="Vendor" readonly></div><div><label class="text-xs font-bold text-gray-500">Security Guard</label><input name="SecurityGuard" id="SecurityGuard"></div><div><label class="text-xs font-bold text-gray-500">Emergency Contact</label><input name="EmergencyContact" id="EmergencyContact"></div><div><label class="text-xs font-bold text-gray-500">Fire Stn/Hosp</label><input name="FireStation" id="FireStation"></div><div class="md:col-span-4"><label class="text-xs font-bold text-gray-500">Description</label><textarea name="Desc" id="Desc" rows="2"></textarea></div></div></div>
+                <div class="glass"><h3 class="section-title">1. Permit Details</h3><div class="grid grid-cols-1 md:grid-cols-4 gap-4"><div><label class="text-xs font-bold text-gray-500">Work Type</label><select name="WorkType" id="WorkType"><option>Hot</option><option>Cold</option><option>Confined Space</option><option>Excavation</option></select></div><div><label class="text-xs font-bold text-gray-500">Specific Work</label><input name="WorkTypeOther" id="WorkTypeOther"></div><div><label class="text-xs font-bold text-gray-500">Location (GPS) - Optional</label><div class="flex gap-2"><input name="ExactLocation" id="ExactLocation" class="flex-1" placeholder="Coords (Optional)"><button type="button" onclick="window.getGeo()" class="bg-orange-100 text-orange-600 px-4 rounded-lg font-bold border border-orange-200" id="btn-get-geo">📍 GPS</button></div></div><input type="hidden" id="Latitude" name="Latitude"><input type="hidden" id="Longitude" name="Longitude"><div><label class="text-xs font-bold text-gray-500">Location Details</label><input name="WorkLocationDetail" id="WorkLocationDetail"></div><div><label class="text-xs font-bold text-gray-500">Section/Unit</label><input name="LocationUnit" id="LocationUnit" value="Pipeline"></div><div><label class="text-xs font-bold text-gray-500">Valid From</label><input type="datetime-local" name="ValidFrom" id="ValidFrom" onchange="window.checkDate()"></div><div><label class="text-xs font-bold text-gray-500">Valid To</label><input type="datetime-local" name="ValidTo" id="ValidTo" onchange="window.checkDate()"></div><div class="md:col-span-2"><label class="text-xs font-bold text-gray-500">Requester</label><input name="RequesterName" id="RequesterName"></div><div class="md:col-span-2"><label class="text-xs font-bold text-gray-500">Reviewer</label><select name="ReviewerEmail" id="ReviewerEmail"></select></div><div class="md:col-span-2"><label class="text-xs font-bold text-gray-500">Approver</label><select name="ApproverEmail" id="ApproverEmail"></select></div><div><label class="text-xs font-bold text-gray-500">Issued To Dept</label><input name="IssuedToDept" id="IssuedToDept"></div><div><label class="text-xs font-bold text-gray-500">Vendor</label><input name="Vendor" id="Vendor" readonly></div><div><label class="text-xs font-bold text-gray-500">Security Guard</label><input name="SecurityGuard" id="SecurityGuard"></div><div><label class="text-xs font-bold text-gray-500">Emergency Contact</label><input name="EmergencyContact" id="EmergencyContact"></div><div><label class="text-xs font-bold text-gray-500">Fire Stn/Hosp</label><input name="FireStation" id="FireStation"></div><div class="md:col-span-4"><label class="text-xs font-bold text-gray-500">Description</label><textarea name="Desc" id="Desc" rows="2"></textarea></div></div></div>
                 <div class="glass" id="section-e"><h3 class="section-title">E. References</h3><div class="grid grid-cols-1 md:grid-cols-4 gap-4"><input name="SopNo" id="SopNo" placeholder="SOP/SWP/SMP No"><input name="JsaNo" id="JsaNo" placeholder="JSA No"><input name="IoclEquip" id="IoclEquip" placeholder="IOCL Equip"><input name="ContEquip" id="ContEquip" placeholder="Contractor Equip"><input name="WorkOrder" id="WorkOrder" placeholder="Work Order No"></div></div>
                 <div class="glass"><h3 class="section-title">2. Checklists</h3><div id="checklists-wrapper" class="space-y-4"></div></div>
                 <div class="glass" id="worker-select-section"><h3 class="section-title">Workers (Approved)</h3><div id="worker-checkboxes" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div><div id="worker-readonly-table" class="hidden overflow-x-auto"><table class="mobile-table w-full text-xs text-left"><thead class="hidden md:table-header-group"><tr><th>Name</th><th>Gender</th><th>Age</th><th>Contractor</th></tr></thead><tbody class="divide-y"></tbody></table></div></div>
@@ -131,6 +131,16 @@
                 </div>
 
                 <div id="signature-history" class="glass hidden"><h3 class="section-title">History</h3><div class="grid grid-cols-1 gap-2 text-xs"><div class="border p-3 rounded bg-gray-50 flex justify-between"><strong>Approval:</strong> <span id="sig-app" class="text-right"></span></div><div class="border p-3 rounded bg-gray-50 flex justify-between"><strong>Renewal:</strong> <span id="sig-ren" class="text-right"></span></div><div class="border p-3 rounded bg-gray-50 flex justify-between"><strong>Closure:</strong> <span id="sig-clos" class="text-right"></span></div></div></div>
+                
+                <div id="gsr-container" class="glass border-l-4 border-orange-600 bg-orange-50 hidden">
+                    <label class="flex items-start gap-3 p-2 cursor-pointer">
+                        <input type="checkbox" id="gsr-check" class="mt-1 w-6 h-6 text-orange-600 rounded focus:ring-orange-500">
+                        <span class="text-sm font-bold text-gray-800 text-justify">
+                            I have read, understood and accepted all terms, conditions and non-compliance penalty of IOCL Golden Safety Rules. I shall ensure all workers are complied to all these rules and in case of any violation, penalty will be imposed by IOCL and I shall accept such penalties without any further challenge.
+                        </span>
+                    </label>
+                </div>
+
                 <div id="actions" class="mt-4 flex flex-col md:flex-row justify-end gap-2 sticky bottom-0 bg-white p-4 shadow-top z-50 border-t"></div>
             </form>
         </div>
@@ -147,7 +157,6 @@
         let currentPermitId = null; 
         const loader = document.getElementById('loader');
 
-        // RECTIFIED: Matching checklist exactly with Server
         const CL_DATA = { 
             A: [
                 "1. Equipment / Work Area inspected.", 
@@ -213,7 +222,6 @@
                 h += CL_DATA[sec].map((t, i) => {
                     const id = `${sec}_Q${i+1}`;
                     let remInput = `<input name="${id}_Detail" placeholder="Rem" class="text-sm mt-2 w-full border-gray-200">`;
-                    // RECTIFIED: Special handling for Gas Test inputs
                     if(sec==='A' && i===11) {
                          remInput = `<div class="flex gap-1 mt-2"><input name="GP_Q12_HC" placeholder="HC % LEL" class="w-1/3"><input name="GP_Q12_ToxicGas" placeholder="Tox PPM" class="w-1/3"><input name="GP_Q12_Oxygen" placeholder="O2 %" class="w-1/3"></div>`;
                     }
@@ -243,14 +251,12 @@
             if(act === 'create') { document.getElementById('w-id').value = ''; document.querySelectorAll('#worker-form-container input').forEach(i => i.value = ''); } 
             else if (act === 'edit_request' && data) { 
                 document.getElementById('w-id').value = data.WorkerID; document.getElementById('w-name').value = data.Name; document.getElementById('w-father').value = data.Father; document.getElementById('w-address').value = data.Address; document.getElementById('w-contact').value = data.Contact; document.getElementById('w-idcard').value = data.ID; document.getElementById('w-gender').value = data.Gender; document.getElementById('w-age').value = data.Age; 
-                // RECTIFIED: ID Type handling
                 const idType = data.IDType || "Voter Card"; const isStandard = ["Voter Card", "PAN Card"].includes(idType); document.getElementById("w-id-type").value = isStandard ? idType : "Other"; window.toggleOtherID(); if(!isStandard) document.getElementById("w-id-type-other").value = idType; 
             } 
         }
         
         window.saveWorker = async function(act) { 
             const idTypeRaw = document.getElementById("w-id-type").value; const idTypeFinal = idTypeRaw === "Other" ? document.getElementById("w-id-type-other").value : idTypeRaw; 
-            // RECTIFIED: Age Validation
             if(parseInt(document.getElementById("w-age").value) < 18) { alert("Worker must be 18+"); return; }
             const body = { Action: act, Role: currentUser.Role, RequestorEmail: currentUser.Email, WorkerID: document.getElementById('w-id').value, ApproverName: currentUser.name, RequestorName: currentUser.name, Details: { Name:document.getElementById("w-name").value, Father:document.getElementById("w-father").value, Address:document.getElementById("w-address").value, Contact:document.getElementById("w-contact").value, ID:document.getElementById("w-idcard").value, Gender:document.getElementById("w-gender").value, Age:document.getElementById("w-age").value, IDType: idTypeFinal } }; 
             const res = await apiCall('/save-worker', 'POST', body); if(res.success) { alert("Saved"); loadWorkers('dashboard'); document.getElementById('worker-form-container').classList.add('hidden'); } else alert(res.error); 
@@ -292,7 +298,7 @@ window.openPermit = async function(id) {
         e.disabled=true; 
     });
     
-    // RECTIFIED: Specific Closure Remarks
+    // Specific Closure Remarks
     safeSet("Closure_Requestor_Remarks", p.Closure_Requestor_Remarks || "");
     safeSet("Closure_Reviewer_Remarks", p.Closure_Reviewer_Remarks || "");
     safeSet("Closure_Approver_Remarks", p.Closure_Approver_Remarks || "");
@@ -423,7 +429,7 @@ window.openPermit = async function(id) {
         document.getElementById("closure-section").classList.remove('hidden'); document.getElementById("div-closure-req").classList.remove('hidden');
         setText("ts-clos-req", p.Closure_Requestor_Date);
         
-        // RECTIFIED: Site Restored Check Logic
+        // Site Restored Check Logic
         document.getElementById("Site_Restored_Check").checked = (p.Site_Restored_Check === 'Y');
         document.getElementById("Site_Restored_Check").disabled = true;
         
@@ -449,6 +455,12 @@ window.openPermit = async function(id) {
     const lastRenEntry = JSON.parse(p.RenewalsJSON||"[]").pop();
     setText("sig-ren", (lastRenEntry && lastRenEntry.app_name) ? `${lastRenEntry.app_name} on ${lastRenEntry.app_at}` : 'None');
     setText("sig-clos", p.Closure_Approver_Sig || 'Pending');
+    
+    // NEW GSR LOGIC: READ-ONLY IF EXISTS
+    const gsrEl = document.getElementById("gsr-check");
+    gsrEl.checked = (p.GSR_Accepted === 'Y');
+    gsrEl.disabled = true;
+    document.getElementById("gsr-container").classList.remove('hidden');
 
     document.getElementById("actions").innerHTML = btns;
     document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-form").classList.remove('hidden');
@@ -461,7 +473,7 @@ window.openPermit = async function(id) {
 
     const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
     
-    // RECTIFIED: Preserve IOCL Data when non-authorized users update status
+    // Preserve IOCL Data when non-authorized users update status
     let ioclData = [];
     const isReviewerEditing = (currentUser.Role === 'Reviewer' && !document.getElementById('iocl-sup-container-rev').parentElement.classList.contains('hidden'));
     const isApproverEditing = (currentUser.Role === 'Approver' && !document.getElementById('iocl-sup-container-app').parentElement.classList.contains('hidden'));
@@ -498,7 +510,7 @@ window.openPermit = async function(id) {
     if(res.success) showDashboard(); else alert(res.error);
 }
 
-    // RECTIFIED: Renewal Logic to include Worker List
+    // Renewal Logic to include Worker List
     window.submitRenewal = async function(act) { 
         const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ''; }; 
         const vf = new Date(getVal("RenewalValidFrom")); const vt = new Date(getVal("RenewalValidTo")); 
@@ -516,8 +528,62 @@ window.openPermit = async function(id) {
         if(res.success) { alert("Done"); showDashboard(); } else alert(res.error); 
     }
     
-    window.showNewPermit = async function() { document.getElementById("pf").reset(); currentPermitId=null; document.getElementById("Status").value="New"; document.getElementById("permit-header-display").innerText = "New Permit"; document.getElementById("permit-worker-audit-display").classList.add("hidden"); document.getElementById("iocl-sup-display-section").classList.add('hidden'); document.getElementById("iocl-reviewer-wrapper").classList.add('hidden'); document.getElementById("iocl-approver-wrapper").classList.add('hidden'); const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); if(rS && aS) { rS.innerHTML=""; aS.innerHTML=""; if(usersData){ usersData.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); usersData.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); } } document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false); const safeSet = (id, val) => { const el = document.getElementById(id); if(el) { el.value = val; } }; safeSet("RequesterName", currentUser.name); safeSet("Vendor", currentUser.name); document.getElementById("Vendor").readOnly=true; document.getElementById("RequesterName").disabled=false; await loadWorkers('permit_dropdown'); document.querySelectorAll('#worker-checkboxes input').forEach(c => c.disabled = false); document.getElementById('worker-checkboxes').classList.remove('hidden'); document.getElementById('worker-readonly-table').classList.add('hidden'); document.getElementById("fs-reviewer-section").classList.add('hidden'); document.getElementById("fs-approver-section").classList.add('hidden'); document.getElementById("renewals-section").classList.add('hidden'); document.getElementById("closure-section").classList.add('hidden'); document.getElementById("actions").innerHTML = `<button type="button" onclick="window.savePermit()" class="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg">Submit Permit</button>`; document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-form").classList.remove('hidden'); }
-    window.savePermit = async function() { document.getElementById('loader').style.display = 'flex'; try { const fd=new FormData(document.getElementById("pf")); document.querySelectorAll('input[type="checkbox"]').forEach(c=>fd.set(c.name, c.checked?"Y":"N")); const selectedWorkers = []; document.querySelectorAll('#worker-checkboxes input:checked').forEach(c => { selectedWorkers.push(JSON.parse(c.value)); }); fd.append("SelectedWorkers", JSON.stringify(selectedWorkers)); fd.append("RequesterEmail", currentUser.Email); fd.append("Latitude", document.getElementById("Latitude").value); fd.append("Longitude", document.getElementById("Longitude").value); if(currentPermitId) fd.set("PermitID", currentPermitId); const res=await fetch(API+'/save-permit', {method:'POST', body:fd}); const json=await res.json(); if(json.success){alert("Saved: "+json.permitId); showDashboard();} else alert(json.error); } finally { document.getElementById('loader').style.display = 'none'; } }
+    window.showNewPermit = async function() { 
+        document.getElementById("pf").reset(); currentPermitId=null; 
+        document.getElementById("Status").value="New"; document.getElementById("permit-header-display").innerText = "New Permit"; 
+        document.getElementById("permit-worker-audit-display").classList.add("hidden"); 
+        document.getElementById("iocl-sup-display-section").classList.add('hidden'); 
+        document.getElementById("iocl-reviewer-wrapper").classList.add('hidden'); 
+        document.getElementById("iocl-approver-wrapper").classList.add('hidden'); 
+        
+        const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); 
+        if(rS && aS) { rS.innerHTML=""; aS.innerHTML=""; if(usersData){ usersData.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); usersData.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); } } 
+        document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false); 
+        
+        const safeSet = (id, val) => { const el = document.getElementById(id); if(el) { el.value = val; } }; 
+        safeSet("RequesterName", currentUser.name); safeSet("Vendor", currentUser.name); document.getElementById("Vendor").readOnly=true; document.getElementById("RequesterName").disabled=false; 
+        await loadWorkers('permit_dropdown'); document.querySelectorAll('#worker-checkboxes input').forEach(c => c.disabled = false); document.getElementById('worker-checkboxes').classList.remove('hidden'); document.getElementById('worker-readonly-table').classList.add('hidden'); document.getElementById("fs-reviewer-section").classList.add('hidden'); document.getElementById("fs-approver-section").classList.add('hidden'); document.getElementById("renewals-section").classList.add('hidden'); document.getElementById("closure-section").classList.add('hidden'); 
+        
+        // NEW GSR LOGIC: ENABLE FOR NEW
+        const gsrEl = document.getElementById("gsr-check");
+        gsrEl.checked = false;
+        gsrEl.disabled = false;
+        document.getElementById("gsr-container").classList.remove('hidden');
+        
+        document.getElementById("actions").innerHTML = `<button type="button" onclick="window.savePermit()" class="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg">Submit Permit</button>`; 
+        document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-form").classList.remove('hidden'); 
+    }
+
+    window.savePermit = async function() { 
+        // GSR VALIDATION
+        if(!document.getElementById('gsr-check').checked) {
+            alert("You must accept the Golden Safety Rules terms to proceed.");
+            document.getElementById('gsr-container').classList.add('ring-2', 'ring-red-500');
+            setTimeout(()=>document.getElementById('gsr-container').classList.remove('ring-2', 'ring-red-500'), 2000);
+            return;
+        }
+
+        document.getElementById('loader').style.display = 'flex'; 
+        try { 
+            const fd=new FormData(document.getElementById("pf")); 
+            document.querySelectorAll('input[type="checkbox"]').forEach(c=>fd.set(c.name, c.checked?"Y":"N")); 
+            
+            fd.set("GSR_Accepted", "Y"); // Explicit set
+
+            const selectedWorkers = []; 
+            document.querySelectorAll('#worker-checkboxes input:checked').forEach(c => { selectedWorkers.push(JSON.parse(c.value)); }); 
+            fd.append("SelectedWorkers", JSON.stringify(selectedWorkers)); 
+            fd.append("RequesterEmail", currentUser.Email); 
+            fd.append("Latitude", document.getElementById("Latitude").value); 
+            fd.append("Longitude", document.getElementById("Longitude").value); 
+            if(currentPermitId) fd.set("PermitID", currentPermitId); 
+            
+            const res=await fetch(API+'/save-permit', {method:'POST', body:fd}); 
+            const json=await res.json(); 
+            if(json.success){alert("Saved: "+json.permitId); showDashboard();} else alert(json.error); 
+        } finally { document.getElementById('loader').style.display = 'none'; } 
+    }
+    
     window.checkDate = function() { const vf=new Date(document.getElementById("ValidFrom").value); const vt=new Date(document.getElementById("ValidTo").value); if(vf && vt) { if(vt <= vf) { alert("End time must be greater than Start time"); document.getElementById("ValidTo").value=""; return; } if((vt-vf)/(1000*60*60*24) > 7) { alert("Max 7 Days"); document.getElementById("ValidTo").value=""; } } }
     window.showDashboard = function() { document.getElementById("view-dashboard").classList.remove('hidden'); document.getElementById("view-form").classList.add('hidden'); document.getElementById("view-add-user").classList.add('hidden'); document.getElementById("view-worker-management").classList.add('hidden'); document.getElementById("view-map").classList.add('hidden'); loadDashboard(); }
     window.getGeo = function() { navigator.geolocation.getCurrentPosition(p=>{ document.getElementById("ExactLocation").value=`${p.coords.latitude}, ${p.coords.longitude}`; document.getElementById("Latitude").value = p.coords.latitude; document.getElementById("Longitude").value = p.coords.longitude; }); }

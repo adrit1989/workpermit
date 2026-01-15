@@ -93,7 +93,7 @@ const CHECKLIST_DATA = {
 };
 
 // --- PDF DRAWING ---
-function drawHeader(doc, bgColor) {
+function drawHeader(doc, bgColor, permitNoStr) {
     if(bgColor && bgColor !== 'Auto' && bgColor !== 'White') {
         const colorMap = { 'Red': '#fee2e2', 'Green': '#dcfce7', 'Yellow': '#fef9c3' };
         doc.save();
@@ -106,7 +106,6 @@ function drawHeader(doc, bgColor) {
     doc.rect(startX,startY,535,95).stroke();
     // Logo Box (Left)
     doc.rect(startX,startY,80,95).stroke();
-    // --- LOGO INSERTION LOGIC ---
     if (fs.existsSync('logo.png')) {
         try {
             doc.image('logo.png', startX, startY, { fit: [80, 95], align: 'center', valign: 'center' });
@@ -120,11 +119,20 @@ function drawHeader(doc, bgColor) {
     doc.fontSize(9).text('EASTERN REGION PIPELINES', startX+80, startY+30, {width:320, align:'center'});
     doc.text('HSE DEPT.', startX+80, startY+45, {width:320, align:'center'});
     doc.fontSize(8).text('COMPOSITE WORK/ COLD WORK/HOT WORK/ENTRY TO CONFINED SPACE/VEHICLE ENTRY / EXCAVATION WORK AT MAINLINE/RCP/SV', startX+80, startY+65, {width:320, align:'center'});
+    
+    // Right Box
     doc.rect(startX+400,startY,135,95).stroke();
     doc.fontSize(8).font('Helvetica');
     doc.text('Doc No: ERPL/HS&E/25-26', startX+405, startY+60);
     doc.text('Issue No: 01', startX+405, startY+70);
     doc.text('Date: 01.09.2025', startX+405, startY+80);
+
+    // (A) Permit No on All Pages
+    if(permitNoStr) {
+        doc.font('Helvetica-Bold').fontSize(10).fillColor('red');
+        doc.text(`Permit No: ${permitNoStr}`, startX+405, startY+15, {width:130, align:'left'});
+        doc.fillColor('black');
+    }
 }
 
 // --- API ROUTES ---
@@ -279,7 +287,24 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
         let workers = req.body.SelectedWorkers;
         if (typeof workers === 'string') { try { workers = JSON.parse(workers); } catch (e) { workers = []; } }
         
-        // Include GSR Accepted Flag
+        // --- (D) HANDLE 1st RENEWAL REQUEST ---
+        let renewalsArr = [];
+        if(req.body.InitRen === 'Y') {
+            renewalsArr.push({
+                status: 'pending_review',
+                valid_from: req.body.InitRenFrom,
+                valid_till: req.body.InitRenTo,
+                hc: req.body.InitRenHC || '', 
+                toxic: req.body.InitRenTox || '', 
+                oxygen: req.body.InitRenO2 || '',
+                precautions: 'As per Permit',
+                req_name: req.body.RequesterName,
+                req_at: getNowIST(),
+                worker_list: workers.map(w => w.Name) 
+            });
+        }
+        const renewalsJsonStr = JSON.stringify(renewalsArr);
+
         const data = { ...req.body, SelectedWorkers: workers, PermitID: pid, CreatedDate: getNowIST(), GSR_Accepted: req.body.GSR_Accepted || 'Y' }; 
         const q = pool.request().input('p', pid).input('s', 'Pending Review').input('w', req.body.WorkType).input('re', req.body.RequesterEmail).input('rv', req.body.ReviewerEmail).input('ap', req.body.ApproverEmail).input('vf', vf).input('vt', vt).input('j', JSON.stringify(data));
         
@@ -295,8 +320,12 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
 
         q.input('lat', sql.NVarChar(50), lat).input('lng', sql.NVarChar(50), lng);
 
-        if (chk.recordset.length > 0) await q.query("UPDATE Permits SET FullDataJSON=@j, WorkType=@w, ValidFrom=@vf, ValidTo=@vt, Latitude=@lat, Longitude=@lng WHERE PermitID=@p");
-        else await q.query("INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, FullDataJSON, RenewalsJSON) VALUES (@p, @s, @w, @re, @rv, @ap, @vf, @vt, @lat, @lng, @j, '[]')");
+        if (chk.recordset.length > 0) {
+            await q.query("UPDATE Permits SET FullDataJSON=@j, WorkType=@w, ValidFrom=@vf, ValidTo=@vt, Latitude=@lat, Longitude=@lng WHERE PermitID=@p");
+        } else {
+            q.input('ren', renewalsJsonStr);
+            await q.query("INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, FullDataJSON, RenewalsJSON) VALUES (@p, @s, @w, @re, @rv, @ap, @vf, @vt, @lat, @lng, @j, @ren)");
+        }
         
         res.json({ success: true, permitId: pid });
     } catch (e) { console.error("SAVE ERROR:", e); res.status(500).json({ error: e.message }); }
@@ -426,7 +455,6 @@ app.post('/api/stats', async (req, res) => { try { const pool = await getConnect
 app.get('/api/download-excel', async (req, res) => { try { const pool = await getConnection(); const result = await pool.request().query("SELECT * FROM Permits ORDER BY Id DESC"); const workbook = new ExcelJS.Workbook(); const sheet = workbook.addWorksheet('Permits'); sheet.columns = [{header:'Permit ID',key:'id',width:15},{header:'Status',key:'status',width:20},{header:'Work',key:'wt',width:25},{header:'Requester',key:'req',width:25},{header:'Location',key:'loc',width:30},{header:'Vendor',key:'ven',width:20},{header:'Valid From',key:'vf',width:20},{header:'Valid To',key:'vt',width:20}]; sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 }; sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFED7D31' } }; result.recordset.forEach(r => { const d = JSON.parse(r.FullDataJSON || "{}"); sheet.addRow({ id: r.PermitID, status: r.Status, wt: d.WorkType, req: d.RequesterName, loc: d.ExactLocation, ven: d.Vendor, vf: formatDate(r.ValidFrom), vt: formatDate(r.ValidTo) }); }); res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); res.setHeader('Content-Disposition', 'attachment; filename=IndianOil_Permits.xlsx'); await workbook.xlsx.write(res); res.end(); } catch (e) { res.status(500).send(e.message); } });
 
 // --- PDF GENERATION ROUTE ---
-// --- PDF GENERATION ROUTE ---
 app.get('/api/download-pdf/:id', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -438,85 +466,75 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.pipe(res);
 
         const bgColor = d.PdfBgColor || 'White';
+        // (A) Composite Permit No
+        const compositePermitNo = `${d.IssuedToDept || 'DEPT'}/${p.PermitID}`;
+
         const drawHeaderOnAll = () => {
-            drawHeader(doc, bgColor);
+            drawHeader(doc, bgColor, compositePermitNo);
             doc.y = 135; 
             doc.fontSize(9).font('Helvetica');
         };
 
         drawHeaderOnAll();
 
-        // --- (D) BANNER AT TOP OF PAGE 1 ---
+        // Banner (Top of Page 1)
         if (fs.existsSync('safety_banner.png')) {
             try {
-                // Draw banner immediately after header on Page 1
                 doc.image('safety_banner.png', 30, doc.y, { width: 535, height: 100, align: 'center', fit: [535, 100] });
-                doc.y += 110; // Move down past banner
-            } catch(err) { console.log("Error loading banner:", err); }
+                doc.y += 110; 
+            } catch(err) { console.log("Error loading banner image:", err); }
         }
 
-        // --- (B) GSR ACCEPTANCE RECORD ---
-        // Displaying this prominently before details
+        // GSR Acceptance
         if(d.GSR_Accepted === 'Y') {
-             doc.rect(30, doc.y, 535, 20).fillColor('#e6fffa').fill(); // Light green bg
-             doc.fillColor('black').stroke(); // Reset fill
-             doc.rect(30, doc.y, 535, 20).stroke(); // Border
+             doc.rect(30, doc.y, 535, 20).fillColor('#e6fffa').fill(); 
+             doc.fillColor('black').stroke(); 
+             doc.rect(30, doc.y, 535, 20).stroke(); 
              doc.font('Helvetica-Bold').fontSize(9).fillColor('#047857')
                 .text("✓ I have read, understood and accepted the IOCL Golden Safety Rules terms and penalties.", 35, doc.y + 5);
              doc.y += 25;
              doc.fillColor('black');
         }
 
-        // --- MAIN INFO SECTION ---
-        doc.font('Helvetica-Bold').fontSize(10).text(`Permit No: ${p.PermitID}`, 30, doc.y);
+        doc.font('Helvetica-Bold').fontSize(10).text(`Permit No: ${compositePermitNo}`, 30, doc.y);
         doc.fontSize(9).font('Helvetica');
         doc.y += 15;
         const startY = doc.y;
 
-        // (i) Work Clearance
         const dateFrom = formatDate(p.ValidFrom);
         const dateTo = formatDate(p.ValidTo);
         doc.text(`(i) Work clearance from: ${dateFrom}    To    ${dateTo} (Valid for the shift unless renewed).`, 30, doc.y);
         doc.y += 15;
 
-        // (ii) Issued To
         doc.text(`(ii) Issued to (Dept/Section/Contractor): ${d.IssuedToDept || '-'} / ${d.Vendor || '-'}`, 30, doc.y);
         doc.y += 15;
 
-        // (iii) Exact Location
         const coords = d.ExactLocation || 'No GPS Data';
         const locDetail = d.WorkLocationDetail || '-';
         doc.text(`(iii) Exact Location of work (Area/RCP/SV/Chainage): ${locDetail} [GPS: ${coords}]`, 30, doc.y);
         doc.y += 15;
 
-        // (iv) Description
         doc.text(`(iv) Description of work: ${d.Desc || '-'}`, 30, doc.y, {width: 535});
         doc.y += 20;
 
-        // (v) Person from Contractor at site
         const siteContact = d.EmergencyContact || 'Not Provided';
         doc.text(`(v) Person from Contractor / Dept. at site (Name & Contact): ${d.RequesterName} / ${siteContact}`, 30, doc.y);
         doc.y += 15;
 
-        // (vi) Guard
         doc.text(`(vi) Patrolling/ security Guard at site (Name & Contact): ${d.SecurityGuard || '-'}`, 30, doc.y);
         doc.y += 15;
 
-        // (vii) JSA/References
         const jsa = d.JsaNo || '-';
         const wo = d.WorkOrder || '-';
         doc.text(`(vii) JSA Ref. No: ${jsa} | Cross-Reference/WO: ${wo}`, 30, doc.y);
         doc.y += 15;
 
-        // (viii) Emergency Contact
         doc.text(`(viii) Name & contact no. of person in case of emergency: ${d.EmergencyContact || '-'}`, 30, doc.y);
         doc.y += 15;
 
-        // (ix) Fire Station
         doc.text(`(ix) Nearest Fire station and Hospital: ${d.FireStation || '-'}`, 30, doc.y);
         doc.y += 20;
 
-        // Box around Main Info
         doc.rect(25, startY - 5, 545, doc.y - startY + 5).stroke();
         doc.y += 10;
         
@@ -528,29 +546,22 @@ app.get('/api/download-pdf/:id', async (req, res) => {
             doc.rect(30,y,350,20).stroke().text("Item",35,y+5); doc.rect(380,y,60,20).stroke().text("Sts",385,y+5); doc.rect(440,y,125,20).stroke().text("Rem",445,y+5); y+=20;
             doc.font('Helvetica').fontSize(8);
             i.forEach((x,k)=>{
-                // --- (A) FIX GAS TEST ROW HEIGHT ---
-                // If Section A and Item 12 (index 11), use larger height
                 let rowH = 20;
-                if(pr === 'A' && k === 11) rowH = 45; // Increased height to fit 3 lines
+                if(pr === 'A' && k === 11) rowH = 45; 
 
                 if(y + rowH > 750){doc.addPage(); drawHeaderOnAll(); doc.y=135; y=135;}
-                
                 const st = d[`${pr}_Q${k+1}`]||'NA';
                 if(d[`${pr}_Q${k+1}`]) {
-                    // Item Text
                     doc.rect(30,y,350,rowH).stroke().text(x,35,y+5,{width:340});
-                    // Status
                     doc.rect(380,y,60,rowH).stroke().text(st,385,y+5); 
                     
-                    // Detail / Remarks
                     let detailTxt = d[`${pr}_Q${k+1}_Detail`]||'';
                     if(pr === 'A' && k === 11) { 
                          const hc = d.GP_Q12_HC || '_';
                          const tox = d.GP_Q12_ToxicGas || '_';
                          const o2 = d.GP_Q12_Oxygen || '_';
-                         detailTxt = `HC: ${hc}% LEL\nTox: ${tox} PPM\nO2: ${o2}%`; // Using newlines
+                         detailTxt = `HC: ${hc}% LEL\nTox: ${tox} PPM\nO2: ${o2}%`;
                     }
-                    
                     doc.rect(440,y,125,rowH).stroke().text(detailTxt,445,y+5);
                     y+=rowH; 
                 }
@@ -561,22 +572,20 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         drawChecklist("SECTION C: For vehicle Entry in Hazardous area", CHECKLIST_DATA.C,'C'); drawChecklist("SECTION D: EXCAVATION", CHECKLIST_DATA.D,'D');
 
         if(doc.y>600){doc.addPage(); drawHeaderOnAll(); doc.y=135;}
-        
-        // --- (C) ANNEXURE III TABLE FORMAT ---
         doc.font('Helvetica-Bold').fontSize(9).text("Annexure III: ATTACHMENT TO MAINLINE WORK PERMIT", 30, doc.y); doc.y+=15;
         
-        // Define Table Data
+        // (E) Annexure III Table
         const annexData = [
             ["Approved SOP/SWP/SMP No", d.SopNo || '-'],
             ["Approved Site Specific JSA No", d.JsaNo || '-'],
             ["IOCL Equipment", d.IoclEquip || '-'],
             ["Contractor Equipment", d.ContEquip || '-'],
-            ["Work Order", d.WorkOrder || '-']
+            ["Work Order", d.WorkOrder || '-'],
+            ["Tool Box Talk", d.ToolBoxTalk || '-']
         ];
 
         let axY = doc.y;
         doc.font('Helvetica').fontSize(9);
-        // Header (Optional, but looks better)
         doc.fillColor('#eee');
         doc.rect(30, axY, 200, 20).fill().stroke();
         doc.rect(230, axY, 335, 20).fill().stroke();
@@ -585,26 +594,22 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.text("Details", 235, axY+5);
         axY += 20;
 
-        // Rows
         doc.font('Helvetica');
         annexData.forEach(row => {
             doc.rect(30, axY, 200, 20).stroke();
             doc.text(row[0], 35, axY+5);
-            
             doc.rect(230, axY, 335, 20).stroke();
             doc.text(row[1], 235, axY+5);
             axY += 20;
         });
         doc.y = axY + 20;
 
-        // --- DYNAMIC SUPERVISORS TABLE ---
         const drawSupTable = (title, headers, dataRows) => {
             if(doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
              doc.font('Helvetica-Bold').text(title, 30, doc.y);
             doc.y += 15; 
             const headerHeight = 20; 
              let currentY = doc.y;
-            // Header Row
             let currentX = 30;
             headers.forEach(h => {
                 doc.rect(currentX, currentY, h.w, headerHeight).stroke();
@@ -612,10 +617,9 @@ app.get('/api/download-pdf/:id', async (req, res) => {
                 currentX += h.w;
             });
             currentY += headerHeight;
-            // Data Rows
             doc.font('Helvetica');
             dataRows.forEach(row => {
-                let maxRowHeight = 20; // default
+                let maxRowHeight = 20; 
                 row.forEach((cell, idx) => {
                     const cellWidth = headers[idx].w - 4;
                     const textHeight = doc.heightOfString(cell, { width: cellWidth, align: 'left' });
@@ -648,26 +652,29 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         const contRows = [[d.RequesterName || '-', "Site In-Charge / Requester", d.EmergencyContact || '-']];
         drawSupTable("Authorized Work Supervisor (Contractor)", [{t:"Name", w:180}, {t:"Designation", w:180}, {t:"Contact", w:175}], contRows);
 
-        // Hazards & PPE
         if(doc.y>650){doc.addPage(); drawHeaderOnAll(); doc.y=135;}
         doc.font('Helvetica-Bold').text("HAZARDS & PRECAUTIONS",30,doc.y); doc.y+=15; doc.rect(30,doc.y,535,60).stroke();
         const hazKeys = ["Lack of Oxygen", "H2S", "Toxic Gases", "Combustible gases", "Pyrophoric Iron", "Corrosive Chemicals", "cave in formation"];
         const foundHaz = hazKeys.filter(k => d[`H_${k.replace(/ /g,'')}`] === 'Y');
         if(d.H_Others==='Y') foundHaz.push(`Others: ${d.H_Others_Detail}`);
         doc.text(`1.The activity has the following expected residual hazards: ${foundHaz.join(', ')}`,35,doc.y+5); 
-        const ppeKeys = ["Helmet","Safety Shoes","Hand gloves","Boiler suit","Face Shield","Apron","Goggles","Dust Respirator","Fresh Air Mask","Lifeline","Safety Harness","Airline","Earmuff"];
+        // (C) PPE Update
+        const ppeKeys = ["Helmet","Safety Shoes","Hand gloves","Boiler suit","Face Shield","Apron","Goggles","Dust Respirator","Fresh Air Mask","Lifeline","Safety Harness","Airline","Earmuff","IFR"];
         const foundPPE = ppeKeys.filter(k => d[`P_${k.replace(/ /g,'')}`] === 'Y');
         if(d.AdditionalPrecautions && d.AdditionalPrecautions.trim() !== '') { foundPPE.push(`(Other: ${d.AdditionalPrecautions})`); }
         doc.text(`2.Following additional PPE to be used in addition to standards PPE: ${foundPPE.join(', ')}`,35,doc.y+25); doc.y+=70;
 
-        // Workers Table
+        // Workers Table (Updated)
         if(doc.y>650){doc.addPage(); drawHeaderOnAll(); doc.y=135;}
         doc.font('Helvetica-Bold').text("WORKERS DEPLOYED",30,doc.y); doc.y+=15; 
         let wy = doc.y;
+        // (F) Adjusted columns for Gender
         doc.rect(30,wy,80,20).stroke().text("Name",35,wy+5); 
-        doc.rect(110,wy,30,20).stroke().text("Age",115,wy+5); doc.rect(140,wy,100,20).stroke().text("ID Details",145,wy+5); 
-        doc.rect(240,wy,90,20).stroke().text("Requestor",245,wy+5);
-        doc.rect(330,wy,235,20).stroke().text("Approved On / By",335,wy+5); 
+        doc.rect(110,wy,40,20).stroke().text("Gender",112,wy+5);
+        doc.rect(150,wy,30,20).stroke().text("Age",152,wy+5); 
+        doc.rect(180,wy,90,20).stroke().text("ID Details",182,wy+5); 
+        doc.rect(270,wy,80,20).stroke().text("Requestor",272,wy+5);
+        doc.rect(350,wy,215,20).stroke().text("Approved On / By",352,wy+5); 
         wy+=20;
         let workers = d.SelectedWorkers || [];
         if (typeof workers === 'string') { try { workers = JSON.parse(workers); } catch (e) { workers = []; } }
@@ -675,14 +682,15 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         workers.forEach(w => {
             if(wy>750){doc.addPage(); drawHeaderOnAll(); doc.y=135; wy=135;}
             doc.rect(30,wy,80,35).stroke().text(w.Name,35,wy+5); 
-            doc.rect(110,wy,30,35).stroke().text(w.Age,115,wy+5); doc.rect(140,wy,100,35).stroke().text(`${w.IDType || ''}: ${w.ID || '-'}`,145,wy+5); 
-            doc.rect(240,wy,90,35).stroke().text(w.RequestorName || '-', 245,wy+5);
-            doc.rect(330,wy,235,35).stroke().text(`${w.ApprovedAt || '-'} by ${w.ApprovedBy || 'Admin'}`, 335,wy+5); 
+            doc.rect(110,wy,40,35).stroke().text(w.Gender||'-',112,wy+5); 
+            doc.rect(150,wy,30,35).stroke().text(w.Age,152,wy+5); 
+            doc.rect(180,wy,90,35).stroke().text(`${w.IDType || ''}: ${w.ID || '-'}`,182,wy+5); 
+            doc.rect(270,wy,80,35).stroke().text(w.RequestorName || '-', 272,wy+5);
+            doc.rect(350,wy,215,35).stroke().text(`${w.ApprovedAt || '-'} by ${w.ApprovedBy || 'Admin'}`, 352,wy+5); 
             wy+=35;
         });
         doc.y = wy+20;
 
-        // --- SIGNATURES ---
         if(doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; }
         doc.font('Helvetica-Bold').text("SIGNATURES",30,doc.y); 
         doc.y+=15; const sY=doc.y;
@@ -691,7 +699,6 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.rect(386,sY,179,40).stroke().text(`APP: ${d.Approver_Sig||'-'}\nRem: ${d.Approver_Remarks||'-'}`, 391, sY+5, {width:169}); 
         doc.y=sY+50;
 
-        // Renewals
         if(doc.y>650){doc.addPage(); drawHeaderOnAll(); doc.y=135;}
         doc.font('Helvetica-Bold').text("CLEARANCE RENEWAL",30,doc.y); doc.y+=15;
         let ry = doc.y;
@@ -724,7 +731,6 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         });
         doc.y = ry + 20;
 
-        // Closure
         if(doc.y>650){doc.addPage(); drawHeaderOnAll(); doc.y=135;}
         doc.font('Helvetica-Bold').text("CLOSURE OF WORK PERMIT",30,doc.y); doc.y+=15;
         let cy = doc.y;
@@ -746,7 +752,6 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         });
         doc.y = cy + 20;
 
-        // Footer Instructions
         if(doc.y>500){doc.addPage(); drawHeaderOnAll(); doc.y=135;} 
         doc.font('Helvetica-Bold').fontSize(10).text("GENERAL INSTRUCTIONS", 30, doc.y); 
         doc.y += 15; 
@@ -754,11 +759,15 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         const instructions = ["1. The work permit shall be filled up carefully.", "2. Appropriate safeguards and PPEs shall be determined.", "3. Requirement of standby personnel shall be mentioned.", "4. Means of communication must be available.", "5. Shift-wise communication to Main Control Room.", "6. Only certified vehicles and electrical equipment allowed.", "7. Welding machines shall be placed in ventilated areas.", "8. No hot work unless explosive meter reading is Zero.", "9. Standby person mandatory for confined space.", "10. Compressed gas cylinders not allowed inside.", "11. While filling trench, men/equipment must be outside.", "12. For renewal, issuer must ensure conditions are satisfactory.", "13. Max renewal up to 7 calendar days.", "14. Permit must be available at site.", "15. On completion, permit must be closed.", "16. Follow latest SOP for Trenching.", "17. CCTV and gas monitoring should be utilized.", "18. Refer to PLHO guidelines for details.", "19. This original permit must always be available with permit receiver.", "20. On completion of the work, the permit must be closed and the original copy of TBT, JSA, Permission etc. associated with permit to be handed over to Permit issuer", "21. A group shall be made for every work with SIC, EIC, permit issuer, Permit receiver, Mainline In charge and authorized contractor supervisor for digital platform", "22. The renewal of permits shall be done through confirmation by digital platform. However, the regularization on permits for renewal shall be done before closure of permit.", "23. No additional worker/supervisor to be engaged unless approved by Permit Receiver."]; 
         instructions.forEach(i => { doc.text(i, 30, doc.y); doc.y += 12; }); 
 
-        const wm = p.Status.includes('Closed') ? 'CLOSED' : 'ACTIVE'; 
+        // (G) Watermark (Status + Type)
+        const wmStatus = p.Status.includes('Closed') ? 'CLOSED' : 'ACTIVE'; 
+        const wmType = (p.WorkType || '').toUpperCase();
+        const wm = `${wmStatus} - ${wmType}`; 
         const color = p.Status.includes('Closed') ? '#ef4444' : '#22c55e'; 
         const range = doc.bufferedPageRange(); 
-        for(let i=0; i<range.count; i++) { doc.switchToPage(i); doc.save(); doc.rotate(-45, {origin:[300,400]}); doc.fontSize(80).fillColor(color).opacity(0.15).text(wm, 100, 350, {align:'center'}); doc.restore(); } 
+        for(let i=0; i<range.count; i++) { doc.switchToPage(i); doc.save(); doc.rotate(-45, {origin:[300,400]}); doc.fontSize(60).fillColor(color).opacity(0.15).text(wm, 50, 350, {align:'center'}); doc.restore(); } 
         doc.end();
     } catch (e) { res.status(500).send(e.message); }
 });
+
 app.listen(8080, () => console.log('Server Ready'));

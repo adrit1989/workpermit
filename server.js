@@ -4,9 +4,9 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs'); 
-const PDFDocument = require('pdfkit'); 
-const ExcelJS = require('exceljs'); 
+const fs = require('fs');
+const PDFDocument = require('pdfkit');
+const ExcelJS = require('exceljs');
 const { BlobServiceClient } = require('@azure/storage-blob');
 const { getConnection, sql } = require('./db');
 
@@ -28,21 +28,21 @@ if (AZURE_CONN_STR) {
 const upload = multer({ storage: multer.memoryStorage() });
 
 // --- HELPERS ---
-function getNowIST() { 
-    return new Date().toLocaleString("en-GB", { 
-        timeZone: "Asia/Kolkata", 
-        day: '2-digit', month: '2-digit', year: 'numeric', 
-        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false 
-    }).replace(',', ''); 
+function getNowIST() {
+    return new Date().toLocaleString("en-GB", {
+        timeZone: "Asia/Kolkata",
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    }).replace(',', '');
 }
 
 function formatDate(dateStr) {
     if (!dateStr) return '-';
     const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr; 
-    return d.toLocaleString("en-GB", { 
-        day: '2-digit', month: '2-digit', year: 'numeric', 
-        hour: '2-digit', minute: '2-digit', hour12: false 
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleString("en-GB", {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', hour12: false
     }).replace(',', '');
 }
 
@@ -104,10 +104,8 @@ function drawHeader(doc, bgColor) {
     const startX=30, startY=30;
     doc.lineWidth(1);
     doc.rect(startX,startY,535,95).stroke();
-    
     // Logo Box (Left)
     doc.rect(startX,startY,80,95).stroke();
-    
     // --- LOGO INSERTION LOGIC ---
     if (fs.existsSync('logo.png')) {
         try {
@@ -212,7 +210,7 @@ app.post('/api/save-worker', async (req, res) => {
                     st = 'Approved'; 
                     appBy = ApproverName;
                     appOn = getNowIST();
-                    dataObj.Current = { ...dataObj.Pending, ApprovedBy: appBy, ApprovedAt: appOn }; 
+                    dataObj.Current = { ...dataObj.Pending, ApprovedBy: appBy, ApprovedAt: appOn };
                     dataObj.Pending = null; 
                 }
             } else if (Action === 'reject') { st = 'Rejected'; dataObj.Pending = null; }
@@ -270,26 +268,23 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
             pid = `WP-${parseInt(idRes.recordset.length > 0 ? idRes.recordset[0].PermitID.split('-')[1] : 1000) + 1}`;
         }
         const chk = await pool.request().input('p', pid).query("SELECT Status FROM Permits WHERE PermitID=@p");
-        
         if(chk.recordset.length > 0) {
-             const status = chk.recordset[0].Status;
-             if (status === 'Closed' || status.includes('Closed')) {
-                 return res.status(400).json({error: "Permit is CLOSED. Editing denied."});
-             }
-             if (status !== 'Pending Review' && status !== 'New') { 
-                 return res.status(400).json({error: "Cannot edit active permit"}); 
-             }
+            const status = chk.recordset[0].Status;
+            if (status === 'Closed' || status.includes('Closed')) {
+                return res.status(400).json({error: "Permit is CLOSED. Editing denied."});
+            }
+            if (status !== 'Pending Review' && status !== 'New') { return res.status(400).json({error: "Cannot edit active permit"}); }
         }
         
         let workers = req.body.SelectedWorkers;
         if (typeof workers === 'string') { try { workers = JSON.parse(workers); } catch (e) { workers = []; } }
         
-        const data = { ...req.body, SelectedWorkers: workers, PermitID: pid, CreatedDate: getNowIST() }; 
+        // Include GSR Accepted Flag
+        const data = { ...req.body, SelectedWorkers: workers, PermitID: pid, CreatedDate: getNowIST(), GSR_Accepted: req.body.GSR_Accepted || 'Y' }; 
         const q = pool.request().input('p', pid).input('s', 'Pending Review').input('w', req.body.WorkType).input('re', req.body.RequesterEmail).input('rv', req.body.ReviewerEmail).input('ap', req.body.ApproverEmail).input('vf', vf).input('vt', vt).input('j', JSON.stringify(data));
         
         let lat = req.body.Latitude;
         let lng = req.body.Longitude;
-        
         const cleanGeo = (val) => {
             if (!val || val === 'undefined' || val === 'null' || String(val).trim() === '') return ''; 
             return String(val); 
@@ -312,21 +307,17 @@ app.post('/api/update-status', async (req, res) => {
         const { PermitID, action, role, user, comment, bgColor, IOCLSupervisors, ...extras } = req.body;
         const pool = await getConnection();
         const cur = await pool.request().input('p', PermitID).query("SELECT * FROM Permits WHERE PermitID=@p");
-        
         if(cur.recordset.length === 0) return res.json({error: "Not found"});
-        
         let st = cur.recordset[0].Status;
         if (st === 'Closed') {
-             return res.status(400).json({error: "Permit is strictly CLOSED. No further actions allowed."});
+            return res.status(400).json({error: "Permit is strictly CLOSED. No further actions allowed."});
         }
-        
         let d = JSON.parse(cur.recordset[0].FullDataJSON);
         Object.assign(d, extras);
         if(bgColor) d.PdfBgColor = bgColor;
         if (IOCLSupervisors) d.IOCLSupervisors = IOCLSupervisors;
         if(req.body.Site_Restored_Check) d.Site_Restored_Check = req.body.Site_Restored_Check;
 
-        // Save remarks based on role
         if(comment) {
             if(role === 'Reviewer') d.Reviewer_Remarks = comment;
             if(role === 'Approver') d.Approver_Remarks = comment;
@@ -337,19 +328,14 @@ app.post('/api/update-status', async (req, res) => {
 
         const now = getNowIST();
 
-        // --- MODIFIED LOGIC FOR CLOSURE FLOW ---
-
-        // 1. Handle Closure Rejection (By Reviewer OR Approver)
         if(action === 'reject_closure') {
             st = 'Active'; 
         }
-        // 2. Handle Reviewer Closure Approval
         else if(action === 'approve_closure' && role === 'Reviewer') {
             st = 'Closure Pending Approval'; 
             d.Closure_Reviewer_Sig = `${user} on ${now}`;
             d.Closure_Reviewer_Date = now;
         }
-        // 3. Handle Approver Actions (Standard & Closure)
         else if(action === 'approve' && role === 'Approver') {
             if(st.includes('Closure Pending Approval')) {
                 st = 'Closed';
@@ -360,18 +346,17 @@ app.post('/api/update-status', async (req, res) => {
                 d.Approver_Sig = `${user} on ${now}`;
             }
         }
-        // 4. Other Standard Actions
         else if(action === 'initiate_closure') {
-             st = 'Closure Pending Review';
-             d.Closure_Requestor_Date = now;
-             d.Closure_Receiver_Sig = `${user} on ${now}`;
+            st = 'Closure Pending Review';
+            d.Closure_Requestor_Date = now;
+            d.Closure_Receiver_Sig = `${user} on ${now}`;
         }
         else if(action === 'reject') {
-             st = 'Rejected';
+            st = 'Rejected';
         }
         else if(role === 'Reviewer' && action === 'review') {
-             st = 'Pending Approval';
-             d.Reviewer_Sig = `${user} on ${now}`;
+            st = 'Pending Approval';
+            d.Reviewer_Sig = `${user} on ${now}`;
         }
         
         await pool.request().input('p', PermitID).input('s', st).input('j', JSON.stringify(d)).query("UPDATE Permits SET Status=@s, FullDataJSON=@j WHERE PermitID=@p");
@@ -386,36 +371,34 @@ app.post('/api/renewal', async (req, res) => {
         const { PermitID, userRole, userName, action, rejectionReason, renewalWorkers, ...data } = req.body;
         const pool = await getConnection();
         const cur = await pool.request().input('p', PermitID).query("SELECT RenewalsJSON, Status, ValidFrom, ValidTo FROM Permits WHERE PermitID=@p");
-        
         if (cur.recordset[0].Status === 'Closed') {
-             return res.status(400).json({error: "Permit is CLOSED. Renewals are disabled."});
+            return res.status(400).json({error: "Permit is CLOSED. Renewals are disabled."});
         }
-        
         let r = JSON.parse(cur.recordset[0].RenewalsJSON||"[]"); 
         const now = getNowIST();
 
         if (userRole === 'Requester') {
-             const rs = new Date(data.RenewalValidFrom); const re = new Date(data.RenewalValidTo);
-             const pS = new Date(cur.recordset[0].ValidFrom); const pE = new Date(cur.recordset[0].ValidTo);
-             
-             if (re <= rs) return res.status(400).json({error: "Renewal End time must be later than Start time"});
-             if (rs < pS || re > pE) return res.status(400).json({error: "Renewal must be within permit validity"});
-             if ((re - rs) / 36e5 > 8) return res.status(400).json({error: "Max 8 hours per clearance"});
-             
-             if(r.length > 0) {
-                 const last = r[r.length-1];
-                 if(last.status !== 'rejected' && last.status !== 'approved') return res.status(400).json({error: "Previous renewal pending"});
-                 if(last.status !== 'rejected' && rs < new Date(last.valid_till)) return res.status(400).json({error: "Overlap detected"});
-             }
-             r.push({ 
-                 status: 'pending_review', 
-                 valid_from: data.RenewalValidFrom, 
-                 valid_till: data.RenewalValidTo, 
-                 hc: data.hc, toxic: data.toxic, oxygen: data.oxygen, precautions: data.precautions, 
-                 req_name: userName, 
-                 req_at: now,
-                 worker_list: renewalWorkers || [] 
-             });
+            const rs = new Date(data.RenewalValidFrom); const re = new Date(data.RenewalValidTo);
+            const pS = new Date(cur.recordset[0].ValidFrom); const pE = new Date(cur.recordset[0].ValidTo);
+            
+            if (re <= rs) return res.status(400).json({error: "Renewal End time must be later than Start time"});
+            if (rs < pS || re > pE) return res.status(400).json({error: "Renewal must be within permit validity"});
+            if ((re - rs) / 36e5 > 8) return res.status(400).json({error: "Max 8 hours per clearance"});
+            
+            if(r.length > 0) {
+                const last = r[r.length-1];
+                if(last.status !== 'rejected' && last.status !== 'approved') return res.status(400).json({error: "Previous renewal pending"});
+                if(last.status !== 'rejected' && rs < new Date(last.valid_till)) return res.status(400).json({error: "Overlap detected"});
+            }
+            r.push({ 
+                status: 'pending_review', 
+                valid_from: data.RenewalValidFrom, 
+                valid_till: data.RenewalValidTo, 
+                hc: data.hc, toxic: data.toxic, oxygen: data.oxygen, precautions: data.precautions,
+                req_name: userName, 
+                req_at: now,
+                worker_list: renewalWorkers || [] 
+            });
         } else {
             const last = r[r.length-1];
             if (action === 'reject') { 
@@ -450,7 +433,8 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         if(!result.recordset.length) return res.status(404).send('Not Found');
         const p = result.recordset[0]; const d = JSON.parse(p.FullDataJSON);
         const doc = new PDFDocument({ margin: 30, size: 'A4', bufferPages: true });
-        res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', `attachment; filename=${p.PermitID}.pdf`); doc.pipe(res);
+        res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', `attachment; filename=${p.PermitID}.pdf`);
+        doc.pipe(res);
 
         const bgColor = d.PdfBgColor || 'White';
         const drawHeaderOnAll = () => {
@@ -461,32 +445,102 @@ app.get('/api/download-pdf/:id', async (req, res) => {
 
         drawHeaderOnAll();
         
-        // MAIN INFO
-        const infoY = doc.y; const c1 = 40, c2 = 300;
-        doc.text(`Permit No: ${p.PermitID}`, c1, infoY).text(`Validity: ${formatDate(p.ValidFrom)} - ${formatDate(p.ValidTo)}`, c2, infoY);
-        doc.text(`Issued To: ${d.IssuedToDept} (${d.Vendor})`, c1, infoY+15).text(`Location: ${d.ExactLocation} (${d.WorkLocationDetail||''})`, c2, infoY+15);
-        doc.text(`Desc: ${d.Desc}`, c1, infoY+30,{width:500}).text(`Site Person: ${d.RequesterName}`, c1, infoY+60).text(`Security: ${d.SecurityGuard||'-'}`, c2, infoY+60);
-        doc.text(`Emergency: ${d.EmergencyContact||'-'}`, c1, infoY+75).text(`Fire Stn: ${d.FireStation||'-'}`, c2, infoY+75);
-        doc.rect(30,infoY-5,535,95).stroke();
-        doc.y=infoY+100;
+        // --- UPDATED MAIN INFO SECTION ---
+        // Replacing the grid with the specific list requested
+        doc.font('Helvetica-Bold').fontSize(10).text(`Permit No: ${p.PermitID}`, 30, doc.y);
+        doc.fontSize(9).font('Helvetica');
+        doc.y += 15;
+        const startY = doc.y;
+
+        // (i) Work Clearance
+        const dateFrom = formatDate(p.ValidFrom);
+        const dateTo = formatDate(p.ValidTo);
+        doc.text(`(i) Work clearance from: ${dateFrom}   To   ${dateTo} (Valid for the shift unless renewed).`, 30, doc.y);
+        doc.y += 15;
+
+        // (ii) Issued To
+        doc.text(`(ii) Issued to (Dept/Section/Contractor): ${d.IssuedToDept || '-'} / ${d.Vendor || '-'}`, 30, doc.y);
+        doc.y += 15;
+
+        // (iii) Exact Location
+        const coords = d.ExactLocation || 'No GPS Data';
+        const locDetail = d.WorkLocationDetail || '-';
+        doc.text(`(iii) Exact Location of work (Area/RCP/SV/Chainage): ${locDetail} [GPS: ${coords}]`, 30, doc.y);
+        doc.y += 15;
+
+        // (iii -> iv in list but label is III in prompt) Description
+        doc.text(`(iv) Description of work: ${d.Desc || '-'}`, 30, doc.y, {width: 535});
+        doc.y += 20;
+
+        // (iv -> v) Person from Contractor at site
+        // Mapping Requestor Name and Emergency Contact (as site contact)
+        const siteContact = d.EmergencyContact || 'Not Provided';
+        doc.text(`(v) Person from Contractor / Dept. at site (Name & Contact): ${d.RequesterName} / ${siteContact}`, 30, doc.y);
+        doc.y += 15;
+
+        // (v -> vi) Guard
+        doc.text(`(vi) Patrolling/ security Guard at site (Name & Contact): ${d.SecurityGuard || '-'}`, 30, doc.y);
+        doc.y += 15;
+
+        // (vi -> vii) JSA/References
+        const jsa = d.JsaNo || '-';
+        const wo = d.WorkOrder || '-';
+        doc.text(`(vii) JSA Ref. No: ${jsa} | Cross-Reference/WO: ${wo}`, 30, doc.y);
+        doc.y += 15;
+
+        // (vii -> viii) Emergency Contact (Redundant but requested)
+        doc.text(`(viii) Name & contact no. of person in case of emergency: ${d.EmergencyContact || '-'}`, 30, doc.y);
+        doc.y += 15;
+
+        // (viii -> ix) Fire Station
+        doc.text(`(ix) Nearest Fire station and Hospital: ${d.FireStation || '-'}`, 30, doc.y);
+        doc.y += 20;
+
+        // Box around Main Info
+        doc.rect(25, startY - 5, 545, doc.y - startY + 5).stroke();
+        doc.y += 10;
+        
+        // GSR Acceptance Record
+        if(d.GSR_Accepted === 'Y') {
+             doc.font('Helvetica-Bold').fillColor('red').fontSize(8).text("** Golden Safety Rules Compliance Accepted by Requestor **", 30, doc.y, {align:'center'});
+             doc.fillColor('black');
+             doc.y += 15;
+        }
 
         // Checklists
         const drawChecklist = (t,i,pr) => { 
             if(doc.y>650){doc.addPage(); drawHeaderOnAll(); doc.y=135;} 
-            doc.font('Helvetica-Bold').fillColor('black').text(t,30,doc.y+10); doc.y+=25; 
+            doc.font('Helvetica-Bold').fillColor('black').fontSize(9).text(t,30,doc.y+10); doc.y+=25; 
             let y=doc.y;
             doc.rect(30,y,350,20).stroke().text("Item",35,y+5); doc.rect(380,y,60,20).stroke().text("Sts",385,y+5); doc.rect(440,y,125,20).stroke().text("Rem",445,y+5); y+=20;
             doc.font('Helvetica').fontSize(8);
             i.forEach((x,k)=>{
                 if(y>750){doc.addPage(); drawHeaderOnAll(); doc.y=135; y=135;}
                 const st = d[`${pr}_Q${k+1}`]||'NA';
-                if(d[`${pr}_Q${k+1}`]) { doc.rect(30,y,350,20).stroke().text(x,35,y+5,{width:340}); doc.rect(380,y,60,20).stroke().text(st,385,y+5); doc.rect(440,y,125,20).stroke().text(d[`${pr}_Q${k+1}_Detail`]||'',445,y+5); y+=20; }
+                if(d[`${pr}_Q${k+1}`]) {
+                    doc.rect(30,y,350,20).stroke().text(x,35,y+5,{width:340});
+                    doc.rect(380,y,60,20).stroke().text(st,385,y+5); 
+                    
+                    // --- GAS TEST DATA INJECTION ---
+                    let detailTxt = d[`${pr}_Q${k+1}_Detail`]||'';
+                    if(pr === 'A' && k === 11) { // Item 12 in Section A
+                         const hc = d.GP_Q12_HC || '_';
+                         const tox = d.GP_Q12_ToxicGas || '_';
+                         const o2 = d.GP_Q12_Oxygen || '_';
+                         detailTxt += `\nHC:${hc}% LEL, Tox:${tox} PPM, O2:${o2}%`;
+                    }
+                    
+                    doc.rect(440,y,125,20).stroke().text(detailTxt,445,y+5);
+                    y+=20; 
+                }
             }); doc.y=y;
         };
-        drawChecklist("SECTION A: GENERAL", CHECKLIST_DATA.A,'A'); drawChecklist("SECTION B: HOT WORK", CHECKLIST_DATA.B,'B'); drawChecklist("SECTION C: VEHICLE", CHECKLIST_DATA.C,'C'); drawChecklist("SECTION D: EXCAVATION", CHECKLIST_DATA.D,'D');
+        drawChecklist("SECTION A: GENERAL", CHECKLIST_DATA.A,'A');
+        drawChecklist("SECTION B : For Hot work / Entry to confined Space", CHECKLIST_DATA.B,'B');
+        drawChecklist("SECTION C: For vehicle Entry in Hazardous area", CHECKLIST_DATA.C,'C'); drawChecklist("SECTION D: EXCAVATION", CHECKLIST_DATA.D,'D');
 
         if(doc.y>600){doc.addPage(); drawHeaderOnAll(); doc.y=135;}
-        doc.font('Helvetica-Bold').text("Annexure III: ATTACHMENT TO MAINLINE WORK PERMIT", 30, doc.y); doc.y+=15;
+        doc.font('Helvetica-Bold').fontSize(9).text("Annexure III: ATTACHMENT TO MAINLINE WORK PERMIT", 30, doc.y); doc.y+=15;
         doc.fontSize(8).font('Helvetica');
         doc.text(`Approved SOP/SWP/SMP no ${d.SopNo||'-'} | Approved site specific JSA no: ${d.JsaNo||'-'}`, 30, doc.y); doc.y+=12;
         doc.text(`IOCL Equipment: ${d.IoclEquip||'-'} | Contractor Equipment: ${d.ContEquip||'-'}`, 30, doc.y); doc.y+=12;
@@ -494,48 +548,40 @@ app.get('/api/download-pdf/:id', async (req, res) => {
 
         // --- DYNAMIC SUPERVISORS TABLE ---
         const drawSupTable = (title, headers, dataRows) => {
-             if(doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
-             
+            if(doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y=135; }
              doc.font('Helvetica-Bold').text(title, 30, doc.y);
-             doc.y += 15; 
-
-             const headerHeight = 20; 
+            doc.y += 15; 
+            const headerHeight = 20; 
              let currentY = doc.y;
-
-             // Header Row
-             let currentX = 30;
-             headers.forEach(h => {
-                 doc.rect(currentX, currentY, h.w, headerHeight).stroke();
-                 doc.text(h.t, currentX + 2, currentY + 6, { width: h.w - 4, align: 'left' });
-                 currentX += h.w;
-             });
-             currentY += headerHeight;
-
-             // Data Rows
-             doc.font('Helvetica');
-             dataRows.forEach(row => {
-                 let maxRowHeight = 20; // default
-                 row.forEach((cell, idx) => {
-                     const cellWidth = headers[idx].w - 4;
-                     const textHeight = doc.heightOfString(cell, { width: cellWidth, align: 'left' });
-                     if (textHeight + 10 > maxRowHeight) maxRowHeight = textHeight + 10;
-                 });
-
-                 if(currentY + maxRowHeight > 750) { 
-                     doc.addPage(); 
-                     drawHeaderOnAll(); 
-                     currentY = 135; 
+            // Header Row
+            let currentX = 30;
+            headers.forEach(h => {
+                doc.rect(currentX, currentY, h.w, headerHeight).stroke();
+                doc.text(h.t, currentX + 2, currentY + 6, { width: h.w - 4, align: 'left' });
+                currentX += h.w;
+            });
+            currentY += headerHeight;
+            // Data Rows
+            doc.font('Helvetica');
+            dataRows.forEach(row => {
+                let maxRowHeight = 20; // default
+                row.forEach((cell, idx) => {
+                    const cellWidth = headers[idx].w - 4;
+                    const textHeight = doc.heightOfString(cell, { width: cellWidth, align: 'left' });
+                    if (textHeight + 10 > maxRowHeight) maxRowHeight = textHeight + 10;
+                });
+                if(currentY + maxRowHeight > 750) { 
+                     doc.addPage(); drawHeaderOnAll(); currentY = 135; 
                  }
-
-                 let rowX = 30;
-                 row.forEach((cell, idx) => {
-                     doc.rect(rowX, currentY, headers[idx].w, maxRowHeight).stroke();
-                     doc.text(cell, rowX + 2, currentY + 5, { width: headers[idx].w - 4, align: 'left' });
-                     rowX += headers[idx].w;
-                 });
-                 currentY += maxRowHeight;
-             });
-             doc.y = currentY + 15;
+                let rowX = 30;
+                row.forEach((cell, idx) => {
+                    doc.rect(rowX, currentY, headers[idx].w, maxRowHeight).stroke();
+                    doc.text(cell, rowX + 2, currentY + 5, { width: headers[idx].w - 4, align: 'left' });
+                    rowX += headers[idx].w;
+                });
+                currentY += maxRowHeight;
+            });
+            doc.y = currentY + 15;
         };
 
         const ioclSups = d.IOCLSupervisors || [];
@@ -547,6 +593,7 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         if(ioclRows.length === 0) ioclRows.push(["-", "-", "-", "-"]);
         
         drawSupTable("Authorized Work Supervisor (IOCL)", [{t:"Name", w:130}, {t:"Designation", w:130}, {t:"Contact", w:100}, {t:"Audit Trail", w:175}], ioclRows);
+        
         const contRows = [[d.RequesterName || '-', "Site In-Charge / Requester", d.EmergencyContact || '-']];
         drawSupTable("Authorized Work Supervisor (Contractor)", [{t:"Name", w:180}, {t:"Designation", w:180}, {t:"Contact", w:175}], contRows);
 
@@ -554,47 +601,40 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         if(doc.y>650){doc.addPage(); drawHeaderOnAll(); doc.y=135;}
         doc.font('Helvetica-Bold').text("HAZARDS & PRECAUTIONS",30,doc.y); doc.y+=15; doc.rect(30,doc.y,535,60).stroke();
         const hazKeys = ["Lack of Oxygen", "H2S", "Toxic Gases", "Combustible gases", "Pyrophoric Iron", "Corrosive Chemicals", "cave in formation"];
-        const foundHaz = hazKeys.filter(k => d[`H_${k.replace(/ /g,'')}`] === 'Y'); if(d.H_Others==='Y') foundHaz.push(`Others: ${d.H_Others_Detail}`);
-        doc.text(`Hazards: ${foundHaz.join(', ')}`,35,doc.y+5); 
+        const foundHaz = hazKeys.filter(k => d[`H_${k.replace(/ /g,'')}`] === 'Y');
+        if(d.H_Others==='Y') foundHaz.push(`Others: ${d.H_Others_Detail}`);
+        doc.text(`1.The activity has the following expected residual hazards: ${foundHaz.join(', ')}`,35,doc.y+5); 
         const ppeKeys = ["Helmet","Safety Shoes","Hand gloves","Boiler suit","Face Shield","Apron","Goggles","Dust Respirator","Fresh Air Mask","Lifeline","Safety Harness","Airline","Earmuff"];
         const foundPPE = ppeKeys.filter(k => d[`P_${k.replace(/ /g,'')}`] === 'Y');
         if(d.AdditionalPrecautions && d.AdditionalPrecautions.trim() !== '') { foundPPE.push(`(Other: ${d.AdditionalPrecautions})`); }
-        doc.text(`PPE: ${foundPPE.join(', ')}`,35,doc.y+25); doc.y+=70;
+        doc.text(`2.Following additional PPE to be used in addition to standards PPE: ${foundPPE.join(', ')}`,35,doc.y+25); doc.y+=70;
 
         // Workers Table
         if(doc.y>650){doc.addPage(); drawHeaderOnAll(); doc.y=135;}
         doc.font('Helvetica-Bold').text("WORKERS DEPLOYED",30,doc.y); doc.y+=15; 
         let wy = doc.y;
         doc.rect(30,wy,80,20).stroke().text("Name",35,wy+5); 
-        doc.rect(110,wy,30,20).stroke().text("Age",115,wy+5); 
-        doc.rect(140,wy,100,20).stroke().text("ID Details",145,wy+5); 
+        doc.rect(110,wy,30,20).stroke().text("Age",115,wy+5); doc.rect(140,wy,100,20).stroke().text("ID Details",145,wy+5); 
         doc.rect(240,wy,90,20).stroke().text("Requestor",245,wy+5);
         doc.rect(330,wy,235,20).stroke().text("Approved On / By",335,wy+5); 
         wy+=20;
-        
         let workers = d.SelectedWorkers || [];
         if (typeof workers === 'string') { try { workers = JSON.parse(workers); } catch (e) { workers = []; } }
         doc.font('Helvetica').fontSize(8);
         workers.forEach(w => {
             if(wy>750){doc.addPage(); drawHeaderOnAll(); doc.y=135; wy=135;}
             doc.rect(30,wy,80,35).stroke().text(w.Name,35,wy+5); 
-            doc.rect(110,wy,30,35).stroke().text(w.Age,115,wy+5); 
-            doc.rect(140,wy,100,35).stroke().text(`${w.IDType || ''}: ${w.ID || '-'}`,145,wy+5); 
+            doc.rect(110,wy,30,35).stroke().text(w.Age,115,wy+5); doc.rect(140,wy,100,35).stroke().text(`${w.IDType || ''}: ${w.ID || '-'}`,145,wy+5); 
             doc.rect(240,wy,90,35).stroke().text(w.RequestorName || '-', 245,wy+5);
             doc.rect(330,wy,235,35).stroke().text(`${w.ApprovedAt || '-'} by ${w.ApprovedBy || 'Admin'}`, 335,wy+5); 
             wy+=35;
         });
         doc.y = wy+20;
 
-        // --- SIGNATURES (FIXED FOR PAGE BREAK) ---
-        if(doc.y > 650) { 
-            doc.addPage(); 
-            drawHeaderOnAll(); 
-            doc.y = 135; 
-        }
+        // --- SIGNATURES ---
+        if(doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; }
         doc.font('Helvetica-Bold').text("SIGNATURES",30,doc.y); 
-        doc.y+=15; 
-        const sY=doc.y;
+        doc.y+=15; const sY=doc.y;
         doc.rect(30,sY,178,40).stroke().text(`REQ: ${d.RequesterName} on ${d.CreatedDate||'-'}`,35,sY+5);
         doc.rect(208,sY,178,40).stroke().text(`REV: ${d.Reviewer_Sig||'-'}\nRem: ${d.Reviewer_Remarks||'-'}`, 213, sY+5, {width:168});
         doc.rect(386,sY,179,40).stroke().text(`APP: ${d.Approver_Sig||'-'}\nRem: ${d.Approver_Remarks||'-'}`, 391, sY+5, {width:169}); 
@@ -604,13 +644,10 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         if(doc.y>650){doc.addPage(); drawHeaderOnAll(); doc.y=135;}
         doc.font('Helvetica-Bold').text("CLEARANCE RENEWAL",30,doc.y); doc.y+=15;
         let ry = doc.y;
-        doc.rect(30,ry,50,25).stroke().text("From",32,ry+5);
-        doc.rect(80,ry,50,25).stroke().text("To",82,ry+5);
-        doc.rect(130,ry,60,25).stroke().text("Gas",132,ry+5);
-        doc.rect(190,ry,70,25).stroke().text("Precautions",192,ry+5);
+        doc.rect(30,ry,50,25).stroke().text("From",32,ry+5); doc.rect(80,ry,50,25).stroke().text("To",82,ry+5);
+        doc.rect(130,ry,60,25).stroke().text("Gas",132,ry+5); doc.rect(190,ry,70,25).stroke().text("Precautions",192,ry+5);
         doc.rect(260,ry,70,25).stroke().text("Workers",262,ry+5);
-        doc.rect(330,ry,75,25).stroke().text("Req",332,ry+5);
-        doc.rect(405,ry,75,25).stroke().text("Rev",407,ry+5);
+        doc.rect(330,ry,75,25).stroke().text("Req",332,ry+5); doc.rect(405,ry,75,25).stroke().text("Rev",407,ry+5);
         doc.rect(480,ry,75,25).stroke().text("App",482,ry+5);
         ry+=25;
         const renewals = JSON.parse(p.RenewalsJSON || "[]");
@@ -624,7 +661,6 @@ app.get('/api/download-pdf/:id', async (req, res) => {
              const wList = r.worker_list ? r.worker_list.join(', ') : 'All';
              doc.rect(260,ry,70,55).stroke().text(wList, 262, ry+5, {width:68});
              doc.rect(330,ry,75,55).stroke().text(`${r.req_name}\n${r.req_at}`, 332, ry+5, {width:73});
-             
              let revText = `${r.rev_name||'-'}\n${r.rev_at||'-'}\nRem: ${r.rev_rem||'-'}`;
              let appText = `${r.app_name||'-'}\n${r.app_at||'-'}\nRem: ${r.app_rem||'-'}`;
              if (r.status === 'rejected') {
@@ -641,7 +677,9 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         if(doc.y>650){doc.addPage(); drawHeaderOnAll(); doc.y=135;}
         doc.font('Helvetica-Bold').text("CLOSURE OF WORK PERMIT",30,doc.y); doc.y+=15;
         let cy = doc.y;
-        doc.rect(30,cy,80,20).stroke().text("Stage",35,cy+5); doc.rect(110,cy,120,20).stroke().text("Name/Sig",115,cy+5); doc.rect(230,cy,100,20).stroke().text("Date/Time",235,cy+5); doc.rect(330,cy,235,20).stroke().text("Remarks",335,cy+5); cy+=20;
+        doc.rect(30,cy,80,20).stroke().text("Stage",35,cy+5); doc.rect(110,cy,120,20).stroke().text("Name/Sig",115,cy+5);
+        doc.rect(230,cy,100,20).stroke().text("Date/Time",235,cy+5); doc.rect(330,cy,235,20).stroke().text("Remarks",335,cy+5);
+        cy+=20;
         const closureSteps = [
             {role:'Requestor', name: d.Closure_Requestor_Sig || d.RequesterName, date:d.Closure_Requestor_Date, rem:d.Closure_Requestor_Remarks},
             {role:'Reviewer', name: d.Closure_Reviewer_Sig, date:d.Closure_Reviewer_Date, rem:d.Closure_Reviewer_Remarks},
@@ -661,14 +699,14 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         if(doc.y>500){doc.addPage(); drawHeaderOnAll(); doc.y=135;} 
         doc.font('Helvetica-Bold').fontSize(10).text("GENERAL INSTRUCTIONS", 30, doc.y); 
         doc.y += 15; 
-        doc.font('Helvetica').fontSize(8); 
+        doc.font('Helvetica').fontSize(8);
         const instructions = ["1. The work permit shall be filled up carefully.", "2. Appropriate safeguards and PPEs shall be determined.", "3. Requirement of standby personnel shall be mentioned.", "4. Means of communication must be available.", "5. Shift-wise communication to Main Control Room.", "6. Only certified vehicles and electrical equipment allowed.", "7. Welding machines shall be placed in ventilated areas.", "8. No hot work unless explosive meter reading is Zero.", "9. Standby person mandatory for confined space.", "10. Compressed gas cylinders not allowed inside.", "11. While filling trench, men/equipment must be outside.", "12. For renewal, issuer must ensure conditions are satisfactory.", "13. Max renewal up to 7 calendar days.", "14. Permit must be available at site.", "15. On completion, permit must be closed.", "16. Follow latest SOP for Trenching.", "17. CCTV and gas monitoring should be utilized.", "18. Refer to PLHO guidelines for details.", "19. This original permit must always be available with permit receiver.", "20. On completion of the work, the permit must be closed and the original copy of TBT, JSA, Permission etc. associated with permit to be handed over to Permit issuer", "21. A group shall be made for every work with SIC, EIC, permit issuer, Permit receiver, Mainline In charge and authorized contractor supervisor for digital platform", "22. The renewal of permits shall be done through confirmation by digital platform. However, the regularization on permits for renewal shall be done before closure of permit.", "23. No additional worker/supervisor to be engaged unless approved by Permit Receiver."]; 
         instructions.forEach(i => { doc.text(i, 30, doc.y); doc.y += 12; }); 
 
         // --- SAFETY BANNER LOGIC ---
         if (fs.existsSync('safety_banner.png')) {
             const bannerHeight = 150; 
-            if (doc.y + bannerHeight > 750) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; } else { doc.moveDown(1); }
+             if (doc.y + bannerHeight > 750) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; } else { doc.moveDown(1); }
             try { doc.image('safety_banner.png', 30, doc.y, { width: 535, align: 'center' }); } catch(err) { console.log("Error loading banner image:", err); }
         }
 

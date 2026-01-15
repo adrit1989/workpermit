@@ -61,7 +61,7 @@
         <div class="glass w-full max-w-md text-center shadow-xl border-t-4 border-orange-600">
             <img src="logo.png" alt="IOCL Logo" class="mx-auto h-24 mb-4 object-contain">
             <h1 class="text-3xl font-extrabold text-orange-600 mb-2">IndianOil</h1>
-            <p class="text-gray-500 mb-6 font-semibold">Mainline Work Permit System (ERPL)</p>
+            <p class="text-gray-500 mb-6 font-semibold"> Mainline Work Permit System (By ERPL)</p>
             <form onsubmit="event.preventDefault(); window.handleLogin();" class="space-y-4 text-left">
                 <div><label class="text-xs font-bold text-gray-500 uppercase ml-1">Role</label><select id="login-role" class="w-full bg-gray-50 h-12" onchange="window.loadUserNames()"><option value="Requester">Requester</option><option value="Reviewer">Reviewer</option><option value="Approver">Approver</option></select></div>
                 <div><label class="text-xs font-bold text-gray-500 uppercase ml-1">User</label><select id="login-name" class="w-full bg-gray-50 h-12" disabled><option>Loading Users...</option></select></div>
@@ -666,10 +666,32 @@
                 return;
             }
 
+            // --- NEW: VALIDATE 1ST RENEWAL ---
+            if (document.getElementById("chk-init-renewal").checked) {
+                const pStart = new Date(document.getElementById("ValidFrom").value);
+                const pEnd = new Date(document.getElementById("ValidTo").value);
+                const rStartInput = document.querySelector('input[name="InitRenFrom"]').value;
+                const rEndInput = document.querySelector('input[name="InitRenTo"]').value;
+
+                if(!rStartInput || !rEndInput) { alert("Please set 1st Renewal Start/End times."); return; }
+
+                const rStart = new Date(rStartInput);
+                const rEnd = new Date(rEndInput);
+
+                if (rEnd <= rStart) { alert("1st Renewal: End time must be greater than Start time."); return; }
+                // Use getTime() for safer comparisons
+                if (rStart.getTime() < pStart.getTime() || rEnd.getTime() > pEnd.getTime()) { alert("1st Renewal must be within the Permit Validity period."); return; }
+                if ((rEnd - rStart) > (8 * 60 * 60 * 1000)) { alert("1st Renewal duration cannot exceed 8 hours."); return; }
+            }
+
             document.getElementById('loader').style.display = 'flex'; 
             try { 
                 const fd = new FormData(document.getElementById("pf")); 
-                document.querySelectorAll('input[type="checkbox"]').forEach(c=>fd.set(c.name, c.checked?"Y":"N")); 
+                document.querySelectorAll('input[type="checkbox"]').forEach(c => {
+                    if (c.name) {
+                        fd.set(c.name, c.checked ? "Y" : "N");
+                    }
+                }); 
                 
                 fd.set("GSR_Accepted", "Y"); 
 
@@ -760,4 +782,3 @@
     </script>
 </body>
 </html>
-

@@ -565,7 +565,7 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         // Banner (Top of Page 1)
         if (fs.existsSync('safety_banner.png')) {
             try {
-                doc.image('safety_banner.png', 30, doc.y, { width: 535, height: 100, align: 'center', fit: [535, 100] });
+                doc.image('safety_banner.png', 30, doc.y, { width: 535, height: 100 });
                 doc.y += 110; 
             } catch(err) { console.log("Error loading banner image:", err); }
         }

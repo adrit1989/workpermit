@@ -266,29 +266,47 @@ app.post('/api/dashboard', async (req, res) => {
 // --- SAVE PERMIT (Corrected & Robust) ---
 app.post('/api/save-permit', upload.single('file'), async (req, res) => {
     try {
-        const vf = new Date(req.body.ValidFrom); const vt = new Date(req.body.ValidTo);
+        console.log("Received Permit Submit Request:", req.body.PermitID); // Debug Log
+
+        // 1. Validate Dates robustly
+        let vf, vt;
+        try {
+            vf = req.body.ValidFrom ? new Date(req.body.ValidFrom) : null;
+            vt = req.body.ValidTo ? new Date(req.body.ValidTo) : null;
+        } catch (err) {
+            return res.status(400).json({ error: "Invalid Date Format" });
+        }
+
+        if (!vf || !vt) return res.status(400).json({ error: "Start and End dates are required" });
         if (vt <= vf) return res.status(400).json({ error: "End date must be after Start date" });
-        if ((vt-vf)/(1000*60*60*24) > 7) return res.status(400).json({ error: "Max 7 days allowed" });
+        if ((vt - vf) / (1000 * 60 * 60 * 24) > 7) return res.status(400).json({ error: "Max 7 days allowed" });
         
         const pool = await getConnection();
+        
+        // 2. ID Generation Logic
         let pid = req.body.PermitID;
         if (!pid || pid === 'undefined' || pid === 'null' || pid === '') {
             const idRes = await pool.request().query("SELECT TOP 1 PermitID FROM Permits ORDER BY Id DESC");
-            pid = `WP-${parseInt(idRes.recordset.length > 0 ? idRes.recordset[0].PermitID.split('-')[1] : 1000) + 1}`;
+            // Check if table is empty
+            const lastId = idRes.recordset.length > 0 ? idRes.recordset[0].PermitID : 'WP-1000';
+            const numPart = parseInt(lastId.split('-')[1] || 1000);
+            pid = `WP-${numPart + 1}`;
         }
         
-        const chk = await pool.request().input('p', pid).query("SELECT Status FROM Permits WHERE PermitID=@p");
+        // 3. Status Check
+        const chk = await pool.request().input('p', sql.NVarChar, pid).query("SELECT Status FROM Permits WHERE PermitID=@p");
         if(chk.recordset.length > 0) {
             const status = chk.recordset[0].Status;
             if (status === 'Closed' || status.includes('Closed')) return res.status(400).json({error: "Permit is CLOSED. Editing denied."});
-            if (status !== 'Pending Review' && status !== 'New') return res.status(400).json({error: "Cannot edit active permit"});
+            // Allow editing if New or Pending Review
         }
         
+        // 4. Parse Workers
         let workers = req.body.SelectedWorkers;
         if (typeof workers === 'string') { try { workers = JSON.parse(workers); } catch (e) { workers = []; } }
         if (!Array.isArray(workers)) workers = [];
 
-        // --- (D) HANDLE 1st RENEWAL REQUEST ---
+        // 5. Build Renewals Array (If requested)
         let renewalsArr = [];
         if(req.body.InitRen === 'Y') {
             renewalsArr.push({
@@ -298,7 +316,6 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
                 hc: req.body.InitRenHC || '', 
                 toxic: req.body.InitRenTox || '', 
                 oxygen: req.body.InitRenO2 || '',
-                // UPDATED: Now captures input from frontend
                 precautions: req.body.InitRenPrec || 'As per Permit',
                 req_name: req.body.RequesterName || '',
                 req_at: getNowIST(),
@@ -307,35 +324,43 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
         }
         const renewalsJsonStr = JSON.stringify(renewalsArr);
 
+        // 6. Data Assembly
         const data = { ...req.body, SelectedWorkers: workers, PermitID: pid, CreatedDate: getNowIST(), GSR_Accepted: req.body.GSR_Accepted || 'Y' }; 
         
-        // Use Explicit Types for JSON columns to avoid truncation/errors
-        const q = pool.request()
-            .input('p', pid)
-            .input('s', 'Pending Review')
-            .input('w', req.body.WorkType || '')
-            .input('re', req.body.RequesterEmail || '')
-            .input('rv', req.body.ReviewerEmail || '')
-            .input('ap', req.body.ApproverEmail || '')
-            .input('vf', vf)
-            .input('vt', vt)
-            .input('j', sql.NVarChar(sql.MAX), JSON.stringify(data)); 
-        
+        // 7. Clean Geo Data (Prevent SQL errors on empty strings)
         let lat = req.body.Latitude; let lng = req.body.Longitude;
-        const cleanGeo = (val) => (!val || val === 'undefined' || val === 'null' || String(val).trim() === '') ? '' : String(val);
-        q.input('lat', sql.NVarChar(50), cleanGeo(lat)).input('lng', sql.NVarChar(50), cleanGeo(lng));
+        const cleanGeo = (val) => (!val || val === 'undefined' || val === 'null' || String(val).trim() === '') ? null : String(val);
+        
+        const q = pool.request()
+            .input('p', sql.NVarChar(50), pid)
+            .input('s', sql.NVarChar(50), 'Pending Review')
+            .input('w', sql.NVarChar(50), req.body.WorkType || '')
+            .input('re', sql.NVarChar(100), req.body.RequesterEmail || '')
+            .input('rv', sql.NVarChar(100), req.body.ReviewerEmail || '')
+            .input('ap', sql.NVarChar(100), req.body.ApproverEmail || '')
+            .input('vf', sql.DateTime, vf)
+            .input('vt', sql.DateTime, vt)
+            .input('lat', sql.NVarChar(50), cleanGeo(lat))
+            .input('lng', sql.NVarChar(50), cleanGeo(lng))
+            .input('j', sql.NVarChar(sql.MAX), JSON.stringify(data))
+            .input('ren', sql.NVarChar(sql.MAX), renewalsJsonStr);
 
         if (chk.recordset.length > 0) {
+            // Update Existing
             await q.query("UPDATE Permits SET FullDataJSON=@j, WorkType=@w, ValidFrom=@vf, ValidTo=@vt, Latitude=@lat, Longitude=@lng WHERE PermitID=@p");
         } else {
-            q.input('ren', sql.NVarChar(sql.MAX), renewalsJsonStr);
+            // Insert New
             await q.query("INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, FullDataJSON, RenewalsJSON) VALUES (@p, @s, @w, @re, @rv, @ap, @vf, @vt, @lat, @lng, @j, @ren)");
         }
         
+        console.log("Save Success:", pid);
         res.json({ success: true, permitId: pid });
-    } catch (e) { console.error("SAVE ERROR:", e); res.status(500).json({ error: e.message }); }
-});
 
+    } catch (e) { 
+        console.error("SERVER SAVE ERROR:", e); // THIS will show in your Azure Logs
+        res.status(500).json({ error: e.message, stack: e.stack }); 
+    }
+});
 app.post('/api/update-status', async (req, res) => {
     try {
         const { PermitID, action, role, user, comment, bgColor, IOCLSupervisors, ...extras } = req.body;

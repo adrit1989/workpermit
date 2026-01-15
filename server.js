@@ -297,7 +297,7 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
                 hc: req.body.InitRenHC || '', 
                 toxic: req.body.InitRenTox || '', 
                 oxygen: req.body.InitRenO2 || '',
-                // UPDATED: Now captures input from frontend
+                // UPDATED: Captures the new Precaution input
                 precautions: req.body.InitRenPrec || 'As per Permit',
                 req_name: req.body.RequesterName || '',
                 req_at: getNowIST(),
@@ -308,7 +308,7 @@ app.post('/api/save-permit', upload.single('file'), async (req, res) => {
 
         const data = { ...req.body, SelectedWorkers: workers, PermitID: pid, CreatedDate: getNowIST(), GSR_Accepted: req.body.GSR_Accepted || 'Y' }; 
         
-        // Use Explicit Types for JSON columns to avoid truncation/errors
+        // Use Explicit Types for JSON to avoid truncation errors (The cause of 500s)
         const q = pool.request()
             .input('p', pid)
             .input('s', 'Pending Review')

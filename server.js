@@ -264,7 +264,7 @@ app.post('/api/dashboard', async (req, res) => {
 });
 
 // --- SAVE PERMIT (Corrected & Robust) ---
-app.post('/api/save-permit', upload.single('file'), async (req, res) => {
+app.post('/api/save-permit', upload.none(), async (req, res) => {
     try {
         console.log("Received Permit Submit Request:", req.body.PermitID); // Debug Log
 

@@ -362,69 +362,124 @@ app.post('/api/save-permit', upload.none(), async (req, res) => {
     }
 });
 app.post('/api/update-status', async (req, res) => {
-    try {
-        const { PermitID, action, role, user, comment, bgColor, IOCLSupervisors, ...extras } = req.body;
-        const pool = await getConnection();
-        const cur = await pool.request().input('p', PermitID).query("SELECT * FROM Permits WHERE PermitID=@p");
-        if(cur.recordset.length === 0) return res.json({error: "Not found"});
-        let st = cur.recordset[0].Status;
-        if (st === 'Closed') {
-            return res.status(400).json({error: "Permit is strictly CLOSED. No further actions allowed."});
-        }
-        let d = JSON.parse(cur.recordset[0].FullDataJSON);
-        Object.assign(d, extras);
-        if(bgColor) d.PdfBgColor = bgColor;
-        if (IOCLSupervisors) d.IOCLSupervisors = IOCLSupervisors;
-        if(req.body.Site_Restored_Check) d.Site_Restored_Check = req.body.Site_Restored_Check;
+    try {
+        const { PermitID, action, role, user, comment, bgColor, IOCLSupervisors, FirstRenewalAction, ...extras } = req.body;
+        const pool = await getConnection();
+        const cur = await pool.request().input('p', PermitID).query("SELECT * FROM Permits WHERE PermitID=@p");
+        if(cur.recordset.length === 0) return res.json({error: "Not found"});
+        
+        let st = cur.recordset[0].Status;
+        if (st === 'Closed') {
+            return res.status(400).json({error: "Permit is strictly CLOSED. No further actions allowed."});
+        }
 
-        if(comment) {
-            if(role === 'Reviewer') d.Reviewer_Remarks = comment;
-            if(role === 'Approver') d.Approver_Remarks = comment;
-        }
-        if(req.body.Closure_Requestor_Remarks) d.Closure_Requestor_Remarks = req.body.Closure_Requestor_Remarks;
-        if(req.body.Closure_Reviewer_Remarks) d.Closure_Reviewer_Remarks = req.body.Closure_Reviewer_Remarks;
-        if(req.body.Closure_Approver_Remarks) d.Closure_Approver_Remarks = req.body.Closure_Approver_Remarks;
+        let d = JSON.parse(cur.recordset[0].FullDataJSON);
+        let renewals = JSON.parse(cur.recordset[0].RenewalsJSON || "[]");
+        const now = getNowIST();
 
-        const now = getNowIST();
+        // --- MERGE EXTRAS ---
+        Object.assign(d, extras);
+        if(bgColor) d.PdfBgColor = bgColor;
+        if (IOCLSupervisors) d.IOCLSupervisors = IOCLSupervisors;
+        if(req.body.Site_Restored_Check) d.Site_Restored_Check = req.body.Site_Restored_Check;
 
-        if(action === 'reject_closure') {
-            st = 'Active'; 
-        }
-        else if(action === 'approve_closure' && role === 'Reviewer') {
-            st = 'Closure Pending Approval'; 
-            d.Closure_Reviewer_Sig = `${user} on ${now}`;
-            d.Closure_Reviewer_Date = now;
-        }
-        else if(action === 'approve' && role === 'Approver') {
-            if(st.includes('Closure Pending Approval')) {
-                st = 'Closed';
-                d.Closure_Issuer_Sig = `${user} on ${now}`;
-                d.Closure_Approver_Date = now;
-            } else {
-                st = 'Active';
-                d.Approver_Sig = `${user} on ${now}`;
-            }
-        }
-        else if(action === 'initiate_closure') {
-            st = 'Closure Pending Review';
-            d.Closure_Requestor_Date = now;
-            d.Closure_Receiver_Sig = `${user} on ${now}`;
-        }
-        else if(action === 'reject') {
-            st = 'Rejected';
-        }
-        else if(role === 'Reviewer' && action === 'review') {
-            st = 'Pending Approval';
-            d.Reviewer_Sig = `${user} on ${now}`;
-        }
-        
-        await pool.request().input('p', PermitID).input('s', st).input('j', JSON.stringify(d)).query("UPDATE Permits SET Status=@s, FullDataJSON=@j WHERE PermitID=@p");
-        res.json({success:true});
-    } catch(e){
-        res.status(500).json({error:e.message});
-    } 
+        if(comment) {
+            if(role === 'Reviewer') d.Reviewer_Remarks = comment;
+            if(role === 'Approver') d.Approver_Remarks = comment;
+        }
+        if(req.body.Closure_Requestor_Remarks) d.Closure_Requestor_Remarks = req.body.Closure_Requestor_Remarks;
+        if(req.body.Closure_Reviewer_Remarks) d.Closure_Reviewer_Remarks = req.body.Closure_Reviewer_Remarks;
+        if(req.body.Closure_Approver_Remarks) d.Closure_Approver_Remarks = req.body.Closure_Approver_Remarks;
+
+        // --- 1ST RENEWAL LOGIC (Simultaneous Processing) ---
+        // Only applies if there is exactly 1 renewal (the initial one) and we are in the main workflow
+        if (renewals.length === 1 && FirstRenewalAction) {
+            const ren = renewals[0];
+            
+            // If Reviewer is submitting a review (Permit Approved, Renewal Decision split)
+            if (role === 'Reviewer' && action === 'review') {
+                if (FirstRenewalAction === 'accept') {
+                    ren.status = 'pending_approval'; // Move renewal to next stage
+                    ren.rev_name = user;
+                    ren.rev_at = now;
+                } else if (FirstRenewalAction === 'reject') {
+                    ren.status = 'rejected';
+                    ren.rej_by = user;
+                    ren.rej_at = now;
+                    ren.rej_reason = "Rejected during 1st Review";
+                    ren.rej_role = 'Reviewer';
+                }
+            }
+            // If Approver is approving (Permit Approved, Renewal Decision split)
+            else if (role === 'Approver' && action === 'approve') {
+                if (ren.status !== 'rejected') { // Only act if reviewer didn't already reject it
+                    if (FirstRenewalAction === 'accept') {
+                        ren.status = 'approved';
+                        ren.app_name = user;
+                        ren.app_at = now;
+                    } else if (FirstRenewalAction === 'reject') {
+                        ren.status = 'rejected';
+                        ren.rej_by = user;
+                        ren.rej_at = now;
+                        ren.rej_reason = "Rejected during 1st Approval";
+                        ren.rej_role = 'Approver';
+                    }
+                }
+            }
+        }
+
+        // --- MAIN PERMIT STATUS LOGIC ---
+        if(action === 'reject_closure') {
+            st = 'Active'; 
+        }
+        else if(action === 'approve_closure' && role === 'Reviewer') {
+            st = 'Closure Pending Approval'; 
+            d.Closure_Reviewer_Sig = `${user} on ${now}`;
+            d.Closure_Reviewer_Date = now;
+        }
+        else if(action === 'approve' && role === 'Approver') {
+            if(st.includes('Closure Pending Approval')) {
+                st = 'Closed';
+                d.Closure_Issuer_Sig = `${user} on ${now}`;
+                d.Closure_Approver_Date = now;
+            } else {
+                st = 'Active';
+                d.Approver_Sig = `${user} on ${now}`;
+            }
+        }
+        else if(action === 'initiate_closure') {
+            st = 'Closure Pending Review';
+            d.Closure_Requestor_Date = now;
+            d.Closure_Receiver_Sig = `${user} on ${now}`;
+        }
+        else if(action === 'reject') {
+            st = 'Rejected';
+            // If permit is rejected, reject any pending renewals too
+            if(renewals.length > 0) {
+                const last = renewals[renewals.length-1];
+                if(last.status.includes('pending')) {
+                    last.status = 'rejected';
+                    last.rej_reason = "Parent Permit Rejected";
+                }
+            }
+        }
+        else if(role === 'Reviewer' && action === 'review') {
+            st = 'Pending Approval';
+            d.Reviewer_Sig = `${user} on ${now}`;
+        }
+        
+        await pool.request()
+            .input('p', PermitID)
+            .input('s', st)
+            .input('j', JSON.stringify(d))
+            .input('r', JSON.stringify(renewals)) // Save updated renewals
+            .query("UPDATE Permits SET Status=@s, FullDataJSON=@j, RenewalsJSON=@r WHERE PermitID=@p");
+            
+        res.json({success:true});
+    } catch(e){
+        res.status(500).json({error:e.message});
+    } 
 });
-
 app.post('/api/renewal', async (req, res) => {
     try {
         const { PermitID, userRole, userName, action, rejectionReason, renewalWorkers, ...data } = req.body;

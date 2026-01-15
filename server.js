@@ -426,6 +426,7 @@ app.post('/api/stats', async (req, res) => { try { const pool = await getConnect
 app.get('/api/download-excel', async (req, res) => { try { const pool = await getConnection(); const result = await pool.request().query("SELECT * FROM Permits ORDER BY Id DESC"); const workbook = new ExcelJS.Workbook(); const sheet = workbook.addWorksheet('Permits'); sheet.columns = [{header:'Permit ID',key:'id',width:15},{header:'Status',key:'status',width:20},{header:'Work',key:'wt',width:25},{header:'Requester',key:'req',width:25},{header:'Location',key:'loc',width:30},{header:'Vendor',key:'ven',width:20},{header:'Valid From',key:'vf',width:20},{header:'Valid To',key:'vt',width:20}]; sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 }; sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFED7D31' } }; result.recordset.forEach(r => { const d = JSON.parse(r.FullDataJSON || "{}"); sheet.addRow({ id: r.PermitID, status: r.Status, wt: d.WorkType, req: d.RequesterName, loc: d.ExactLocation, ven: d.Vendor, vf: formatDate(r.ValidFrom), vt: formatDate(r.ValidTo) }); }); res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); res.setHeader('Content-Disposition', 'attachment; filename=IndianOil_Permits.xlsx'); await workbook.xlsx.write(res); res.end(); } catch (e) { res.status(500).send(e.message); } });
 
 // --- PDF GENERATION ROUTE ---
+// --- PDF GENERATION ROUTE ---
 app.get('/api/download-pdf/:id', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -444,9 +445,29 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         };
 
         drawHeaderOnAll();
-        
-        // --- UPDATED MAIN INFO SECTION ---
-        // Replacing the grid with the specific list requested
+
+        // --- (D) BANNER AT TOP OF PAGE 1 ---
+        if (fs.existsSync('safety_banner.png')) {
+            try {
+                // Draw banner immediately after header on Page 1
+                doc.image('safety_banner.png', 30, doc.y, { width: 535, height: 100, align: 'center', fit: [535, 100] });
+                doc.y += 110; // Move down past banner
+            } catch(err) { console.log("Error loading banner:", err); }
+        }
+
+        // --- (B) GSR ACCEPTANCE RECORD ---
+        // Displaying this prominently before details
+        if(d.GSR_Accepted === 'Y') {
+             doc.rect(30, doc.y, 535, 20).fillColor('#e6fffa').fill(); // Light green bg
+             doc.fillColor('black').stroke(); // Reset fill
+             doc.rect(30, doc.y, 535, 20).stroke(); // Border
+             doc.font('Helvetica-Bold').fontSize(9).fillColor('#047857')
+                .text("✓ I have read, understood and accepted the IOCL Golden Safety Rules terms and penalties.", 35, doc.y + 5);
+             doc.y += 25;
+             doc.fillColor('black');
+        }
+
+        // --- MAIN INFO SECTION ---
         doc.font('Helvetica-Bold').fontSize(10).text(`Permit No: ${p.PermitID}`, 30, doc.y);
         doc.fontSize(9).font('Helvetica');
         doc.y += 15;
@@ -455,7 +476,7 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         // (i) Work Clearance
         const dateFrom = formatDate(p.ValidFrom);
         const dateTo = formatDate(p.ValidTo);
-        doc.text(`(i) Work clearance from: ${dateFrom}   To   ${dateTo} (Valid for the shift unless renewed).`, 30, doc.y);
+        doc.text(`(i) Work clearance from: ${dateFrom}    To    ${dateTo} (Valid for the shift unless renewed).`, 30, doc.y);
         doc.y += 15;
 
         // (ii) Issued To
@@ -468,31 +489,30 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.text(`(iii) Exact Location of work (Area/RCP/SV/Chainage): ${locDetail} [GPS: ${coords}]`, 30, doc.y);
         doc.y += 15;
 
-        // (iii -> iv in list but label is III in prompt) Description
+        // (iv) Description
         doc.text(`(iv) Description of work: ${d.Desc || '-'}`, 30, doc.y, {width: 535});
         doc.y += 20;
 
-        // (iv -> v) Person from Contractor at site
-        // Mapping Requestor Name and Emergency Contact (as site contact)
+        // (v) Person from Contractor at site
         const siteContact = d.EmergencyContact || 'Not Provided';
         doc.text(`(v) Person from Contractor / Dept. at site (Name & Contact): ${d.RequesterName} / ${siteContact}`, 30, doc.y);
         doc.y += 15;
 
-        // (v -> vi) Guard
+        // (vi) Guard
         doc.text(`(vi) Patrolling/ security Guard at site (Name & Contact): ${d.SecurityGuard || '-'}`, 30, doc.y);
         doc.y += 15;
 
-        // (vi -> vii) JSA/References
+        // (vii) JSA/References
         const jsa = d.JsaNo || '-';
         const wo = d.WorkOrder || '-';
         doc.text(`(vii) JSA Ref. No: ${jsa} | Cross-Reference/WO: ${wo}`, 30, doc.y);
         doc.y += 15;
 
-        // (vii -> viii) Emergency Contact (Redundant but requested)
+        // (viii) Emergency Contact
         doc.text(`(viii) Name & contact no. of person in case of emergency: ${d.EmergencyContact || '-'}`, 30, doc.y);
         doc.y += 15;
 
-        // (viii -> ix) Fire Station
+        // (ix) Fire Station
         doc.text(`(ix) Nearest Fire station and Hospital: ${d.FireStation || '-'}`, 30, doc.y);
         doc.y += 20;
 
@@ -500,13 +520,6 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.rect(25, startY - 5, 545, doc.y - startY + 5).stroke();
         doc.y += 10;
         
-        // GSR Acceptance Record
-        if(d.GSR_Accepted === 'Y') {
-             doc.font('Helvetica-Bold').fillColor('red').fontSize(8).text("** Golden Safety Rules Compliance Accepted by Requestor **", 30, doc.y, {align:'center'});
-             doc.fillColor('black');
-             doc.y += 15;
-        }
-
         // Checklists
         const drawChecklist = (t,i,pr) => { 
             if(doc.y>650){doc.addPage(); drawHeaderOnAll(); doc.y=135;} 
@@ -515,23 +528,31 @@ app.get('/api/download-pdf/:id', async (req, res) => {
             doc.rect(30,y,350,20).stroke().text("Item",35,y+5); doc.rect(380,y,60,20).stroke().text("Sts",385,y+5); doc.rect(440,y,125,20).stroke().text("Rem",445,y+5); y+=20;
             doc.font('Helvetica').fontSize(8);
             i.forEach((x,k)=>{
-                if(y>750){doc.addPage(); drawHeaderOnAll(); doc.y=135; y=135;}
+                // --- (A) FIX GAS TEST ROW HEIGHT ---
+                // If Section A and Item 12 (index 11), use larger height
+                let rowH = 20;
+                if(pr === 'A' && k === 11) rowH = 45; // Increased height to fit 3 lines
+
+                if(y + rowH > 750){doc.addPage(); drawHeaderOnAll(); doc.y=135; y=135;}
+                
                 const st = d[`${pr}_Q${k+1}`]||'NA';
                 if(d[`${pr}_Q${k+1}`]) {
-                    doc.rect(30,y,350,20).stroke().text(x,35,y+5,{width:340});
-                    doc.rect(380,y,60,20).stroke().text(st,385,y+5); 
+                    // Item Text
+                    doc.rect(30,y,350,rowH).stroke().text(x,35,y+5,{width:340});
+                    // Status
+                    doc.rect(380,y,60,rowH).stroke().text(st,385,y+5); 
                     
-                    // --- GAS TEST DATA INJECTION ---
+                    // Detail / Remarks
                     let detailTxt = d[`${pr}_Q${k+1}_Detail`]||'';
-                    if(pr === 'A' && k === 11) { // Item 12 in Section A
+                    if(pr === 'A' && k === 11) { 
                          const hc = d.GP_Q12_HC || '_';
                          const tox = d.GP_Q12_ToxicGas || '_';
                          const o2 = d.GP_Q12_Oxygen || '_';
-                         detailTxt += `\nHC:${hc}% LEL, Tox:${tox} PPM, O2:${o2}%`;
+                         detailTxt = `HC: ${hc}% LEL\nTox: ${tox} PPM\nO2: ${o2}%`; // Using newlines
                     }
                     
-                    doc.rect(440,y,125,20).stroke().text(detailTxt,445,y+5);
-                    y+=20; 
+                    doc.rect(440,y,125,rowH).stroke().text(detailTxt,445,y+5);
+                    y+=rowH; 
                 }
             }); doc.y=y;
         };
@@ -540,11 +561,41 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         drawChecklist("SECTION C: For vehicle Entry in Hazardous area", CHECKLIST_DATA.C,'C'); drawChecklist("SECTION D: EXCAVATION", CHECKLIST_DATA.D,'D');
 
         if(doc.y>600){doc.addPage(); drawHeaderOnAll(); doc.y=135;}
+        
+        // --- (C) ANNEXURE III TABLE FORMAT ---
         doc.font('Helvetica-Bold').fontSize(9).text("Annexure III: ATTACHMENT TO MAINLINE WORK PERMIT", 30, doc.y); doc.y+=15;
-        doc.fontSize(8).font('Helvetica');
-        doc.text(`Approved SOP/SWP/SMP no ${d.SopNo||'-'} | Approved site specific JSA no: ${d.JsaNo||'-'}`, 30, doc.y); doc.y+=12;
-        doc.text(`IOCL Equipment: ${d.IoclEquip||'-'} | Contractor Equipment: ${d.ContEquip||'-'}`, 30, doc.y); doc.y+=12;
-        doc.text(`Work Order: ${d.WorkOrder||'-'}`, 30, doc.y); doc.y+=20;
+        
+        // Define Table Data
+        const annexData = [
+            ["Approved SOP/SWP/SMP No", d.SopNo || '-'],
+            ["Approved Site Specific JSA No", d.JsaNo || '-'],
+            ["IOCL Equipment", d.IoclEquip || '-'],
+            ["Contractor Equipment", d.ContEquip || '-'],
+            ["Work Order", d.WorkOrder || '-']
+        ];
+
+        let axY = doc.y;
+        doc.font('Helvetica').fontSize(9);
+        // Header (Optional, but looks better)
+        doc.fillColor('#eee');
+        doc.rect(30, axY, 200, 20).fill().stroke();
+        doc.rect(230, axY, 335, 20).fill().stroke();
+        doc.fillColor('black');
+        doc.font('Helvetica-Bold').text("Parameter", 35, axY+5);
+        doc.text("Details", 235, axY+5);
+        axY += 20;
+
+        // Rows
+        doc.font('Helvetica');
+        annexData.forEach(row => {
+            doc.rect(30, axY, 200, 20).stroke();
+            doc.text(row[0], 35, axY+5);
+            
+            doc.rect(230, axY, 335, 20).stroke();
+            doc.text(row[1], 235, axY+5);
+            axY += 20;
+        });
+        doc.y = axY + 20;
 
         // --- DYNAMIC SUPERVISORS TABLE ---
         const drawSupTable = (title, headers, dataRows) => {
@@ -695,20 +746,13 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         });
         doc.y = cy + 20;
 
-        // Footer Instructions & Safety Banner
+        // Footer Instructions
         if(doc.y>500){doc.addPage(); drawHeaderOnAll(); doc.y=135;} 
         doc.font('Helvetica-Bold').fontSize(10).text("GENERAL INSTRUCTIONS", 30, doc.y); 
         doc.y += 15; 
         doc.font('Helvetica').fontSize(8);
         const instructions = ["1. The work permit shall be filled up carefully.", "2. Appropriate safeguards and PPEs shall be determined.", "3. Requirement of standby personnel shall be mentioned.", "4. Means of communication must be available.", "5. Shift-wise communication to Main Control Room.", "6. Only certified vehicles and electrical equipment allowed.", "7. Welding machines shall be placed in ventilated areas.", "8. No hot work unless explosive meter reading is Zero.", "9. Standby person mandatory for confined space.", "10. Compressed gas cylinders not allowed inside.", "11. While filling trench, men/equipment must be outside.", "12. For renewal, issuer must ensure conditions are satisfactory.", "13. Max renewal up to 7 calendar days.", "14. Permit must be available at site.", "15. On completion, permit must be closed.", "16. Follow latest SOP for Trenching.", "17. CCTV and gas monitoring should be utilized.", "18. Refer to PLHO guidelines for details.", "19. This original permit must always be available with permit receiver.", "20. On completion of the work, the permit must be closed and the original copy of TBT, JSA, Permission etc. associated with permit to be handed over to Permit issuer", "21. A group shall be made for every work with SIC, EIC, permit issuer, Permit receiver, Mainline In charge and authorized contractor supervisor for digital platform", "22. The renewal of permits shall be done through confirmation by digital platform. However, the regularization on permits for renewal shall be done before closure of permit.", "23. No additional worker/supervisor to be engaged unless approved by Permit Receiver."]; 
         instructions.forEach(i => { doc.text(i, 30, doc.y); doc.y += 12; }); 
-
-        // --- SAFETY BANNER LOGIC ---
-        if (fs.existsSync('safety_banner.png')) {
-            const bannerHeight = 150; 
-             if (doc.y + bannerHeight > 750) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; } else { doc.moveDown(1); }
-            try { doc.image('safety_banner.png', 30, doc.y, { width: 535, align: 'center' }); } catch(err) { console.log("Error loading banner image:", err); }
-        }
 
         const wm = p.Status.includes('Closed') ? 'CLOSED' : 'ACTIVE'; 
         const color = p.Status.includes('Closed') ? '#ef4444' : '#22c55e'; 
@@ -717,5 +761,4 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         doc.end();
     } catch (e) { res.status(500).send(e.message); }
 });
-
 app.listen(8080, () => console.log('Server Ready'));

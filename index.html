@@ -636,65 +636,43 @@
             const r=currentUser.Role, s=p.Status;
             
             // Update Renewals Table
-            const rens = JSON.parse(p.RenewalsJSON || "[]");
-            document.querySelector("#table-renewals tbody").innerHTML = rens.map(r => `<tr><td data-label="Period" class="font-mono text-[10px] leading-tight">Start: ${r.valid_from.replace('T',' ')}<br>End: ${r.valid_till.replace('T',' ')}</td><td data-label="Gas & Prec" class="text-[10px]">HC:${r.hc} | O2:${r.oxygen} | Tox:${r.toxic}<br>Prec: ${r.precautions || '-'}</td><td data-label="Workers" class="text-[10px]">${r.worker_list ? r.worker_list.join(', ') : 'All'}</td><td data-label="Req" class="text-[10px]">${r.req_name}<br>${r.req_at}</td><td data-label="Rev" class="text-[10px]">${r.rev_name||'-'}</td><td data-label="App" class="text-[10px]">${r.app_name||'-'}</td><td data-label="Status"><span class="font-bold ${r.status==='rejected'?'text-red-600':'text-green-600'}">${r.status}</span></td></tr>`).join('');
-            
-            if (rens.length > 0) {
-                document.getElementById("renewals-section").classList.remove('hidden');
-            }
-
-            // --- 2. FIX: ENABLE RENEWAL RADIO BUTTONS ---
-            document.getElementById("first-renewal-decision").classList.add('hidden');
-            document.querySelectorAll('input[name="FirstRenewalAction"]').forEach(el => el.checked = false);
-
-            if (rens.length === 1) {
-                if (r === 'Reviewer' && s === 'Pending Review' && rens[0].status === 'pending_review') {
-                    document.getElementById("first-renewal-decision").classList.remove('hidden');
-                    document.querySelectorAll('input[name="FirstRenewalAction"]').forEach(el => el.disabled = false);
-                }
-                if (r === 'Approver' && s === 'Pending Approval' && rens[0].status === 'pending_approval') {
-                    document.getElementById("first-renewal-decision").classList.remove('hidden');
-                    document.querySelectorAll('input[name="FirstRenewalAction"]').forEach(el => el.disabled = false);
-                }
-            }
-
-            if(s==='Pending Review' && r==='Requester') {
-               document.getElementById('worker-checkboxes').classList.remove('hidden');
-               document.getElementById('worker-readonly-table').classList.add('hidden');
-               document.querySelectorAll('#worker-checkboxes input').forEach(c => {
-                   const wData = JSON.parse(c.value);
-                   if(workersArr.find(sw => sw.WorkerID === wData.WorkerID)) c.checked = true;
-                   c.disabled = false;
-               });
-            } else {
-               document.getElementById('worker-checkboxes').classList.add('hidden');
-               const wTable = document.querySelector('#worker-readonly-table tbody');
-               wTable.innerHTML = workersArr.map(w => `<tr><td data-label="Name" class="font-bold">${w.Name}</td><td data-label="Gender">${w.Gender||'-'}</td><td data-label="Age">${w.Age}</td><td data-label="Cont">${p.RequesterName}</td></tr>`).join('');
-               document.getElementById('worker-readonly-table').classList.remove('hidden');
-            }
-            
-            if(r === 'Requester' && (s === 'New' || s === 'Pending Review')) {
-                document.getElementById("ExactLocation").disabled = false; document.getElementById("btn-get-geo").disabled = false; document.getElementById("Latitude").disabled = false; document.getElementById("Longitude").disabled = false;
-            } else {
-                document.getElementById("ExactLocation").disabled = true; document.getElementById("btn-get-geo").disabled = true; document.getElementById("Latitude").disabled = true; document.getElementById("Longitude").disabled = true;
-            }
-
-            if(p.H_Others==='Y') document.getElementById('other-hazard-div').classList.remove('hidden');
-
-            ['fs-reviewer-section', 'fs-approver-section', 'closure-section', 'pending-renewal-display', 'action-renewal', 'signature-history', 'iocl-sup-display-section', 'iocl-reviewer-wrapper', 'iocl-approver-wrapper'].forEach(id => document.getElementById(id).classList.add('hidden'));
-            
-            document.getElementById("init-renewal-wrapper").classList.add('hidden');
-
-            const ioclData = p.IOCLSupervisors || [];
-            document.getElementById("iocl-sup-container-rev").innerHTML = ""; document.getElementById("iocl-sup-container-app").innerHTML = "";
-            ioclData.forEach(d => { window.addIOCLRow('iocl-sup-container-rev', d); window.addIOCLRow('iocl-sup-container-app', d); });
-            
-            const dispTable = document.querySelector('#table-iocl-display tbody');
-            let dispHTML = ioclData.length === 0 ? '<tr><td colspan="4" class="text-gray-400">No Supervisors Added</td></tr>' : ioclData.map(x => {
-                let style = x.is_deleted ? 'style="text-decoration: line-through; color: red;"' : '';
-                let audit = `Added by ${x.added_by} on ${x.added_at}` + (x.is_deleted ? `<br><span class="text-red-600 font-bold">Deleted by ${x.deleted_by} on ${x.deleted_at}</span>` : '');
-                return `<tr ${style}><td>${x.name}</td><td>${x.desig}</td><td>${x.contact}</td><td class="text-[10px]">${audit}</td></tr>`;
-            }).join('');
+            // --- REPLACE the Renewal Table Generation in window.openPermit ---
+const rens = JSON.parse(p.RenewalsJSON || "[]");
+document.querySelector("#table-renewals tbody").innerHTML = rens.map(r => `
+    <tr>
+        <td data-label="Period" class="font-mono text-[10px] leading-tight">
+            Start: ${r.valid_from.replace('T',' ')}<br>
+            End: ${r.valid_till.replace('T',' ')}
+        </td>
+        <td data-label="Gas & Prec" class="text-[10px]">
+            HC:${r.hc} | O2:${r.oxygen} | Tox:${r.toxic}<br>
+            Prec: ${r.precautions || '-'}
+        </td>
+        <td data-label="Workers" class="text-[10px]">
+            ${r.worker_list ? r.worker_list.join(', ') : 'All'}
+        </td>
+        <td data-label="Req" class="text-[10px]">
+            <div class="font-bold">${r.req_name}</div>
+            <div class="text-gray-500">${r.req_at}</div>
+        </td>
+        <td data-label="Rev" class="text-[10px]">
+            <div class="font-bold">${r.rev_name||'-'}</div>
+            <div class="text-gray-500">${r.rev_at||''}</div>
+            ${r.rev_rem ? `<div class="text-blue-600 italic">"${r.rev_rem}"</div>` : ''}
+        </td>
+        <td data-label="App" class="text-[10px]">
+            <div class="font-bold">${r.app_name||'-'}</div>
+            <div class="text-gray-500">${r.app_at||''}</div>
+            ${r.app_rem ? `<div class="text-blue-600 italic">"${r.app_rem}"</div>` : ''}
+        </td>
+        <td data-label="Status">
+            <span class="font-bold ${r.status==='rejected'?'text-red-600':'text-green-600'} uppercase text-xs">
+                ${r.status}
+            </span>
+            ${r.status==='rejected' ? `<div class="text-[10px] text-red-500">Reason: ${r.rej_reason||'-'}</div>` : ''}
+        </td>
+    </tr>
+`).join('');
             dispTable.innerHTML = dispHTML;
 
             const isDataView = (s === 'Active' || s === 'Closed' || s.includes('Renewal') || s.includes('Closure'));
@@ -1042,3 +1020,4 @@
     </script>
 </body>
 </html>
+

@@ -216,7 +216,7 @@
                 "9. Access for Free approach of Fire Tender.", 
                 "10. Iron Sulfide removed/ Kept wet.", 
                 "11. Equipment electrically isolated and tagged vide Permit no.", 
-                "12. Gas Test: HC / Toxic / O2 checked.", // Special handling in renderUI
+                "12. Gas Test: HC / Toxic / O2 checked.", 
                 "13. Running water hose / Fire extinguisher provided. Fire water system available.", 
                 "14. Area cordoned off and Precautionary tag/Board provided.", 
                 "15. CCTV monitoring facility available at site.", 
@@ -248,7 +248,6 @@
             ] 
         };
         const HAZARDS = ["Lack of Oxygen", "H2S", "Toxic Gases", "Combustible gases", "Pyrophoric Iron", "Corrosive Chemicals", "cave in formation", "Others"];
-        // (C) Added IFR to PPE
         const PPE = ["Helmet", "Safety Shoes", "Hand gloves", "Boiler suit", "Face Shield", "Apron", "Goggles", "Dust Respirator", "Fresh Air Mask", "Lifeline", "Safety Harness", "Airline", "Earmuff", "IFR"];
 
         document.addEventListener("DOMContentLoaded", () => { window.loadUsers(); renderUI(); });
@@ -262,9 +261,8 @@
             } finally { loader.style.display = 'none'; }
         }
 
-        // (B) Master Toggle Logic
+        // Master Toggle Logic
         window.toggleSection = function(sec, val) {
-            // Select all radio buttons in this section that match the value (Yes/NA/No)
             const radios = document.querySelectorAll(`input[name^="${sec}_Q"][value="${val}"]`);
             radios.forEach(r => r.checked = true);
         }
@@ -272,7 +270,6 @@
         function renderUI() {
             let h = '';
             ['A','B','C','D'].forEach(sec => {
-                // (B) Added Master Switches Header
                 h += `<div class="glass p-3">
                         <div class="flex justify-between items-center border-b pb-1 mb-2">
                             <div class="font-bold text-orange-700">SECTION ${sec}</div>
@@ -456,12 +453,12 @@
                 const last = rens[rens.length-1];
                 
                 if(r==='Requester' && (!last || (last.status!=='pending_review' && last.status!=='pending_approval'))) {
-                       document.getElementById("closure-section").classList.remove('hidden'); document.getElementById("div-closure-req").classList.remove('hidden');
-                       document.getElementById("Closure_Requestor_Remarks").disabled = false; document.getElementById("Site_Restored_Check").disabled = false;
-                       
-                       document.getElementById("form-renewal").classList.remove('hidden'); document.querySelectorAll('#form-renewal input').forEach(e => e.disabled = false);
-                       const renSel = document.getElementById('renewal-worker-select'); renSel.innerHTML = currentPermitWorkers.map(w => `<label class="flex items-center gap-1 text-xs bg-white p-1 rounded border"><input type="checkbox" value="${w.Name}" checked class="ren-worker-cb"> ${w.Name}</label>`).join('');
-                       btns += `<button type="button" onclick="window.upd('initiate_closure')" class="bg-red-600 text-white px-6 py-3 rounded-lg font-bold shadow flex-1">Job Complete</button>`;
+                        document.getElementById("closure-section").classList.remove('hidden'); document.getElementById("div-closure-req").classList.remove('hidden');
+                        document.getElementById("Closure_Requestor_Remarks").disabled = false; document.getElementById("Site_Restored_Check").disabled = false;
+                        
+                        document.getElementById("form-renewal").classList.remove('hidden'); document.querySelectorAll('#form-renewal input').forEach(e => e.disabled = false);
+                        const renSel = document.getElementById('renewal-worker-select'); renSel.innerHTML = currentPermitWorkers.map(w => `<label class="flex items-center gap-1 text-xs bg-white p-1 rounded border"><input type="checkbox" value="${w.Name}" checked class="ren-worker-cb"> ${w.Name}</label>`).join('');
+                        btns += `<button type="button" onclick="window.upd('initiate_closure')" class="bg-red-600 text-white px-6 py-3 rounded-lg font-bold shadow flex-1">Job Complete</button>`;
                 }
                 
                 if(last && (last.status==='pending_review' || last.status==='pending_approval')) {
@@ -605,6 +602,7 @@
             document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-form").classList.remove('hidden'); 
         }
 
+        // --- FIXED SUBMIT LOGIC ---
         window.savePermit = async function() { 
             if(!document.getElementById('gsr-check').checked) {
                 alert("You must accept the Golden Safety Rules terms to proceed.");
@@ -615,7 +613,7 @@
 
             document.getElementById('loader').style.display = 'flex'; 
             try { 
-                const fd=new FormData(document.getElementById("pf")); 
+                const fd = new FormData(document.getElementById("pf")); 
                 document.querySelectorAll('input[type="checkbox"]').forEach(c=>fd.set(c.name, c.checked?"Y":"N")); 
                 
                 fd.set("GSR_Accepted", "Y"); 
@@ -623,20 +621,83 @@
                 const selectedWorkers = []; 
                 document.querySelectorAll('#worker-checkboxes input:checked').forEach(c => { selectedWorkers.push(JSON.parse(c.value)); }); 
                 fd.append("SelectedWorkers", JSON.stringify(selectedWorkers)); 
-                fd.append("RequesterEmail", currentUser.Email); 
-                fd.append("Latitude", document.getElementById("Latitude").value); 
-                fd.append("Longitude", document.getElementById("Longitude").value); 
+                
+                if(currentUser && currentUser.Email) {
+                    fd.append("RequesterEmail", currentUser.Email); 
+                }
+
+                // Handle potentially empty lat/long to prevent null errors
+                fd.append("Latitude", document.getElementById("Latitude").value || ""); 
+                fd.append("Longitude", document.getElementById("Longitude").value || ""); 
+                
                 if(currentPermitId) fd.set("PermitID", currentPermitId); 
                 
-                const res=await fetch(API+'/save-permit', {method:'POST', body:fd}); 
-                const json=await res.json(); 
-                if(json.success){alert("Saved: "+json.permitId); showDashboard();} else alert(json.error); 
-            } finally { document.getElementById('loader').style.display = 'none'; } 
+                const res = await fetch(API+'/save-permit', {method:'POST', body:fd}); 
+                
+                // CRITICAL FIX: Handle Server Errors (Status 500) gracefully
+                if (!res.ok) {
+                    const text = await res.text();
+                    console.error("Server Error HTML:", text); 
+                    throw new Error(`Server Error (${res.status}). Check console.`);
+                }
+
+                const json = await res.json(); 
+                if(json.success){
+                    alert("Saved successfully: " + json.permitId); 
+                    showDashboard();
+                } else {
+                    alert("Error: " + json.error); 
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Submission Failed: " + e.message);
+            } finally { 
+                document.getElementById('loader').style.display = 'none'; 
+            } 
         }
         
         window.checkDate = function() { const vf=new Date(document.getElementById("ValidFrom").value); const vt=new Date(document.getElementById("ValidTo").value); if(vf && vt) { if(vt <= vf) { alert("End time must be greater than Start time"); document.getElementById("ValidTo").value=""; return; } if((vt-vf)/(1000*60*60*24) > 7) { alert("Max 7 Days"); document.getElementById("ValidTo").value=""; } } }
         window.showDashboard = function() { document.getElementById("view-dashboard").classList.remove('hidden'); document.getElementById("view-form").classList.add('hidden'); document.getElementById("view-add-user").classList.add('hidden'); document.getElementById("view-worker-management").classList.add('hidden'); document.getElementById("view-map").classList.add('hidden'); loadDashboard(); }
-        window.getGeo = function() { navigator.geolocation.getCurrentPosition(p=>{ document.getElementById("ExactLocation").value=`${p.coords.latitude}, ${p.coords.longitude}`; document.getElementById("Latitude").value = p.coords.latitude; document.getElementById("Longitude").value = p.coords.longitude; }); }
+        
+        // --- FIXED GPS LOGIC ---
+        window.getGeo = function() {
+            if (!navigator.geolocation) {
+                alert("Geolocation is not supported by your browser.");
+                return;
+            }
+
+            const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
+            const btn = document.getElementById("btn-get-geo");
+            
+            btn.innerText = "Locating...";
+            btn.disabled = true;
+
+            navigator.geolocation.getCurrentPosition(
+                (p) => {
+                    document.getElementById("ExactLocation").value = `${p.coords.latitude.toFixed(6)}, ${p.coords.longitude.toFixed(6)}`;
+                    document.getElementById("Latitude").value = p.coords.latitude;
+                    document.getElementById("Longitude").value = p.coords.longitude;
+                    btn.innerText = "📍 GPS Set";
+                    btn.disabled = false;
+                },
+                (err) => {
+                    btn.innerText = "📍 Retry GPS";
+                    btn.disabled = false;
+                    
+                    let msg = "Error fetching location.";
+                    if (err.code === 1) msg = "Permission denied.";
+                    else if (err.code === 2) msg = "Position unavailable.";
+                    else if (err.code === 3) msg = "Timeout.";
+                    
+                    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                        msg += " \nNOTE: GPS requires HTTPS.";
+                    }
+                    alert(msg);
+                },
+                options
+            );
+        };
+
         window.showAddUser = function() { document.getElementById("view-add-user").classList.remove('hidden'); }
         window.submitNewUser = async function() { const n=document.getElementById("new-user-name").value; const e=document.getElementById("new-user-email").value; const r=document.getElementById("new-user-role").value; const p=document.getElementById("new-user-pass").value; const res=await apiCall('/add-user','POST',{name:n,email:e,role:r,password:p}); if(res.success){alert("User Added"); document.getElementById("view-add-user").classList.add('hidden');} else alert(res.error); }
         window.showMap = function() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-map").classList.remove('hidden'); loadMapData(); }

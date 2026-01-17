@@ -117,6 +117,18 @@ async function drawPermitPDF(doc, p, d) {
     // Helper: Draw Header
     const bgColor = d.PdfBgColor || 'White';
     const compositePermitNo = `${d.IssuedToDept || 'DEPT'}/${p.PermitID}`;
+    
+    // Watermark Helper
+    const drawWatermark = () => {
+        if (p.Status === 'Closed') {
+            doc.save();
+            doc.rotate(-45, { origin: [297.5, 421] }); // Center of A4
+            doc.font('Helvetica-Bold').fontSize(100).fillColor('red').opacity(0.15)
+               .text('CLOSED', 0, 380, { align: 'center', width: 595 });
+            doc.restore();
+            doc.opacity(1); // Reset opacity
+        }
+    };
 
     const drawHeader = (doc, bgColor, permitNoStr) => {
         if (bgColor && bgColor !== 'Auto' && bgColor !== 'White') {
@@ -126,6 +138,9 @@ async function drawPermitPDF(doc, p, d) {
             doc.rect(0, 0, doc.page.width, doc.page.height).fill();
             doc.restore();
         }
+        
+        drawWatermark(); // Draw watermark on every page background
+
         const startX = 30, startY = 30;
         doc.lineWidth(1);
         doc.rect(startX, startY, 535, 95).stroke();
@@ -255,7 +270,7 @@ async function drawPermitPDF(doc, p, d) {
     };
     drawChecklist("SECTION A: GENERAL", CHECKLIST_DATA.A, 'A');
     drawChecklist("SECTION B : For Hot work / Entry to confined Space", CHECKLIST_DATA.B, 'B');
-    drawChecklist("SECTION C: For vehicle Entry in Hazardous area", CHECKLIST_DATA.C, 'C');
+    drawChecklist("SECTION C: For vehicle Entry in Hazardous area", CHECKLIST_DATA.C, 'C'); 
     drawChecklist("SECTION D: EXCAVATION", CHECKLIST_DATA.D, 'D');
 
     if (doc.y > 600) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; }
@@ -385,7 +400,7 @@ async function drawPermitPDF(doc, p, d) {
     doc.rect(386, sY, 179, 40).stroke().text(`APP: ${d.Approver_Sig || '-'}\nRem: ${d.Approver_Remarks || '-'}`, 391, sY + 5, { width: 169 });
     doc.y = sY + 50;
 
-    // --- RENEWAL TABLE WITH PHOTO (UPDATED FOR FEATURE B) ---
+    // --- RENEWAL TABLE WITH PHOTO (UPDATED) ---
     if (doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; }
     doc.font('Helvetica-Bold').text("CLEARANCE RENEWAL", 30, doc.y); doc.y += 15;
     let ry = doc.y;
@@ -405,21 +420,21 @@ async function drawPermitPDF(doc, p, d) {
     doc.font('Helvetica').fontSize(8);
 
     for (const r of renewals) {
-        const rowHeight = 60; 
+        const rowHeight = 60; // Increased height for photo
         if (ry > 680) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; ry = 135; }
 
         let startTxt = r.valid_from.replace('T', '\n');
         let endTxt = r.valid_till.replace('T', '\n');
         
         // FEATURE B: Mark Odd Hours in PDF
-        if (r.odd_hour_req === true) {
+        if (r.odd_hour_req) {
             endTxt += "\n(Night Shift)";
             doc.font('Helvetica-Bold').fillColor('purple');
         }
 
         doc.rect(30, ry, 45, rowHeight).stroke().text(startTxt, 32, ry + 5, { width: 43 });
         doc.rect(75, ry, 45, rowHeight).stroke().text(endTxt, 77, ry + 5, { width: 43 });
-        doc.fillColor('black').font('Helvetica'); // Reset font color
+        doc.fillColor('black').font('Helvetica'); // Reset font
 
         doc.rect(120, ry, 55, rowHeight).stroke().text(`HC: ${r.hc}\nTox: ${r.toxic}\nO2: ${r.oxygen}\nPrec: ${r.precautions || '-'}`, 122, ry + 5, { width: 53 });
 
@@ -455,7 +470,7 @@ async function drawPermitPDF(doc, p, d) {
     }
     doc.y = ry + 20;
 
-    // --- CLOSURE SECTION ---
+    // --- CLOSURE SECTION (FIXED: Handles Page Breaks) ---
     if (p.Status.includes('Closure') || p.Status === 'Closed') {
         if (doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; }
         doc.font('Helvetica-Bold').fontSize(10).text("WORK COMPLETION & CLOSURE", 30, doc.y);
@@ -473,6 +488,7 @@ async function drawPermitPDF(doc, p, d) {
 
         // Remarks Table
         const closureY = doc.y;
+        if (closureY > 700) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; }
         doc.rect(30, closureY, 178, 60).stroke().text(`REQUESTOR:\n${d.Closure_Receiver_Sig || '-'}\nDate: ${d.Closure_Requestor_Date || '-'}\nRem: ${d.Closure_Requestor_Remarks || '-'}`, 35, closureY + 5, { width: 168 });
         doc.rect(208, closureY, 178, 60).stroke().text(`REVIEWER:\n${d.Closure_Reviewer_Sig || '-'}\nDate: ${d.Closure_Reviewer_Date || '-'}\nRem: ${d.Closure_Reviewer_Remarks || '-'}`, 213, closureY + 5, { width: 168 });
         doc.rect(386, closureY, 179, 60).stroke().text(`ISSUING AUTHORITY (APPROVER):\n${d.Closure_Issuer_Sig || '-'}\nDate: ${d.Closure_Approver_Date || '-'}\nRem: ${d.Closure_Approver_Remarks || '-'}`, 391, closureY + 5, { width: 169 });
@@ -852,9 +868,9 @@ app.post('/api/update-status', async (req, res) => {
             .input('r', JSON.stringify(renewals));
 
         if (isFinalClosure) {
-            // Feature A: Wipe JSON, Set PDF URL
+            // Feature A: Wipe JSON (FullData and Renewals), Set PDF URL
             await q.input('url', finalPdfUrl)
-                   .query("UPDATE Permits SET Status=@s, FullDataJSON=NULL, RenewalsJSON=@r, FinalPdfUrl=@url WHERE PermitID=@p");
+                   .query("UPDATE Permits SET Status=@s, FullDataJSON=NULL, RenewalsJSON=NULL, FinalPdfUrl=@url WHERE PermitID=@p");
         } else {
             // Normal Update
             await q.input('j', finalJson)
@@ -946,7 +962,8 @@ app.post('/api/permit-data', async (req, res) => {
             res.json({ 
                 ...data, 
                 Status: r.recordset[0].Status, 
-                RenewalsJSON: r.recordset[0].RenewalsJSON,
+                RenewalsJSON: r.recordset[0].RenewalsJSON, 
+                // NEW: Send photo preference back to frontend
                 RequireRenewalPhotos: data.RequireRenewalPhotos || 'N',
                 FullDataJSON: null // Don't send raw large string
             }); 
@@ -982,6 +999,8 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         const result = await pool.request().input('p', req.params.id).query("SELECT * FROM Permits WHERE PermitID = @p");
         if (!result.recordset.length) return res.status(404).send('Not Found');
         const p = result.recordset[0]; 
+        // If Closed, this route won't work perfectly without JSON, so Frontend uses Blob Link.
+        // But for active/archived history:
         const d = p.FullDataJSON ? JSON.parse(p.FullDataJSON) : {};
         
         const doc = new PDFDocument({ margin: 30, size: 'A4', bufferPages: true });

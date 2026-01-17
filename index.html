@@ -301,62 +301,52 @@
         let currentRenewalCount = 0; 
         let permitRequirePhoto = false; 
         const loader = document.getElementById('loader');
+        
+        // --- SECURITY VARIABLES ---
+        let authToken = null;
+
+        // --- XSS PROTECTION ---
+        function escapeHtml(text) {
+            if (!text) return text;
+            return String(text)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
 
         const CL_DATA = { 
-            A: [
-                "1. Equipment / Work Area inspected.", 
-                "2. Surrounding area checked, cleaned and covered. Oil/RAGS/Grass Etc removed.", 
-                "3. Manholes, Sewers, CBD etc. and hot nearby surface covered.", 
-                "4. Considered hazards from other routine, non-routine operations and concerned person alerted.", 
-                "5. Equipment blinded/ disconnected/ closed/ isolated/ wedge opened.", 
-                "6. Equipment properly drained and depressurized.", 
-                "7. Equipment properly steamed/purged.", 
-                "8. Equipment water flushed.", 
-                "9. Access for Free approach of Fire Tender.", 
-                "10. Iron Sulfide removed/ Kept wet.", 
-                "11. Equipment electrically isolated and tagged vide Permit no.", 
-                "12. Gas Test: HC / Toxic / O2 checked.", 
-                "13. Running water hose / Fire extinguisher provided. Fire water system available.", 
-                "14. Area cordoned off and Precautionary tag/Board provided.", 
-                "15. CCTV monitoring facility available at site.", 
-                "16. Proper ventilation and Lighting provided."
-            ], 
-            B: [
-                "1. Proper means of exit / escape provided.", 
-                "2. Standby personnel provided from Mainline/ Maint. / Contractor/HSE.", 
-                "3. Checked for oil and Gas trapped behind the lining in equipment.", 
-                "4. Shield provided against spark.", 
-                "5. Portable equipment / nozzle properly grounded.", 
-                "6. Standby persons provided for entry to confined space.", 
-                "7. Adequate Communication Provided to Stand by Person.", 
-                "8. Attendant Trained Provided With Rescue Equipment/SCABA.", 
-                "9. Space Adequately Cooled for Safe Entry Of Person.", 
-                "10. Continuous Inert Gas Flow Arranged.", 
-                "11. Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding.", 
-                "12. Gas Cylinders are kept outside the confined Space.", 
-                "13. Spark arrestor Checked on mobile Equipments.", 
-                "14. Welding Machine Checked for Safe Location.", 
-                "15. Permit taken for working at height Vide Permit No."
-            ], 
+            A: [ "1. Equipment / Work Area inspected.", "2. Surrounding area checked, cleaned and covered. Oil/RAGS/Grass Etc removed.", "3. Manholes, Sewers, CBD etc. and hot nearby surface covered.", "4. Considered hazards from other routine, non-routine operations and concerned person alerted.", "5. Equipment blinded/ disconnected/ closed/ isolated/ wedge opened.", "6. Equipment properly drained and depressurized.", "7. Equipment properly steamed/purged.", "8. Equipment water flushed.", "9. Access for Free approach of Fire Tender.", "10. Iron Sulfide removed/ Kept wet.", "11. Equipment electrically isolated and tagged vide Permit no.", "12. Gas Test: HC / Toxic / O2 checked.", "13. Running water hose / Fire extinguisher provided. Fire water system available.", "14. Area cordoned off and Precautionary tag/Board provided.", "15. CCTV monitoring facility available at site.", "16. Proper ventilation and Lighting provided." ], 
+            B: [ "1. Proper means of exit / escape provided.", "2. Standby personnel provided from Mainline/ Maint. / Contractor/HSE.", "3. Checked for oil and Gas trapped behind the lining in equipment.", "4. Shield provided against spark.", "5. Portable equipment / nozzle properly grounded.", "6. Standby persons provided for entry to confined space.", "7. Adequate Communication Provided to Stand by Person.", "8. Attendant Trained Provided With Rescue Equipment/SCABA.", "9. Space Adequately Cooled for Safe Entry Of Person.", "10. Continuous Inert Gas Flow Arranged.", "11. Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding.", "12. Gas Cylinders are kept outside the confined Space.", "13. Spark arrestor Checked on mobile Equipments.", "14. Welding Machine Checked for Safe Location.", "15. Permit taken for working at height Vide Permit No." ], 
             C: ["1. PESO approved spark elimination system provided on the mobile equipment/ vehicle provided."], 
-            D: [
-                "1. For excavated trench/ pit proper slop/ shoring/ shuttering provided to prevent soil collapse.", 
-                "2. Excavated soil kept at safe distance from trench/pit edge (min. pit depth).", 
-                "3. Safe means of access provided inside trench/pit.", 
-                "4. Movement of heavy vehicle prohibited."
-            ] 
+            D: [ "1. For excavated trench/ pit proper slop/ shoring/ shuttering provided to prevent soil collapse.", "2. Excavated soil kept at safe distance from trench/pit edge (min. pit depth).", "3. Safe means of access provided inside trench/pit.", "4. Movement of heavy vehicle prohibited." ] 
         };
         const HAZARDS = ["Lack of Oxygen", "H2S", "Toxic Gases", "Combustible gases", "Pyrophoric Iron", "Corrosive Chemicals", "cave in formation", "Others"];
         const PPE = ["Helmet", "Safety Shoes", "Hand gloves", "Boiler suit", "Face Shield", "Apron", "Goggles", "Dust Respirator", "Fresh Air Mask", "Lifeline", "Safety Harness", "Airline", "Earmuff", "IFR"];
 
         document.addEventListener("DOMContentLoaded", () => { window.loadUsers(); renderUI(); });
 
+        // --- SECURE API CALL ---
         async function apiCall(ep, meth="GET", body=null) {
             loader.style.display = 'flex';
             try {
-                const opts={method:meth,headers:{'Content-Type':'application/json'}};
+                const headers = {'Content-Type':'application/json'};
+                // Attach Token if it exists
+                if(authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                
+                const opts={method:meth, headers:headers};
                 if(body)opts.body=JSON.stringify(body);
-                const res=await fetch(API+ep,opts); return await res.json();
+                
+                const res=await fetch(API+ep,opts); 
+                
+                if (res.status === 401 || res.status === 403) {
+                    alert("Session expired or unauthorized. Please log in again.");
+                    location.reload();
+                    return { error: "Auth Error" };
+                }
+                
+                return await res.json();
             } finally { loader.style.display = 'none'; }
         }
 
@@ -400,8 +390,26 @@
         }
 
         window.loadUsers = async function() { try { const u = await apiCall('/users'); usersData = u; document.getElementById("login-role").value = "Requester"; loadUserNames(); } catch (e) { console.error("Failed", e); } }
-        window.loadUserNames = function() { const role = document.getElementById("login-role").value; const names = usersData[role+'s'] || []; const sel = document.getElementById("login-name"); sel.innerHTML = names.map(u => `<option value="${u.email}">${u.name}</option>`).join(''); sel.disabled = false; }
-        window.handleLogin = async function() { const r=document.getElementById("login-role").value; const n=document.getElementById("login-name").options[document.getElementById("login-name").selectedIndex].text; const e=document.getElementById("login-name").value; const p=document.getElementById("login-password").value; const res=await apiCall('/login','POST',{role:r,name:e,password:p}); if(res.success){ currentUser={...res.user, name:n}; document.getElementById("view-login").classList.add('hidden'); document.getElementById("app-container").classList.remove('hidden'); document.getElementById("user-info").innerText=`${n} (${r})`; updateRoleUI(); loadDashboard(); } else alert("Invalid Login"); }
+        window.loadUserNames = function() { const role = document.getElementById("login-role").value; const names = usersData[role+'s'] || []; const sel = document.getElementById("login-name"); sel.innerHTML = names.map(u => `<option value="${u.email}">${escapeHtml(u.name)}</option>`).join(''); sel.disabled = false; }
+        
+        window.handleLogin = async function() { 
+            const r=document.getElementById("login-role").value; 
+            const n=document.getElementById("login-name").options[document.getElementById("login-name").selectedIndex].text; 
+            const e=document.getElementById("login-name").value; 
+            const p=document.getElementById("login-password").value; 
+            
+            const res=await apiCall('/login','POST',{role:r,name:e,password:p}); 
+            if(res.success){ 
+                currentUser={...res.user, name:n}; 
+                authToken = res.token; // SAVE TOKEN
+                document.getElementById("view-login").classList.add('hidden'); 
+                document.getElementById("app-container").classList.remove('hidden'); 
+                document.getElementById("user-info").innerText=`${n} (${r})`; 
+                updateRoleUI(); 
+                loadDashboard(); 
+            } else alert("Invalid Login"); 
+        }
+        
         function updateRoleUI() { if(currentUser.Role==='Requester') { document.getElementById("btn-new-permit").classList.remove('hidden'); document.getElementById("btn-add-worker").classList.remove('hidden'); document.getElementById("btn-header-map").classList.add('hidden'); } if(currentUser.Role!=='Requester') { document.getElementById("btn-view-map").classList.remove('hidden'); document.getElementById("btn-download-excel").classList.remove('hidden'); document.getElementById("charts-container").classList.remove('hidden'); document.getElementById("btn-header-map").classList.remove('hidden'); loadStats(); if(currentUser.Role==='Approver') document.getElementById("btn-add-user").classList.remove('hidden'); } }
         async function loadStats() { const res=await apiCall('/stats','POST'); if(chartS)chartS.destroy(); if(chartT)chartT.destroy(); chartS=new Chart(document.getElementById('chartStatus'),{type:'doughnut',data:{labels:Object.keys(res.statusCounts),datasets:[{data:Object.values(res.statusCounts)}]}}); chartT=new Chart(document.getElementById('chartType'),{type:'bar',data:{labels:Object.keys(res.typeCounts),datasets:[{label:'Types',data:Object.values(res.typeCounts)}]}}); }
         window.toggleOtherID = function() { const val = document.getElementById("w-id-type").value; const otherInput = document.getElementById("w-id-type-other"); if(val === "Other") otherInput.classList.remove("hidden"); else otherInput.classList.add("hidden"); }
@@ -423,17 +431,32 @@
             const res = await apiCall('/save-worker', 'POST', body); if(res.success) { alert("Saved"); loadWorkers('dashboard'); document.getElementById('worker-form-container').classList.add('hidden'); } else alert(res.error); 
         }
 
-        async function loadWorkers(context) { const res = await apiCall('/get-workers', 'POST', {role:currentUser.Role, email:currentUser.Email, context:context}); if(context === 'permit_dropdown') { const con = document.getElementById('worker-checkboxes'); con.innerHTML = res.map(w => `<label class="flex items-center gap-2 border p-3 rounded-lg bg-gray-50"><input type="checkbox" name="Worker_${w.WorkerID}" value='${JSON.stringify(w)}' class="w-5 h-5"> <span class="font-bold">${w.Name}</span> <span class="text-xs text-gray-500">(${w.Age})</span></label>`).join(''); } else { const t = document.querySelector('#table-workers tbody'); t.innerHTML = res.map(w => `<tr><td data-label="Name" class="font-bold text-blue-600">${w.Name}</td><td data-label="Father">${w.Father}</td><td data-label="ID Details">${w.IDType || 'ID'}: ${w.ID}</td><td data-label="Address/Contact">${w.Address}<br><span class="text-xs text-blue-600">${w.Contact}</span></td><td data-label="Requestor" class="font-bold text-indigo-600">${w.RequestorName || 'Unknown'}</td> <td data-label="Status"><span class="px-2 py-1 rounded text-xs font-bold ${w.Status==='Approved'?'bg-green-100 text-green-800':(w.Status==='Rejected'?'bg-red-100 text-red-800':'bg-yellow-100 text-yellow-800')}">${w.Status}</span>${w.ApprovedBy ? `<div class="text-[10px] mt-1 text-green-700">App: ${w.ApprovedBy}<br>${w.ApprovedAt}</div>` : ''}</td><td data-label="Action">${(currentUser.Role !== 'Requester' && w.Status.includes('Pending')) ? `<button onclick="window.workerAction('${w.WorkerID}','approve')" class="text-green-600 font-bold border p-1 rounded hover:bg-green-50">Approve</button> <button onclick="window.workerAction('${w.WorkerID}','reject')" class="text-red-600 font-bold border p-1 rounded hover:bg-red-50 ml-2">Reject</button>` : ''}${(currentUser.Role==='Requester' && w.Status==='Approved') ? `<button onclick='window.openWorkerForm("edit_request", ${JSON.stringify(w)})' class="text-blue-600 font-bold mr-2">Edit</button> <button onclick="window.workerAction('${w.WorkerID}','delete')" class="text-red-600 font-bold">Del</button>` : ''}</td></tr>`).join(''); } }
-        window.workerAction = async function(id, act) { await apiCall('/save-worker', 'POST', {WorkerID:id, Action:act, Role:currentUser.Role, ApproverName: currentUser.name}); loadWorkers('dashboard'); }
-        async function loadDashboard() { const res = await apiCall('/dashboard', 'POST', {role:currentUser.Role, email:currentUser.Email}); const tP=document.querySelector('#table-pending tbody'), tA=document.querySelector('#table-active tbody'), tO=document.querySelector('#table-other tbody'); tP.innerHTML=""; tA.innerHTML=""; tO.innerHTML=""; res.forEach(p => { let pendingWith = "-"; if(p.Status.includes('Review')) pendingWith = p.ReviewerEmail ? p.ReviewerEmail.split('@')[0] : '-'; if(p.Status.includes('Approval')) pendingWith = p.ApproverEmail ? p.ApproverEmail.split('@')[0] : '-'; const statusColor = p.Status.includes('Pending') ? 'text-red-600' : (p.Status==='Active' ? 'text-green-600' : 'text-gray-600'); 
-        
-        // Feature A: Closed Permit PDF Link
-        let actionHtml = `<span class="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-bold">OPEN</span>`;
-        if (p.Status === 'Closed') {
-            actionHtml = `<a href="${p.FinalPdfUrl}" target="_blank" class="btn-pdf">Download PDF</a>`;
+        async function loadWorkers(context) { 
+            const res = await apiCall('/get-workers', 'POST', {role:currentUser.Role, email:currentUser.Email, context:context}); 
+            if(context === 'permit_dropdown') { 
+                const con = document.getElementById('worker-checkboxes'); 
+                con.innerHTML = res.map(w => `<label class="flex items-center gap-2 border p-3 rounded-lg bg-gray-50"><input type="checkbox" name="Worker_${w.WorkerID}" value='${JSON.stringify(w)}' class="w-5 h-5"> <span class="font-bold">${escapeHtml(w.Name)}</span> <span class="text-xs text-gray-500">(${w.Age})</span></label>`).join(''); 
+            } else { 
+                const t = document.querySelector('#table-workers tbody'); 
+                t.innerHTML = res.map(w => `<tr><td data-label="Name" class="font-bold text-blue-600">${escapeHtml(w.Name)}</td><td data-label="Father">${escapeHtml(w.Father)}</td><td data-label="ID Details">${w.IDType || 'ID'}: ${escapeHtml(w.ID)}</td><td data-label="Address/Contact">${escapeHtml(w.Address)}<br><span class="text-xs text-blue-600">${escapeHtml(w.Contact)}</span></td><td data-label="Requestor" class="font-bold text-indigo-600">${escapeHtml(w.RequestorName) || 'Unknown'}</td> <td data-label="Status"><span class="px-2 py-1 rounded text-xs font-bold ${w.Status==='Approved'?'bg-green-100 text-green-800':(w.Status==='Rejected'?'bg-red-100 text-red-800':'bg-yellow-100 text-yellow-800')}">${w.Status}</span>${w.ApprovedBy ? `<div class="text-[10px] mt-1 text-green-700">App: ${escapeHtml(w.ApprovedBy)}<br>${w.ApprovedAt}</div>` : ''}</td><td data-label="Action">${(currentUser.Role !== 'Requester' && w.Status.includes('Pending')) ? `<button onclick="window.workerAction('${w.WorkerID}','approve')" class="text-green-600 font-bold border p-1 rounded hover:bg-green-50">Approve</button> <button onclick="window.workerAction('${w.WorkerID}','reject')" class="text-red-600 font-bold border p-1 rounded hover:bg-red-50 ml-2">Reject</button>` : ''}${(currentUser.Role==='Requester' && w.Status==='Approved') ? `<button onclick='window.openWorkerForm("edit_request", ${JSON.stringify(w)})' class="text-blue-600 font-bold mr-2">Edit</button> <button onclick="window.workerAction('${w.WorkerID}','delete')" class="text-red-600 font-bold">Del</button>` : ''}</td></tr>`).join(''); 
+            } 
         }
+        window.workerAction = async function(id, act) { await apiCall('/save-worker', 'POST', {WorkerID:id, Action:act, Role:currentUser.Role, ApproverName: currentUser.name}); loadWorkers('dashboard'); }
+        
+        async function loadDashboard() { 
+            const res = await apiCall('/dashboard', 'POST', {role:currentUser.Role, email:currentUser.Email}); 
+            const tP=document.querySelector('#table-pending tbody'), tA=document.querySelector('#table-active tbody'), tO=document.querySelector('#table-other tbody'); tP.innerHTML=""; tA.innerHTML=""; tO.innerHTML=""; 
+            res.forEach(p => { 
+                let pendingWith = "-"; if(p.Status.includes('Review')) pendingWith = p.ReviewerEmail ? p.ReviewerEmail.split('@')[0] : '-'; if(p.Status.includes('Approval')) pendingWith = p.ApproverEmail ? p.ApproverEmail.split('@')[0] : '-'; const statusColor = p.Status.includes('Pending') ? 'text-red-600' : (p.Status==='Active' ? 'text-green-600' : 'text-gray-600'); 
+                
+                // Feature A: Closed Permit PDF Link
+                let actionHtml = `<span class="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-bold">OPEN</span>`;
+                if (p.Status === 'Closed') {
+                    actionHtml = `<a href="${p.FinalPdfUrl}" target="_blank" class="btn-pdf">Download PDF</a>`;
+                }
 
-        const row = `<tr class="cursor-pointer hover:bg-orange-50 transition" onclick="if('${p.Status}' !== 'Closed') window.openPermit('${p.PermitID}')"><td data-label="ID" class="font-bold text-blue-600 text-lg">${p.PermitID}</td><td data-label="Type" class="font-medium">${p.WorkType||'-'}</td><td data-label="Loc" class="text-gray-600">${p.LocationUnit||'-'}</td><td data-label="Status" class="font-bold ${statusColor}">${p.Status}</td><td data-label="With" class="text-sm text-gray-500">${pendingWith}</td><td data-label="Action">${actionHtml}</td></tr>`; let isAction = false; const s = p.Status; if(currentUser.Role === 'Reviewer') { if((s === 'Pending Review' || s === 'Renewal Pending Review' || s === 'Closure Pending Review') && p.ReviewerEmail === currentUser.Email) isAction = true; } else if(currentUser.Role === 'Approver') { if((s === 'Pending Approval' || s === 'Renewal Pending Approval' || s === 'Closure Pending Approval') && p.ApproverEmail === currentUser.Email) isAction = true; } else if (currentUser.Role === 'Requester') { if (s.includes('Pending')) isAction = true; } if(isAction) tP.innerHTML += row; else if(s === 'Active') tA.innerHTML += row; else tO.innerHTML += row; }); }
+                const row = `<tr class="cursor-pointer hover:bg-orange-50 transition" onclick="if('${p.Status}' !== 'Closed') window.openPermit('${p.PermitID}')"><td data-label="ID" class="font-bold text-blue-600 text-lg">${p.PermitID}</td><td data-label="Type" class="font-medium">${escapeHtml(p.WorkType||'-')}</td><td data-label="Loc" class="text-gray-600">${escapeHtml(p.LocationUnit||'-')}</td><td data-label="Status" class="font-bold ${statusColor}">${p.Status}</td><td data-label="With" class="text-sm text-gray-500">${escapeHtml(pendingWith)}</td><td data-label="Action">${actionHtml}</td></tr>`; let isAction = false; const s = p.Status; if(currentUser.Role === 'Reviewer') { if((s === 'Pending Review' || s === 'Renewal Pending Review' || s === 'Closure Pending Review') && p.ReviewerEmail === currentUser.Email) isAction = true; } else if(currentUser.Role === 'Approver') { if((s === 'Pending Approval' || s === 'Renewal Pending Approval' || s === 'Closure Pending Approval') && p.ApproverEmail === currentUser.Email) isAction = true; } else if (currentUser.Role === 'Requester') { if (s.includes('Pending')) isAction = true; } if(isAction) tP.innerHTML += row; else if(s === 'Active') tA.innerHTML += row; else tO.innerHTML += row; }); 
+        }
 
         const getNow = () => new Date().toLocaleString("en-GB").replace(',','');
         window.addIOCLRow = function(containerId, data = {}) { if(data.is_deleted) return; const div = document.createElement('div'); div.className = "flex gap-1 iocl-row items-center"; const auditData = `<input type="hidden" class="iocl-added-by" value="${data.added_by || currentUser.name}"><input type="hidden" class="iocl-added-at" value="${data.added_at || getNow()}">`; div.innerHTML = `${auditData}<input placeholder="Name" value="${data.name||''}" class="iocl-name w-1/3 text-xs border border-gray-300 rounded p-1"><input placeholder="Desig" value="${data.desig||''}" class="iocl-desig w-1/3 text-xs border border-gray-300 rounded p-1"><input placeholder="Contact" value="${data.contact||''}" class="iocl-contact w-1/3 text-xs border border-gray-300 rounded p-1"><button type="button" onclick="window.markIOCLDeleted(this)" class="text-red-500 font-bold px-2 hover:bg-red-50 rounded">x</button>`; document.getElementById(containerId).appendChild(div); }
@@ -450,12 +473,12 @@
             document.getElementById("permit-worker-audit-display").classList.remove("hidden");
             
             if(document.getElementById("assigned-worker-audit")) {
-                document.getElementById("assigned-worker-audit").innerHTML = `<table class="mobile-table w-full text-xs"><thead><tr><th>Name</th><th>ID Details</th><th>Father</th><th>Requestor</th><th>Approval Trail</th></tr></thead><tbody>${p.SelectedWorkers.map(w=>`<tr><td data-label="Name">${w.Name} (${w.Age})</td><td data-label="ID">${w.IDType || 'ID'}: ${w.ID}</td><td data-label="Father">${w.Father}</td><td data-label="Requestor">${w.RequestorName || '-'}</td><td data-label="Approval"><span class="text-green-700 font-bold">Approved by ${w.ApprovedBy||'Admin'} on ${w.ApprovedAt||p.CreatedDate}</span></td></tr>`).join('')}</tbody></table>`;
+                document.getElementById("assigned-worker-audit").innerHTML = `<table class="mobile-table w-full text-xs"><thead><tr><th>Name</th><th>ID Details</th><th>Father</th><th>Requestor</th><th>Approval Trail</th></tr></thead><tbody>${p.SelectedWorkers.map(w=>`<tr><td data-label="Name">${escapeHtml(w.Name)} (${w.Age})</td><td data-label="ID">${w.IDType || 'ID'}: ${escapeHtml(w.ID)}</td><td data-label="Father">${escapeHtml(w.Father)}</td><td data-label="Requestor">${escapeHtml(w.RequestorName) || '-'}</td><td data-label="Approval"><span class="text-green-700 font-bold">Approved by ${escapeHtml(w.ApprovedBy)||'Admin'} on ${w.ApprovedAt||p.CreatedDate}</span></td></tr>`).join('')}</tbody></table>`;
             }
 
             const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); 
             rS.innerHTML=""; aS.innerHTML=""; 
-            if(usersData){ usersData.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); usersData.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); }
+            if(usersData){ usersData.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${escapeHtml(u.name)}</option>`); usersData.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${escapeHtml(u.name)}</option>`); }
 
             const safeSet = (id, val) => { const el = document.getElementById(id); if(el) el.value = val; };
             const setText = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
@@ -484,7 +507,7 @@
             document.querySelector("#table-renewals tbody").innerHTML = rens.map(r => {
                 const isOddHour = (r.odd_hour_req === true);
                 const nightBadge = isOddHour ? '<br><span class="bg-indigo-900 text-white px-1 text-[10px] rounded">NIGHT</span>' : '';
-                return `<tr><td data-label="Period" class="font-mono text-xs">Start: ${r.valid_from.replace('T',' ')}<br>End: &nbsp;&nbsp;${r.valid_till.replace('T',' ')}${nightBadge}</td><td data-label="Gas & Prec"><strong>Gas:</strong> HC:${r.hc}, O2:${r.oxygen}, Tox:${r.toxic}<br><strong>Prec:</strong> ${r.precautions || '-'}</td><td data-label="Workers" class="text-xs text-gray-600">${r.worker_list ? r.worker_list.join(', ') : 'All'}</td><td data-label="Photo">${r.photoUrl ? `<a href="${r.photoUrl}" target="_blank" class="text-blue-600 font-bold underline text-xs">View Photo</a>` : 'N/A'}</td><td data-label="Req">${r.req_name}<br><span class="text-[10px] text-gray-500">${r.req_at}</span></td><td data-label="Rev">${r.rev_name||'-'}<br><span class="text-[10px] text-gray-500">${r.rev_at||''}</span></td><td data-label="App">${r.app_name||'-'}<br><span class="text-[10px] text-gray-500">${r.app_at||''}</span></td><td data-label="Status"><span class="font-bold ${r.status==='rejected'?'text-red-600':'text-green-600'}">${r.status}</span></td></tr>`;
+                return `<tr><td data-label="Period" class="font-mono text-xs">Start: ${r.valid_from.replace('T',' ')}<br>End: &nbsp;&nbsp;${r.valid_till.replace('T',' ')}${nightBadge}</td><td data-label="Gas & Prec"><strong>Gas:</strong> HC:${escapeHtml(r.hc)}, O2:${escapeHtml(r.oxygen)}, Tox:${escapeHtml(r.toxic)}<br><strong>Prec:</strong> ${escapeHtml(r.precautions) || '-'}</td><td data-label="Workers" class="text-xs text-gray-600">${r.worker_list ? r.worker_list.join(', ') : 'All'}</td><td data-label="Photo">${r.photoUrl ? `<a href="${r.photoUrl}" target="_blank" class="text-blue-600 font-bold underline text-xs">View Photo</a>` : 'N/A'}</td><td data-label="Req">${escapeHtml(r.req_name)}<br><span class="text-[10px] text-gray-500">${r.req_at}</span></td><td data-label="Rev">${escapeHtml(r.rev_name)||'-'}<br><span class="text-[10px] text-gray-500">${r.rev_at||''}</span></td><td data-label="App">${escapeHtml(r.app_name)||'-'}<br><span class="text-[10px] text-gray-500">${r.app_at||''}</span></td><td data-label="Status"><span class="font-bold ${r.status==='rejected'?'text-red-600':'text-green-600'}">${r.status}</span></td></tr>`;
             }).join('');
             
             if (rens.length > 0) {
@@ -516,7 +539,7 @@
             } else {
                document.getElementById('worker-checkboxes').classList.add('hidden');
                const wTable = document.querySelector('#worker-readonly-table tbody');
-               wTable.innerHTML = workersArr.map(w => `<tr><td data-label="Name" class="font-bold">${w.Name}</td><td data-label="Gender">${w.Gender||'-'}</td><td data-label="Age">${w.Age}</td><td data-label="Cont">${p.RequesterName}</td></tr>`).join('');
+               wTable.innerHTML = workersArr.map(w => `<tr><td data-label="Name" class="font-bold">${escapeHtml(w.Name)}</td><td data-label="Gender">${w.Gender||'-'}</td><td data-label="Age">${w.Age}</td><td data-label="Cont">${escapeHtml(p.RequesterName)}</td></tr>`).join('');
                document.getElementById('worker-readonly-table').classList.remove('hidden');
             }
             
@@ -539,8 +562,8 @@
             const dispTable = document.querySelector('#table-iocl-display tbody');
             let dispHTML = ioclData.length === 0 ? '<tr><td colspan="4" class="text-gray-400">No Supervisors Added</td></tr>' : ioclData.map(x => {
                 let style = x.is_deleted ? 'style="text-decoration: line-through; color: red;"' : '';
-                let audit = `Added by ${x.added_by} on ${x.added_at}` + (x.is_deleted ? `<br><span class="text-red-600 font-bold">Deleted by ${x.deleted_by} on ${x.deleted_at}</span>` : '');
-                return `<tr ${style}><td>${x.name}</td><td>${x.desig}</td><td>${x.contact}</td><td class="text-[10px]">${audit}</td></tr>`;
+                let audit = `Added by ${escapeHtml(x.added_by)} on ${x.added_at}` + (x.is_deleted ? `<br><span class="text-red-600 font-bold">Deleted by ${escapeHtml(x.deleted_by)} on ${x.deleted_at}</span>` : '');
+                return `<tr ${style}><td>${escapeHtml(x.name)}</td><td>${escapeHtml(x.desig)}</td><td>${escapeHtml(x.contact)}</td><td class="text-[10px]">${audit}</td></tr>`;
             }).join('');
             dispTable.innerHTML = dispHTML;
 
@@ -593,11 +616,9 @@
                         document.getElementById("Closure_Requestor_Remarks").disabled = false; document.getElementById("Site_Restored_Check").disabled = false;
                         
                         document.getElementById("form-renewal").classList.remove('hidden'); document.querySelectorAll('#form-renewal input').forEach(e => e.disabled = false);
-                        const renSel = document.getElementById('renewal-worker-select'); renSel.innerHTML = currentPermitWorkers.map(w => `<label class="flex items-center gap-1 text-xs bg-white p-1 rounded border"><input type="checkbox" value="${w.Name}" checked class="ren-worker-cb"> ${w.Name}</label>`).join('');
+                        const renSel = document.getElementById('renewal-worker-select'); renSel.innerHTML = currentPermitWorkers.map(w => `<label class="flex items-center gap-1 text-xs bg-white p-1 rounded border"><input type="checkbox" value="${escapeHtml(w.Name)}" checked class="ren-worker-cb"> ${escapeHtml(w.Name)}</label>`).join('');
                         
                         // FEATURE C: LOGIC FOR PHOTO BOX VISIBILITY
-                        // 1. Never show for 1st renewal (count == 0)
-                        // 2. Show for 2nd+ ONLY IF flag is true
                         const showPhotoBox = (currentRenewalCount > 0 && permitRequirePhoto);
                         const photoDiv = document.getElementById("renewal-photo-container");
                         const msgEl = document.getElementById("photo-mandate-msg");
@@ -618,19 +639,17 @@
                         document.getElementById("pending-renewal-display").classList.remove('hidden'); 
                         setText("disp-ren-from", last.valid_from.replace('T', ' ')); 
                         setText("disp-ren-to", last.valid_till.replace('T', ' ')); 
-                        setText("disp-ren-gas", `${last.hc}/${last.toxic}/${last.oxygen}`); 
-                        setText("disp-ren-prec", last.precautions); 
+                        setText("disp-ren-gas", `${escapeHtml(last.hc)}/${escapeHtml(last.toxic)}/${escapeHtml(last.oxygen)}`); 
+                        setText("disp-ren-prec", escapeHtml(last.precautions)); 
                         
                         // FEATURE A: Odd Hour Check for Approver/Reviewer
                         if(last.odd_hour_req) {
                             document.getElementById("odd-hour-approval-controls").classList.remove('hidden');
                             setText("odd-hour-req-status", "Requester Agreed to Safety Precautions");
                             
-                            // Reset toggle and disable button initially
                             const chk = document.getElementById("odd-hour-allow-check");
                             chk.checked = false;
                             
-                            // FIX A: Unlock the checkbox so they can click it!
                             chk.disabled = false; 
 
                             document.getElementById("btn-approve-renewal").disabled = true;
@@ -678,7 +697,7 @@
             document.getElementById("signature-history").classList.remove('hidden');
             setText("sig-app", p.Approver_Sig || 'Pending');
             const lastRenEntry = JSON.parse(p.RenewalsJSON||"[]").pop();
-            setText("sig-ren", (lastRenEntry && lastRenEntry.app_name) ? `${lastRenEntry.app_name} on ${lastRenEntry.app_at}` : 'None');
+            setText("sig-ren", (lastRenEntry && lastRenEntry.app_name) ? `${escapeHtml(lastRenEntry.app_name)} on ${lastRenEntry.app_at}` : 'None');
             setText("sig-clos", p.Closure_Approver_Sig || 'Pending');
             
             const gsrEl = document.getElementById("gsr-check");
@@ -797,10 +816,10 @@
                 const isPhotoMandatory = (currentRenewalCount > 0 && permitRequirePhoto);
 
                 if(isPhotoMandatory) {
-                     if(!fileInput.files || fileInput.files.length === 0) {
-                          alert("MANDATORY: You must capture a photo for this renewal.");
-                          return;
-                     }
+                      if(!fileInput.files || fileInput.files.length === 0) {
+                           alert("MANDATORY: You must capture a photo for this renewal.");
+                           return;
+                      }
                 }
             }
             const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ''; }; 
@@ -834,7 +853,12 @@
 
             loader.style.display = 'flex';
             try {
-                 const res = await fetch(API+'/renewal', {method:'POST', body:fd});
+                 // Token handled by apiCall, but for FormData we use fetch manually.
+                 // Need to attach token here too!
+                 const headers = {};
+                 if(authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                 
+                 const res = await fetch(API+'/renewal', {method:'POST', body:fd, headers: headers});
                  const json = await res.json();
                  if(json.success) { alert("Done"); showDashboard(); } else alert(json.error); 
             } catch(e) { console.error(e); alert("Failed: " + e.message); }
@@ -851,7 +875,7 @@
             document.getElementById("first-renewal-decision").classList.add('hidden'); 
             
             const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); 
-            if(rS && aS) { rS.innerHTML=""; aS.innerHTML=""; if(usersData){ usersData.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); usersData.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${u.name}</option>`); } } 
+            if(rS && aS) { rS.innerHTML=""; aS.innerHTML=""; if(usersData){ usersData.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${escapeHtml(u.name)}</option>`); usersData.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${escapeHtml(u.name)}</option>`); } } 
             document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false); 
             
             const safeSet = (id, val) => { const el = document.getElementById(id); if(el) { el.value = val; } }; 
@@ -925,7 +949,11 @@
                 
                 if(currentPermitId) fd.set("PermitID", currentPermitId); 
                 
-                const res = await fetch(API+'/save-permit', {method:'POST', body:fd}); 
+                // Add Authorization Header to fetch
+                const headers = {};
+                if(authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+                const res = await fetch(API+'/save-permit', {method:'POST', body:fd, headers:headers}); 
                 
                 if (!res.ok) {
                     const text = await res.text();
@@ -983,7 +1011,7 @@
         window.showAddUser = function() { document.getElementById("view-add-user").classList.remove('hidden'); }
         window.submitNewUser = async function() { const n=document.getElementById("new-user-name").value; const e=document.getElementById("new-user-email").value; const r=document.getElementById("new-user-role").value; const p=document.getElementById("new-user-pass").value; const res=await apiCall('/add-user','POST',{name:n,email:e,role:r,password:p}); if(res.success){alert("User Added"); document.getElementById("view-add-user").classList.add('hidden');} else alert(res.error); }
         window.showMap = function() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-map").classList.remove('hidden'); loadMapData(); }
-        async function loadMapData() { const p = await apiCall('/map-data', 'POST'); if(!mapInstance) mapInstance=new google.maps.Map(document.getElementById("map"),{center:{lat:22.57,lng:88.36},zoom:5}); const listEl = document.getElementById("map-list-content"); listEl.innerHTML = ""; const infoWindow = new google.maps.InfoWindow(); p.forEach(x => { const marker = new google.maps.Marker({position:{lat:x.lat,lng:x.lng}, map:mapInstance, title:x.PermitID}); const content = `<div><b>${x.PermitID}</b><br>Loc: ${x.ExactLocation}<br>Req: ${x.RequesterName}<br>Valid: ${x.ValidTo}</div>`; marker.addListener("click", () => { infoWindow.setContent(content); infoWindow.open(mapInstance, marker); }); const item = document.createElement("div"); item.className = "p-3 border-b cursor-pointer hover:bg-orange-50 text-sm flex justify-between"; item.innerHTML = `<div><b>${x.PermitID}</b><div class="text-xs text-gray-500">${x.ExactLocation}</div></div><div class="text-xs font-bold text-orange-600">${x.WorkType}</div>`; item.onclick = () => { mapInstance.setCenter({lat:x.lat,lng:x.lng}); mapInstance.setZoom(12); infoWindow.setContent(`<b>${x.PermitID}</b><br>${x.WorkType}`); infoWindow.open(mapInstance, marker); }; listEl.appendChild(item); }); }
+        async function loadMapData() { const p = await apiCall('/map-data', 'POST'); if(!mapInstance) mapInstance=new google.maps.Map(document.getElementById("map"),{center:{lat:22.57,lng:88.36},zoom:5}); const listEl = document.getElementById("map-list-content"); listEl.innerHTML = ""; const infoWindow = new google.maps.InfoWindow(); p.forEach(x => { const marker = new google.maps.Marker({position:{lat:x.lat,lng:x.lng}, map:mapInstance, title:x.PermitID}); const content = `<div><b>${escapeHtml(x.PermitID)}</b><br>Loc: ${escapeHtml(x.ExactLocation)}<br>Req: ${escapeHtml(x.RequesterName)}<br>Valid: ${x.ValidTo}</div>`; marker.addListener("click", () => { infoWindow.setContent(content); infoWindow.open(mapInstance, marker); }); const item = document.createElement("div"); item.className = "p-3 border-b cursor-pointer hover:bg-orange-50 text-sm flex justify-between"; item.innerHTML = `<div><b>${escapeHtml(x.PermitID)}</b><div class="text-xs text-gray-500">${escapeHtml(x.ExactLocation)}</div></div><div class="text-xs font-bold text-orange-600">${escapeHtml(x.WorkType)}</div>`; item.onclick = () => { mapInstance.setCenter({lat:x.lat,lng:x.lng}); mapInstance.setZoom(12); infoWindow.setContent(`<b>${escapeHtml(x.PermitID)}</b><br>${escapeHtml(x.WorkType)}`); infoWindow.open(mapInstance, marker); }; listEl.appendChild(item); }); }
     </script>
 </body>
 </html>

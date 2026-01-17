@@ -643,7 +643,7 @@ app.post('/api/get-workers', authenticateToken, async (req, res) => {
         });
         if (req.body.context === 'permit_dropdown') res.json(list.filter(w => w.Status === 'Approved'));
         else {
-            if (req.body.role === 'Requester') res.json(list.filter(w => w.RequestorEmail === req.body.email || w.Status === 'Approved'));
+            if (req.user.role === 'Requester') res.json(list.filter(w => w.RequestorEmail === req.body.email || w.Status === 'Approved'));
             else res.json(list);
         }
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -666,7 +666,7 @@ app.get('/api/users', async (req, res) => {
 
 app.post('/api/dashboard', authenticateToken, async (req, res) => {
     try {
-        const { role, email } = req.body;
+        const { role, email } = req.user;
         const pool = await getConnection();
         const r = await pool.request().query("SELECT PermitID, Status, ValidFrom, ValidTo, RequesterEmail, ReviewerEmail, ApproverEmail, FullDataJSON, FinalPdfUrl FROM Permits");
         

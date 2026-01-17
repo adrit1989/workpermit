@@ -317,7 +317,7 @@
         }
 
         const CL_DATA = { 
-            A: [ "1. Equipment / Work Area inspected.", "2. Surrounding area checked, cleaned and covered. Oil/RAGS/Grass Etc removed.", "3. Manholes, Sewers, CBD etc. and hot nearby surface covered.", "4. Considered hazards from other routine, non-routine operations and concerned person alerted.", "5. Equipment properly drained and depressurized.", "6. Equipment properly steamed/purged.", "7. Equipment water flushed.", "8. Equipment electrically isolated and tagged vide Permit no.", "9. Access for Free approach of Fire Tender.", "10. Iron Sulfide removed/ Kept wet.", "11. Equipment blinded/ disconnected/ closed/ isolated/ wedge opened.", "12. Gas Test: HC / Toxic / O2 checked.", "13. Running water hose / Fire extinguisher provided. Fire water system available.", "14. Area cordoned off and Precautionary tag/Board provided.", "15. CCTV monitoring facility available at site.", "16. Proper ventilation and Lighting provided." ], 
+            A: [ "1. Equipment / Work Area inspected.", "2. Surrounding area checked, cleaned and covered. Oil/RAGS/Grass Etc removed.", "3. Manholes, Sewers, CBD etc. and hot nearby surface covered.", "4. Considered hazards from other routine, non-routine operations and concerned person alerted.", "5. Equipment blinded/ disconnected/ closed/ isolated/ wedge opened.", "6. Equipment properly drained and depressurized.", "7. Equipment properly steamed/purged.", "7. Equipment water flushed.", "8. Equipment electrically isolated and tagged vide Permit no.", "9. Access for Free approach of Fire Tender.", "10. Iron Sulfide removed/ Kept wet.", "11. Equipment blinded/ disconnected/ closed/ isolated/ wedge opened.", "12. Gas Test: HC / Toxic / O2 checked.", "13. Running water hose / Fire extinguisher provided. Fire water system available.", "14. Area cordoned off and Precautionary tag/Board provided.", "15. CCTV monitoring facility available at site.", "16. Proper ventilation and Lighting provided." ], 
             B: [ "1. Proper means of exit / escape provided.", "2. Standby personnel provided from Mainline/ Maint. / Contractor/HSE.", "3. Checked for oil and Gas trapped behind the lining in equipment.", "4. Shield provided against spark.", "5. Portable equipment / nozzle properly grounded.", "6. Standby persons provided for entry to confined space.", "7. Adequate Communication Provided to Stand by Person.", "8. Attendant Trained Provided With Rescue Equipment/SCABA.", "9. Space Adequately Cooled for Safe Entry Of Person.", "10. Continuous Inert Gas Flow Arranged.", "11. Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding.", "12. Gas Cylinders are kept outside the confined Space.", "13. Spark arrestor Checked on mobile Equipments.", "14. Welding Machine Checked for Safe Location.", "15. Permit taken for working at height Vide Permit No." ], 
             C: ["1. PESO approved spark elimination system provided on the mobile equipment/ vehicle provided."], 
             D: [ "1. For excavated trench/ pit proper slop/ shoring/ shuttering provided to prevent soil collapse.", "2. Excavated soil kept at safe distance from trench/pit edge (min. pit depth).", "3. Safe means of access provided inside trench/pit.", "4. Movement of heavy vehicle prohibited." ] 
@@ -507,7 +507,11 @@
             document.querySelector("#table-renewals tbody").innerHTML = rens.map(r => {
                 const isOddHour = (r.odd_hour_req === true);
                 const nightBadge = isOddHour ? '<br><span class="bg-indigo-900 text-white px-1 text-[10px] rounded">NIGHT</span>' : '';
-                return `<tr><td data-label="Period" class="font-mono text-xs">Start: ${r.valid_from.replace('T',' ')}<br>End: &nbsp;&nbsp;${r.valid_till.replace('T',' ')}${nightBadge}</td><td data-label="Gas & Prec"><strong>Gas:</strong> HC:${escapeHtml(r.hc)}, O2:${escapeHtml(r.oxygen)}, Tox:${escapeHtml(r.toxic)}<br><strong>Prec:</strong> ${escapeHtml(r.precautions) || '-'}</td><td data-label="Workers" class="text-xs text-gray-600">${r.worker_list ? r.worker_list.join(', ') : 'All'}</td><td data-label="Photo">${r.photoUrl ? `<a href="${r.photoUrl}" target="_blank" class="text-blue-600 font-bold underline text-xs">View Photo</a>` : 'N/A'}</td><td data-label="Req">${escapeHtml(r.req_name)}<br><span class="text-[10px] text-gray-500">${r.req_at}</span></td><td data-label="Rev">${escapeHtml(r.rev_name)||'-'}<br><span class="text-[10px] text-gray-500">${r.rev_at||''}</span></td><td data-label="App">${escapeHtml(r.app_name)||'-'}<br><span class="text-[10px] text-gray-500">${r.app_at||''}</span></td><td data-label="Status"><span class="font-bold ${r.status==='rejected'?'text-red-600':'text-green-600'}">${r.status}</span></td></tr>`;
+                
+                // SECURE PHOTO BUTTON HERE
+                const photoHtml = r.photoUrl ? `<button type="button" onclick="window.viewSecurePhoto('${r.photoUrl}')" class="text-blue-600 font-bold underline text-xs">View Photo</button>` : 'N/A';
+
+                return `<tr><td data-label="Period" class="font-mono text-xs">Start: ${r.valid_from.replace('T',' ')}<br>End: &nbsp;&nbsp;${r.valid_till.replace('T',' ')}${nightBadge}</td><td data-label="Gas & Prec"><strong>Gas:</strong> HC:${escapeHtml(r.hc)}, O2:${escapeHtml(r.oxygen)}, Tox:${escapeHtml(r.toxic)}<br><strong>Prec:</strong> ${escapeHtml(r.precautions) || '-'}</td><td data-label="Workers" class="text-xs text-gray-600">${r.worker_list ? r.worker_list.join(', ') : 'All'}</td><td data-label="Photo">${photoHtml}</td><td data-label="Req">${escapeHtml(r.req_name)}<br><span class="text-[10px] text-gray-500">${r.req_at}</span></td><td data-label="Rev">${escapeHtml(r.rev_name)||'-'}<br><span class="text-[10px] text-gray-500">${r.rev_at||''}</span></td><td data-label="App">${escapeHtml(r.app_name)||'-'}<br><span class="text-[10px] text-gray-500">${r.app_at||''}</span></td><td data-label="Status"><span class="font-bold ${r.status==='rejected'?'text-red-600':'text-green-600'}">${r.status}</span></td></tr>`;
             }).join('');
             
             if (rens.length > 0) {
@@ -668,7 +672,7 @@
                     }
                     btns += `<button type="button" onclick="window.downloadSecurePDF('${id}')" class="bg-gray-700 text-white px-6 py-3 rounded-lg font-bold shadow flex-1 text-center">Download PDF</button>`;
                 }
-            } // <--- THIS WAS THE MISSING BRACE
+            } 
             
             if(s.includes('Closure') || s === 'Closed') {
                 document.getElementById("closure-section").classList.remove('hidden'); document.getElementById("div-closure-req").classList.remove('hidden');
@@ -1047,6 +1051,27 @@
             } finally {
                 loader.style.display = 'none';
             }
+        };
+
+        // NEW FUNCTION: Secure Photo Viewer
+        window.viewSecurePhoto = async function(fullUrl) {
+            if (!fullUrl) return alert("No photo URL found");
+            const filename = fullUrl.split('/').pop();
+            loader.style.display = 'flex';
+            try {
+                const headers = {};
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                const res = await fetch(`${API}/view-photo/${filename}`, { method: 'GET', headers: headers });
+                if (res.status === 401 || res.status === 403) {
+                    alert("Session expired. Please login again."); location.reload(); return;
+                }
+                if (!res.ok) throw new Error("Could not load photo");
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                window.open(url, '_blank');
+                setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+            } catch (e) { console.error(e); alert("Failed to load photo"); }
+            finally { loader.style.display = 'none'; }
         };
     </script>
 </body>

@@ -613,6 +613,7 @@
                 const last = rens[rens.length-1];
                 
                 if(r==='Requester' && (!last || (last.status!=='pending_review' && last.status!=='pending_approval'))) {
+                    document.getElementById("renewals-section").classList.remove('hidden');
                         document.getElementById("closure-section").classList.remove('hidden'); document.getElementById("div-closure-req").classList.remove('hidden');
                         document.getElementById("Closure_Requestor_Remarks").disabled = false; document.getElementById("Site_Restored_Check").disabled = false;
                         
@@ -1058,3 +1059,4 @@
     </script>
 </body>
 </html>
+

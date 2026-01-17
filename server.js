@@ -68,7 +68,7 @@ const AZURE_CONN_STR = process.env.AZURE_STORAGE_CONNECTION_STRING;
 // --- RATE LIMITER ---
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, 
-    max: 10, 
+    max: 100, // Relaxed for testing
     message: "Too many login attempts, please try again later."
 });
 
@@ -855,6 +855,23 @@ app.post('/api/renewal', authenticateToken, upload.any(), async (req, res) => {
         const now = getNowIST();
 
         if (userRole === 'Requester') {
+            const rs = new Date(data.RenewalValidFrom);
+            const re = new Date(data.RenewalValidTo);
+
+            if (re <= rs) return res.status(400).json({ error: "End time must be after Start time" });
+
+            // --- CRITICAL FIX: OVERLAP CHECK ---
+            if (r.length > 0) {
+                const last = r[r.length - 1];
+                if (last.status !== 'rejected') {
+                    const lastEnd = new Date(last.valid_till);
+                    if (rs < lastEnd) {
+                        return res.status(400).json({ error: "Overlap Error: New renewal cannot start before the previous one ends." });
+                    }
+                }
+            }
+            // ------------------------------------
+
             const photoFile = req.files ? req.files.find(f => f.fieldname === 'RenewalImage') : null;
             let photoUrl = null;
             if(photoFile) {

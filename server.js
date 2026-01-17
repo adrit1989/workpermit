@@ -254,7 +254,7 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
     doc.rect(25, startY - 5, 545, doc.y - startY + 5).stroke();
     doc.y += 10;
 
-    // CHECKLISTS (Collapsed for brevity)
+    // CHECKLISTS
     const CHECKLIST_DATA = {
         A: [ "1. Equipment / Work Area inspected.", "2. Surrounding area checked, cleaned and covered. Oil/RAGS/Grass Etc removed.", "3. Manholes, Sewers, CBD etc. and hot nearby surface covered.", "4. Considered hazards from other routine, non-routine operations and concerned person alerted.", "5. Equipment blinded/ disconnected/ closed/ isolated/ wedge opened.", "6. Equipment properly drained and depressurized.", "7. Equipment properly steamed/purged.", "8. Equipment water flushed.", "9. Access for Free approach of Fire Tender.", "10. Iron Sulfide removed/ Kept wet.", "11. Equipment electrically isolated and tagged vide Permit no.", "12. Gas Test: HC / Toxic / O2 checked.", "13. Running water hose / Fire extinguisher provided. Fire water system available.", "14. Area cordoned off and Precautionary tag/Board provided.", "15. CCTV monitoring facility available at site.", "16. Proper ventilation and Lighting provided." ],
         B: [ "1. Proper means of exit / escape provided.", "2. Standby personnel provided from Mainline/ Maint. / Contractor/HSE.", "3. Checked for oil and Gas trapped behind the lining in equipment.", "4. Shield provided against spark.", "5. Portable equipment / nozzle properly grounded.", "6. Standby persons provided for entry to confined space.", "7. Adequate Communication Provided to Stand by Person.", "8. Attendant Trained Provided With Rescue Equipment/SCABA.", "9. Space Adequately Cooled for Safe Entry Of Person.", "10. Continuous Inert Gas Flow Arranged.", "11. Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding.", "12. Gas Cylinders are kept outside the confined Space.", "13. Spark arrestor Checked on mobile Equipments.", "14. Welding Machine Checked for Safe Location.", "15. Permit taken for working at height Vide Permit No." ],
@@ -656,17 +656,23 @@ app.post('/api/get-workers', authenticateToken, async (req, res) => {
 
 // PROTECTED ROUTES
 
+// --- FIX: PUBLIC ROUTE FOR USER LIST (Correctly placed, case-insensitive mapping) ---
 app.get('/api/users', async (req, res) => {
     try {
         const pool = await getConnection();
         const r = await pool.request().query('SELECT Name, Email, Role FROM Users');
-        const mapU = u => ({ name: u.Name, email: u.Email, role: u.Role });
+        // Handle potentially different casing from SQL
+        const mapU = u => ({ name: u.Name || u.name, email: u.Email || u.email, role: u.Role || u.role });
+        
         res.json({
-            Requesters: r.recordset.filter(u => u.Role === 'Requester').map(mapU),
-            Reviewers: r.recordset.filter(u => u.Role === 'Reviewer').map(mapU),
-            Approvers: r.recordset.filter(u => u.Role === 'Approver').map(mapU)
+            Requesters: r.recordset.filter(u => (u.Role || u.role) === 'Requester').map(mapU),
+            Reviewers: r.recordset.filter(u => (u.Role || u.role) === 'Reviewer').map(mapU),
+            Approvers: r.recordset.filter(u => (u.Role || u.role) === 'Approver').map(mapU)
         });
-    } catch (e) { res.status(500).json({ error: e.message }) }
+    } catch (e) { 
+        console.error("API Users Error:", e);
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
 app.post('/api/dashboard', authenticateToken, async (req, res) => {

@@ -97,7 +97,7 @@ const CHECKLIST_DATA = {
         "8. Attendant Trained Provided With Rescue Equipment/SCABA.",
         "9. Space Adequately Cooled for Safe Entry Of Person.",
         "10. Continuous Inert Gas Flow Arranged.",
-        "11. Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding.",
+        "11. Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding..",
         "12. Gas Cylinders are kept outside the confined Space.",
         "13. Spark arrestor Checked on mobile Equipments.",
         "14. Welding Machine Checked for Safe Location.",

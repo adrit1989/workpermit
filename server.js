@@ -569,7 +569,7 @@ app.post('/api/add-user', authenticateToken, async (req, res) => {
 // WORKER MANAGEMENT (RESTORED ROUTES)
 app.post('/api/save-worker', authenticateToken, async (req, res) => {
     try {
-        const { WorkerID, Action, Role, Details, RequestorEmail, RequestorName, ApproverName } = req.body;
+        const { WorkerID, Action, Role, Details, RequestorEmail, RequestorName } = req.body; // Removed ApproverName from destructuring
         const pool = await getConnection();
         if ((Action === 'create' || Action === 'edit_request') && Details && parseInt(Details.Age) < 18) return res.status(400).json({ error: "Worker must be 18+" });
 
@@ -610,10 +610,13 @@ app.post('/api/save-worker', authenticateToken, async (req, res) => {
             let appBy = null; let appOn = null;
 
             if (Action === 'approve') {
+                // Security Check: Only Approver/Reviewer can approve
+                if (req.user.role === 'Requester') return res.status(403).json({ error: "Unauthorized" });
+
                 if (st.includes('Pending Review')) st = st.replace('Review', 'Approval');
                 else if (st.includes('Pending Approval')) {
                     st = 'Approved';
-                    appBy = ApproverName;
+                    appBy = req.user.name; // Securely get name from token
                     appOn = getNowIST();
                     dataObj.Current = { ...dataObj.Pending, ApprovedBy: appBy, ApprovedAt: appOn };
                     dataObj.Pending = null;
@@ -643,7 +646,8 @@ app.post('/api/get-workers', authenticateToken, async (req, res) => {
         });
         if (req.body.context === 'permit_dropdown') res.json(list.filter(w => w.Status === 'Approved'));
         else {
-            if (req.user.role === 'Requester') res.json(list.filter(w => w.RequestorEmail === req.body.email || w.Status === 'Approved'));
+            // Use req.user instead of req.body for role and email
+            if (req.user.role === 'Requester') res.json(list.filter(w => w.RequestorEmail === req.user.email || w.Status === 'Approved'));
             else res.json(list);
         }
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -666,7 +670,7 @@ app.get('/api/users', async (req, res) => {
 
 app.post('/api/dashboard', authenticateToken, async (req, res) => {
     try {
-        const { role, email } = req.user;
+        const { role, email } = req.user; // Get from Token
         const pool = await getConnection();
         const r = await pool.request().query("SELECT PermitID, Status, ValidFrom, ValidTo, RequesterEmail, ReviewerEmail, ApproverEmail, FullDataJSON, FinalPdfUrl FROM Permits");
         

@@ -112,18 +112,20 @@ const CHECKLIST_DATA = {
     ]
 };
 
-// --- CORE PDF GENERATOR (Refactored to support both Active & Closed) ---
+// --- CORE PDF GENERATOR ---
 async function drawPermitPDF(doc, p, d, renewalsList) {
-    // Helper: Draw Header
     const bgColor = d.PdfBgColor || 'White';
     const compositePermitNo = `${d.IssuedToDept || 'DEPT'}/${p.PermitID}`;
 
+    // WATERMARK LOGIC
     const drawWatermark = () => {
         if (p.Status === 'Closed') {
             doc.save();
-            doc.rotate(-45, { origin: [297.5, 421] }); // Center of A4
-            doc.font('Helvetica-Bold').fontSize(80).fillColor('red').opacity(0.15);
-            doc.text('CLOSED PERMIT', 0, 300, { align: 'center', width: 595 });
+            // Center of A4 is approx x=297, y=421
+            doc.translate(297, 421);
+            doc.rotate(-45);
+            doc.font('Helvetica-Bold').fontSize(80).fillColor('#ff0000').opacity(0.30); // Increased opacity
+            doc.text('CLOSED PERMIT', -250, -40, { align: 'center', width: 500 }); // Centered text
             doc.restore();
             doc.opacity(1);
         }
@@ -138,13 +140,13 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
             doc.restore();
         }
 
-        drawWatermark();
+        drawWatermark(); // Draw watermark on every page
 
         const startX = 30, startY = 30;
         doc.lineWidth(1);
         doc.rect(startX, startY, 535, 95).stroke();
-        // Logo Box (Left)
-        doc.rect(startX, startY, 80, 95).stroke();
+        
+        doc.rect(startX, startY, 80, 95).stroke(); // Logo Box
         if (fs.existsSync('logo.png')) {
             try { doc.image('logo.png', startX, startY, { fit: [80, 95], align: 'center', valign: 'center' }); } catch (err) { }
         }
@@ -155,7 +157,6 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
         doc.text('HSE DEPT.', startX + 80, startY + 45, { width: 320, align: 'center' });
         doc.fontSize(8).text('COMPOSITE WORK/ COLD WORK/HOT WORK/ENTRY TO CONFINED SPACE/VEHICLE ENTRY / EXCAVATION WORK AT MAINLINE/RCP/SV', startX + 80, startY + 65, { width: 320, align: 'center' });
 
-        // Right Box
         doc.rect(startX + 400, startY, 135, 95).stroke();
         doc.fontSize(8).font('Helvetica');
         doc.text('Doc No: ERPL/HS&E/25-26', startX + 405, startY + 60);
@@ -254,7 +255,7 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
             if (d[`${pr}_Q${k + 1}`]) {
                 doc.rect(30, y, 350, rowH).stroke().text(x, 35, y + 5, { width: 340 });
                 doc.rect(380, y, 60, rowH).stroke().text(st, 385, y + 5);
-
+                
                 let detailTxt = d[`${pr}_Q${k + 1}_Detail`] || '';
                 if (pr === 'A' && k === 11) {
                     const hc = d.GP_Q12_HC || '_';
@@ -294,7 +295,6 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
     doc.font('Helvetica-Bold').text("Parameter", 35, axY + 5);
     doc.text("Details", 235, axY + 5);
     axY += 20;
-
     doc.font('Helvetica');
     annexData.forEach(row => {
         doc.rect(30, axY, 200, 20).stroke();
@@ -305,6 +305,7 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
     });
     doc.y = axY + 20;
 
+    // Helper for Supervisor tables
     const drawSupTable = (title, headers, dataRows) => {
         if (doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; }
         doc.font('Helvetica-Bold').text(title, 30, doc.y);
@@ -326,9 +327,7 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
                 const textHeight = doc.heightOfString(cell, { width: cellWidth, align: 'left' });
                 if (textHeight + 10 > maxRowHeight) maxRowHeight = textHeight + 10;
             });
-            if (currentY + maxRowHeight > 750) {
-                doc.addPage(); drawHeaderOnAll(); currentY = 135;
-            }
+            if (currentY + maxRowHeight > 750) { doc.addPage(); drawHeaderOnAll(); currentY = 135; }
             let rowX = 30;
             row.forEach((cell, idx) => {
                 doc.rect(rowX, currentY, headers[idx].w, maxRowHeight).stroke();
@@ -347,7 +346,6 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
         return [s.name, s.desig, s.contact, auditText];
     });
     if (ioclRows.length === 0) ioclRows.push(["-", "-", "-", "-"]);
-
     drawSupTable("Authorized Work Supervisor (IOCL)", [{ t: "Name", w: 130 }, { t: "Designation", w: 130 }, { t: "Contact", w: 100 }, { t: "Audit Trail", w: 175 }], ioclRows);
 
     const contRows = [[d.RequesterName || '-', "Site In-Charge / Requester", d.EmergencyContact || '-']];
@@ -359,7 +357,7 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
     const foundHaz = hazKeys.filter(k => d[`H_${k.replace(/ /g, '')}`] === 'Y');
     if (d.H_Others === 'Y') foundHaz.push(`Others: ${d.H_Others_Detail}`);
     doc.text(`1.The activity has the following expected residual hazards: ${foundHaz.join(', ')}`, 35, doc.y + 5);
-    // PPE Update
+    
     const ppeKeys = ["Helmet", "Safety Shoes", "Hand gloves", "Boiler suit", "Face Shield", "Apron", "Goggles", "Dust Respirator", "Fresh Air Mask", "Lifeline", "Safety Harness", "Airline", "Earmuff", "IFR"];
     const foundPPE = ppeKeys.filter(k => d[`P_${k.replace(/ /g, '')}`] === 'Y');
     if (d.AdditionalPrecautions && d.AdditionalPrecautions.trim() !== '') { foundPPE.push(`(Other: ${d.AdditionalPrecautions})`); }
@@ -399,7 +397,7 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
     doc.rect(386, sY, 179, 40).stroke().text(`APP: ${d.Approver_Sig || '-'}\nRem: ${d.Approver_Remarks || '-'}`, 391, sY + 5, { width: 169 });
     doc.y = sY + 50;
 
-    // --- RENEWAL TABLE WITH PHOTO (UPDATED & WATERMARK READY) ---
+    // --- RENEWAL TABLE ---
     if (doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; }
     doc.font('Helvetica-Bold').text("CLEARANCE RENEWAL", 30, doc.y); doc.y += 15;
     let ry = doc.y;
@@ -415,19 +413,16 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
     doc.rect(495, ry, 70, 25).stroke().text("Reason", 497, ry + 5);
 
     ry += 25;
-    
-    // Ensure we iterate the PASSED renewals list, not just what's in 'p'
+    // Use passed renewalsList for completeness
     const finalRenewals = renewalsList || JSON.parse(p.RenewalsJSON || "[]");
     doc.font('Helvetica').fontSize(8);
 
     for (const r of finalRenewals) {
-        const rowHeight = 60; 
+        const rowHeight = 60;
         if (ry > 680) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; ry = 135; }
 
         let startTxt = r.valid_from.replace('T', '\n');
         let endTxt = r.valid_till.replace('T', '\n');
-        
-        // FEATURE B: Mark Odd Hours
         if (r.odd_hour_req === true) {
             endTxt += "\n(Night Shift)";
             doc.font('Helvetica-Bold').fillColor('purple');
@@ -435,20 +430,25 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
 
         doc.rect(30, ry, 45, rowHeight).stroke().text(startTxt, 32, ry + 5, { width: 43 });
         doc.rect(75, ry, 45, rowHeight).stroke().text(endTxt, 77, ry + 5, { width: 43 });
-        doc.fillColor('black').font('Helvetica'); // Reset
+        doc.fillColor('black').font('Helvetica');
 
         doc.rect(120, ry, 55, rowHeight).stroke().text(`HC: ${r.hc}\nTox: ${r.toxic}\nO2: ${r.oxygen}\nPrec: ${r.precautions || '-'}`, 122, ry + 5, { width: 53 });
-
         const wList = r.worker_list ? r.worker_list.join(', ') : 'All';
         doc.rect(175, ry, 60, rowHeight).stroke().text(wList, 177, ry + 5, { width: 58 });
 
-        // --- PHOTO COLUMN ---
+        // --- PHOTO: ASYNC DOWNLOAD with TIMEOUT ---
         doc.rect(235, ry, 50, rowHeight).stroke();
         if (r.photoUrl && containerClient) {
             try {
                 const blobName = r.photoUrl.split('/').pop();
                 const blockBlobClient = containerClient.getBlockBlobClient(blobName);
-                const downloadBlockBlobResponse = await blockBlobClient.download(0);
+                
+                // Add Timeout to prevent hanging
+                const downloadPromise = blockBlobClient.download(0);
+                const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000));
+                
+                const downloadBlockBlobResponse = await Promise.race([downloadPromise, timeoutPromise]);
+                
                 const chunks = [];
                 for await (const chunk of downloadBlockBlobResponse.readableStreamBody) {
                     chunks.push(chunk);
@@ -457,7 +457,7 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
                 try {
                     doc.image(imageBuffer, 237, ry + 2, { fit: [46, rowHeight - 4], align: 'center', valign: 'center' });
                 } catch (imgErr) { console.log("Img draw err", imgErr); }
-            } catch (err) { console.log("Blob err", err); }
+            } catch (err) { console.log("Blob err/Timeout", err); }
         } else {
             doc.text("No Photo", 237, ry + 25, { width: 46, align: 'center' });
         }
@@ -618,25 +618,12 @@ app.post('/api/dashboard', async (req, res) => {
     try {
         const { role, email } = req.body;
         const pool = await getConnection();
-        // UPDATED: Include FinalPdfUrl
         const r = await pool.request().query("SELECT PermitID, Status, ValidFrom, ValidTo, RequesterEmail, ReviewerEmail, ApproverEmail, FullDataJSON, FinalPdfUrl FROM Permits");
         
         const p = r.recordset.map(x => {
             let baseData = {};
-            // Handle Closed Permits where JSON is null
-            if (x.FullDataJSON) {
-                try { baseData = JSON.parse(x.FullDataJSON); } catch(e) {}
-            }
-            return { 
-                ...baseData, 
-                PermitID: x.PermitID, 
-                Status: x.Status, 
-                ValidFrom: x.ValidFrom,
-                RequesterEmail: x.RequesterEmail,
-                ReviewerEmail: x.ReviewerEmail,
-                ApproverEmail: x.ApproverEmail,
-                FinalPdfUrl: x.FinalPdfUrl // Send PDF link to frontend
-            };
+            if (x.FullDataJSON) { try { baseData = JSON.parse(x.FullDataJSON); } catch(e) {} }
+            return { ...baseData, PermitID: x.PermitID, Status: x.Status, ValidFrom: x.ValidFrom, RequesterEmail: x.RequesterEmail, ReviewerEmail: x.ReviewerEmail, ApproverEmail: x.ApproverEmail, FinalPdfUrl: x.FinalPdfUrl };
         });
         
         const f = p.filter(x => (role === 'Requester' ? x.RequesterEmail === email : true));
@@ -648,23 +635,17 @@ app.post('/api/dashboard', async (req, res) => {
 app.post('/api/save-permit', upload.any(), async (req, res) => {
     try {
         console.log("Received Permit Submit Request:", req.body.PermitID);
-
-        // 1. Validate Dates
         let vf, vt;
         try {
             vf = req.body.ValidFrom ? new Date(req.body.ValidFrom) : null;
             vt = req.body.ValidTo ? new Date(req.body.ValidTo) : null;
-        } catch (err) {
-            return res.status(400).json({ error: "Invalid Date Format" });
-        }
+        } catch (err) { return res.status(400).json({ error: "Invalid Date Format" }); }
 
         if (!vf || !vt) return res.status(400).json({ error: "Start and End dates are required" });
         if (vt <= vf) return res.status(400).json({ error: "End date must be after Start date" });
         if ((vt - vf) / (1000 * 60 * 60 * 24) > 7) return res.status(400).json({ error: "Max 7 days allowed" });
 
         const pool = await getConnection();
-
-        // 2. ID Generation
         let pid = req.body.PermitID;
         if (!pid || pid === 'undefined' || pid === 'null' || pid === '') {
             const idRes = await pool.request().query("SELECT TOP 1 PermitID FROM Permits ORDER BY Id DESC");
@@ -673,29 +654,24 @@ app.post('/api/save-permit', upload.any(), async (req, res) => {
             pid = `WP-${numPart + 1}`;
         }
 
-        // 3. Status Check
         const chk = await pool.request().input('p', sql.NVarChar, pid).query("SELECT Status FROM Permits WHERE PermitID=@p");
         if (chk.recordset.length > 0) {
             const status = chk.recordset[0].Status;
             if (status === 'Closed' || status.includes('Closed')) return res.status(400).json({ error: "Permit is CLOSED. Editing denied." });
         }
 
-        // 4. Parse Workers
         let workers = req.body.SelectedWorkers;
         if (typeof workers === 'string') { try { workers = JSON.parse(workers); } catch (e) { workers = []; } }
         if (!Array.isArray(workers)) workers = [];
 
-        // 5. Build Renewals Array (If requested)
         let renewalsArr = [];
         if (req.body.InitRen === 'Y') {
-            // Upload 1st Renewal Image
             let photoUrl = null;
             const renImageFile = req.files ? req.files.find(f => f.fieldname === 'InitRenImage') : null;
             if (renImageFile) {
                 const blobName = `${pid}-1stRenewal.jpg`;
                 photoUrl = await uploadToAzure(renImageFile.buffer, blobName);
             }
-
             renewalsArr.push({
                 status: 'pending_review',
                 valid_from: req.body.InitRenFrom || '',
@@ -711,11 +687,8 @@ app.post('/api/save-permit', upload.any(), async (req, res) => {
             });
         }
         const renewalsJsonStr = JSON.stringify(renewalsArr);
-
-        // 6. Data Assembly
         const data = { ...req.body, SelectedWorkers: workers, PermitID: pid, CreatedDate: getNowIST(), GSR_Accepted: req.body.GSR_Accepted || 'Y' };
-
-        // 7. Clean Geo Data
+        
         let lat = req.body.Latitude; let lng = req.body.Longitude;
         const cleanGeo = (val) => (!val || val === 'undefined' || val === 'null' || String(val).trim() === '') ? null : String(val);
 
@@ -738,17 +711,14 @@ app.post('/api/save-permit', upload.any(), async (req, res) => {
         } else {
             await q.query("INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, FullDataJSON, RenewalsJSON) VALUES (@p, @s, @w, @re, @rv, @ap, @vf, @vt, @lat, @lng, @j, @ren)");
         }
-
-        console.log("Save Success:", pid);
         res.json({ success: true, permitId: pid });
-
     } catch (e) {
         console.error("SERVER SAVE ERROR:", e);
         res.status(500).json({ error: e.message, stack: e.stack });
     }
 });
 
-// --- UPDATE STATUS & ARCHIVE ---
+// --- UPDATE STATUS & ARCHIVE (FIXED: Handles Async PDF Generation Safely) ---
 app.post('/api/update-status', async (req, res) => {
     try {
         const { PermitID, action, role, user, comment, bgColor, IOCLSupervisors, FirstRenewalAction, RequireRenewalPhotos, ...extras } = req.body;
@@ -825,9 +795,8 @@ app.post('/api/update-status', async (req, res) => {
                 st = 'Closed';
                 d.Closure_Issuer_Sig = `${user} on ${now}`;
                 d.Closure_Approver_Date = now;
-                // Add final closure timestamp to full data before archiving
-                d.Closure_Approver_Sig = `${user} on ${now}`;
-                isFinalClosure = true;
+                d.Closure_Approver_Sig = `${user} on ${now}`; 
+                isFinalClosure = true; 
             } else {
                 st = 'Active';
                 d.Approver_Sig = `${user} on ${now}`;
@@ -858,39 +827,39 @@ app.post('/api/update-status', async (req, res) => {
         let finalJson = JSON.stringify(d);
 
         if (isFinalClosure) {
-            // Generate PDF Buffer *before* deleting data
-            // We pass status='Closed' explicitly so watermark draws
             const pdfRecord = { ...cur.recordset[0], Status: 'Closed', PermitID: PermitID, ValidFrom: cur.recordset[0].ValidFrom, ValidTo: cur.recordset[0].ValidTo };
             
-            // Generate PDF in memory
-            const pdfBuffer = await new Promise((resolve, reject) => {
+            // Generate PDF in memory with safety try/catch wrapper for async operations
+            const pdfBuffer = await new Promise(async (resolve, reject) => {
                 const doc = new PDFDocument({ margin: 30, size: 'A4', bufferPages: true });
                 const buffers = [];
                 doc.on('data', buffers.push.bind(buffers));
                 doc.on('end', () => resolve(Buffer.concat(buffers)));
                 doc.on('error', reject);
                 
-                // Pass current `d` and `renewals` which are fully updated
-                drawPermitPDF(doc, pdfRecord, d, renewals);
-                doc.end();
+                try {
+                    await drawPermitPDF(doc, pdfRecord, d, renewals);
+                    doc.end();
+                } catch (err) {
+                    // Force close doc to release promise if drawing fails
+                    console.error("PDF Draw Error:", err);
+                    doc.end();
+                    reject(err);
+                }
             });
 
-            // Upload to Azure Blob
             const blobName = `closed-permits/${PermitID}_FINAL.pdf`;
             finalPdfUrl = await uploadToAzure(pdfBuffer, blobName, "application/pdf");
-
-            // Prepare for deletion
-            finalJson = null; 
+            finalJson = null; // Prepare to wipe data
         }
 
-        // --- SQL UPDATE ---
         const q = pool.request()
             .input('p', PermitID)
             .input('s', st)
             .input('r', JSON.stringify(renewals));
 
         if (isFinalClosure) {
-            // FIX: Wipe RenewalsJSON too
+            // Feature A: Wipe RenewalsJSON and FullDataJSON
             await q.input('url', finalPdfUrl)
                    .query("UPDATE Permits SET Status=@s, FullDataJSON=NULL, RenewalsJSON=NULL, FinalPdfUrl=@url WHERE PermitID=@p");
         } else {
@@ -900,7 +869,7 @@ app.post('/api/update-status', async (req, res) => {
 
         res.json({ success: true, archived: isFinalClosure });
     } catch (e) {
-        console.error(e);
+        console.error("Update Status Error:", e);
         res.status(500).json({ error: e.message });
     }
 });
@@ -930,7 +899,6 @@ app.post('/api/renewal', upload.any(), async (req, res) => {
                 if (last.status !== 'rejected' && rs < new Date(last.valid_till)) return res.status(400).json({ error: "Overlap detected" });
             }
 
-            // --- PHOTO UPLOAD LOGIC ---
             let photoUrl = null;
             const renImageFile = req.files ? req.files.find(f => f.fieldname === 'RenewalImage') : null;
             if (renImageFile) {
@@ -949,7 +917,7 @@ app.post('/api/renewal', upload.any(), async (req, res) => {
                 req_at: now,
                 worker_list: JSON.parse(renewalWorkers || "[]"),
                 photoUrl: photoUrl,
-                odd_hour_req: (oddHourReq === 'Y') // FEATURE B: Capture Odd Hour Flag
+                odd_hour_req: (oddHourReq === 'Y') // FEATURE B
             });
         } else {
             const last = r[r.length - 1];
@@ -977,16 +945,14 @@ app.post('/api/permit-data', async (req, res) => {
         const pool = await getConnection(); 
         const r = await pool.request().input('p', sql.NVarChar, req.body.permitId).query("SELECT * FROM Permits WHERE PermitID=@p"); 
         if (r.recordset.length) {
-            // Feature A: Safety check for Closed permits (NULL JSON)
             const jsonStr = r.recordset[0].FullDataJSON;
             const data = jsonStr ? JSON.parse(jsonStr) : {};
             res.json({ 
                 ...data, 
                 Status: r.recordset[0].Status, 
                 RenewalsJSON: r.recordset[0].RenewalsJSON, 
-                // FEATURE C: Send photo requirement flag to frontend
-                RequireRenewalPhotos: data.RequireRenewalPhotos || 'N',
-                FullDataJSON: null // Don't send raw large string
+                RequireRenewalPhotos: data.RequireRenewalPhotos || 'N', // Feature C
+                FullDataJSON: null 
             }); 
         } else res.json({ error: "404" }); 
     } catch (e) { res.status(500).json({ error: e.message }) } 
@@ -1013,7 +979,7 @@ app.get('/api/download-excel', async (req, res) => {
     } catch (e) { res.status(500).send(e.message); } 
 });
 
-// --- UPDATED PDF GENERATION ROUTE ---
+// --- PDF GENERATION ROUTE ---
 app.get('/api/download-pdf/:id', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -1021,22 +987,14 @@ app.get('/api/download-pdf/:id', async (req, res) => {
         if (!result.recordset.length) return res.status(404).send('Not Found');
         const p = result.recordset[0]; 
         const d = p.FullDataJSON ? JSON.parse(p.FullDataJSON) : {};
-        // Retrieve renewals for standard download
         const renewals = p.RenewalsJSON ? JSON.parse(p.RenewalsJSON) : [];
-
         const doc = new PDFDocument({ margin: 30, size: 'A4', bufferPages: true });
         res.setHeader('Content-Type', 'application/pdf'); 
         res.setHeader('Content-Disposition', `attachment; filename=${p.PermitID}.pdf`);
         doc.pipe(res);
-
-        // Pass renewal list explicitly
         await drawPermitPDF(doc, p, d, renewals);
         doc.end();
-
-    } catch (e) {
-        console.error(e);
-        res.status(500).send(e.message);
-    }
+    } catch (e) { console.error(e); res.status(500).send(e.message); }
 });
 
 // START SERVER

@@ -648,7 +648,7 @@
                             setText("odd-hour-req-status", "Requester Agreed to Safety Precautions");
                             
                             const chk = document.getElementById("odd-hour-allow-check");
-                            chk.checked = false;
+                            chk.checked = false; 
                             
                             chk.disabled = false; 
 
@@ -667,7 +667,8 @@
                          document.getElementById("pdf-color-select").classList.remove('hidden');
                     }
                     btns += `<button type="button" onclick="window.downloadSecurePDF('${id}')" class="bg-gray-700 text-white px-6 py-3 rounded-lg font-bold shadow flex-1 text-center">Download PDF</button>`;
-            }
+                }
+            } // <--- THIS WAS THE MISSING BRACE
             
             if(s.includes('Closure') || s === 'Closed') {
                 document.getElementById("closure-section").classList.remove('hidden'); document.getElementById("div-closure-req").classList.remove('hidden');
@@ -690,7 +691,7 @@
                       btns=`<button type="button" onclick="window.upd('reject_closure')" class="bg-red-600 text-white px-4 py-3 rounded-lg font-bold flex-1">Reject</button><button type="button" onclick="window.upd('approve')" class="bg-black text-white px-4 py-3 rounded-lg font-bold flex-1">Close Permit</button>`; 
                 }
                 
-                if(s==='Closed') { btns = `<a href="${API}/download-pdf/${id}" target="_blank" class="bg-gray-700 text-white px-6 py-3 rounded-lg font-bold shadow flex-1 text-center">Download PDF</a>`; }
+                if(s==='Closed') { btns = `<button type="button" onclick="window.downloadSecurePDF('${id}')" class="bg-gray-700 text-white px-6 py-3 rounded-lg font-bold shadow flex-1 text-center">Download PDF</button>`; }
             }
 
             document.getElementById("signature-history").classList.remove('hidden');

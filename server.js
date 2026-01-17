@@ -557,7 +557,7 @@ app.post('/api/add-user', authenticateToken, async (req, res) => {
 
 // PROTECTED ROUTES
 
-app.get('/api/users', authenticateToken, async (req, res) => {
+app.get('/api/users', async (req, res) => {
     try {
         const pool = await getConnection();
         const r = await pool.request().query('SELECT Name, Email, Role FROM Users');

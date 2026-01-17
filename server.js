@@ -62,7 +62,11 @@ app.use(bodyParser.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, '.')));
 
 // --- CONFIGURATION ---
-const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_change_this_in_azure_env_vars"; 
+if (!process.env.JWT_SECRET) {
+    console.error("FATAL ERROR: JWT_SECRET is not defined.");
+    process.exit(1);
+}
+const JWT_SECRET = process.env.JWT_SECRET;
 const AZURE_CONN_STR = process.env.AZURE_STORAGE_CONNECTION_STRING;
 
 // --- RATE LIMITER ---
@@ -688,7 +692,9 @@ app.post('/api/save-permit', authenticateToken, upload.any(), async (req, res) =
 
         if (!vf || !vt) return res.status(400).json({ error: "Start and End dates are required" });
         if (vt <= vf) return res.status(400).json({ error: "End date must be after Start date" });
-        
+        if (req.body.Desc && req.body.Desc.length > 500) {
+            return res.status(400).json({ error: "Description too long (max 500 chars)" });
+        }
         const pool = await getConnection();
         let pid = req.body.PermitID;
         if (!pid || pid === 'undefined' || pid === 'null' || pid === '') {
@@ -995,7 +1001,7 @@ app.get('/api/download-excel', authenticateToken, async (req, res) => {
     }
 });
 
-app.get('/api/download-pdf/:id', async (req, res) => {
+app.get('/api/download-pdf/:id', authenticateToken, async (req, res) => {
     try {
         const pool = await getConnection();
         const result = await pool.request().input('p', req.params.id).query("SELECT * FROM Permits WHERE PermitID = @p");

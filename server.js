@@ -19,6 +19,7 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 
 // --- SECURITY MIDDLEWARE ---
+// --- SECURITY MIDDLEWARE ---
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -26,14 +27,17 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc: [
           "'self'",
-          "'unsafe-inline'", // Allows your main script tag
-          "https://cdn.tailwindcss.com", // Tailwind
-          "https://cdn.jsdelivr.net",    // Chart.js
-          "https://maps.googleapis.com"  // Google Maps
+          "'unsafe-inline'", // Allows <script> tags
+          "https://cdn.tailwindcss.com",
+          "https://cdn.jsdelivr.net",
+          "https://maps.googleapis.com"
         ],
+        // 👇 THIS IS THE NEW LINE THAT FIXES YOUR DROPDOWNS 👇
+        scriptSrcAttr: ["'unsafe-inline'"], 
+        
         styleSrc: [
           "'self'",
-          "'unsafe-inline'" // Tailwind adds inline styles
+          "'unsafe-inline'"
         ],
         imgSrc: [
           "'self'",

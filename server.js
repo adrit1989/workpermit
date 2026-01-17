@@ -72,7 +72,7 @@ const AZURE_CONN_STR = process.env.AZURE_STORAGE_CONNECTION_STRING;
 // --- RATE LIMITER ---
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, 
-    max: 100, // Relaxed for testing
+    max: 100, 
     message: "Too many login attempts, please try again later."
 });
 
@@ -254,7 +254,7 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
     doc.rect(25, startY - 5, 545, doc.y - startY + 5).stroke();
     doc.y += 10;
 
-    // CHECKLISTS
+    // CHECKLISTS (Collapsed for brevity)
     const CHECKLIST_DATA = {
         A: [ "1. Equipment / Work Area inspected.", "2. Surrounding area checked, cleaned and covered. Oil/RAGS/Grass Etc removed.", "3. Manholes, Sewers, CBD etc. and hot nearby surface covered.", "4. Considered hazards from other routine, non-routine operations and concerned person alerted.", "5. Equipment blinded/ disconnected/ closed/ isolated/ wedge opened.", "6. Equipment properly drained and depressurized.", "7. Equipment properly steamed/purged.", "8. Equipment water flushed.", "9. Access for Free approach of Fire Tender.", "10. Iron Sulfide removed/ Kept wet.", "11. Equipment electrically isolated and tagged vide Permit no.", "12. Gas Test: HC / Toxic / O2 checked.", "13. Running water hose / Fire extinguisher provided. Fire water system available.", "14. Area cordoned off and Precautionary tag/Board provided.", "15. CCTV monitoring facility available at site.", "16. Proper ventilation and Lighting provided." ],
         B: [ "1. Proper means of exit / escape provided.", "2. Standby personnel provided from Mainline/ Maint. / Contractor/HSE.", "3. Checked for oil and Gas trapped behind the lining in equipment.", "4. Shield provided against spark.", "5. Portable equipment / nozzle properly grounded.", "6. Standby persons provided for entry to confined space.", "7. Adequate Communication Provided to Stand by Person.", "8. Attendant Trained Provided With Rescue Equipment/SCABA.", "9. Space Adequately Cooled for Safe Entry Of Person.", "10. Continuous Inert Gas Flow Arranged.", "11. Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding.", "12. Gas Cylinders are kept outside the confined Space.", "13. Spark arrestor Checked on mobile Equipments.", "14. Welding Machine Checked for Safe Location.", "15. Permit taken for working at height Vide Permit No." ],
@@ -413,10 +413,11 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
     if (doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; }
     doc.font('Helvetica-Bold').text("SIGNATURES", 30, doc.y);
     doc.y += 15; const sY = doc.y;
-    doc.rect(30, sY, 178, 40).stroke().text(`REQ: ${d.RequesterName} on ${d.CreatedDate || '-'}`, 35, sY + 5);
-    doc.rect(208, sY, 178, 40).stroke().text(`REV: ${d.Reviewer_Sig || '-'}\nRem: ${d.Reviewer_Remarks || '-'}`, 213, sY + 5, { width: 168 });
-    doc.rect(386, sY, 179, 40).stroke().text(`APP: ${d.Approver_Sig || '-'}\nRem: ${d.Approver_Remarks || '-'}`, 391, sY + 5, { width: 169 });
-    doc.y = sY + 50;
+    // --- FIX B: INCREASED HEIGHT FROM 40 TO 65 ---
+    doc.rect(30, sY, 178, 65).stroke().text(`REQ: ${d.RequesterName} on ${d.CreatedDate || '-'}`, 35, sY + 5);
+    doc.rect(208, sY, 178, 65).stroke().text(`REV: ${d.Reviewer_Sig || '-'}\nRem: ${d.Reviewer_Remarks || '-'}`, 213, sY + 5, { width: 168 });
+    doc.rect(386, sY, 179, 65).stroke().text(`APP: ${d.Approver_Sig || '-'}\nRem: ${d.Approver_Remarks || '-'}`, 391, sY + 5, { width: 169 });
+    doc.y = sY + 75;
 
     // --- RENEWAL TABLE ---
     if (doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; }
@@ -782,6 +783,34 @@ app.post('/api/update-status', authenticateToken, async (req, res) => {
 
         Object.assign(d, extras);
         
+        // --- FIX C: Restore 1st Renewal Approval Logic ---
+        if (renewals.length === 1 && req.body.FirstRenewalAction) {
+            const ren = renewals[0];
+            const decision = req.body.FirstRenewalAction;
+            
+            if (role === 'Reviewer' && action === 'review') {
+                if (decision === 'accept') {
+                    ren.status = 'pending_approval';
+                    ren.rev_name = user; ren.rev_at = now;
+                } else if (decision === 'reject') {
+                    ren.status = 'rejected';
+                    ren.rej_by = user; ren.rej_at = now; ren.rej_reason = "Rejected during 1st Review";
+                }
+            }
+            else if (role === 'Approver' && action === 'approve') {
+                if (ren.status !== 'rejected') {
+                    if (decision === 'accept') {
+                        ren.status = 'approved';
+                        ren.app_name = user; ren.app_at = now;
+                    } else if (decision === 'reject') {
+                        ren.status = 'rejected';
+                        ren.rej_by = user; ren.rej_at = now; ren.rej_reason = "Rejected during 1st Approval";
+                    }
+                }
+            }
+        }
+        // ----------------------------------------------------
+
         // Status Logic (Standard flow)
         if (action === 'reject_closure') { st = 'Active'; }
         else if (action === 'approve_closure' && role === 'Reviewer') {

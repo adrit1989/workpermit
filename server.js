@@ -19,7 +19,37 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 
 // --- SECURITY MIDDLEWARE ---
-app.use(helmet()); 
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'", // Allows your main script tag
+          "https://cdn.tailwindcss.com", // Tailwind
+          "https://cdn.jsdelivr.net",    // Chart.js
+          "https://maps.googleapis.com"  // Google Maps
+        ],
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'" // Tailwind adds inline styles
+        ],
+        imgSrc: [
+          "'self'",
+          "data:",
+          "blob:",
+          "https://maps.gstatic.com",
+          "https://maps.googleapis.com"
+        ],
+        connectSrc: [
+          "'self'",
+          "https://maps.googleapis.com"
+        ],
+      },
+    },
+  })
+);
 app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, '.')));

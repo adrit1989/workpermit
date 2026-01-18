@@ -85,7 +85,10 @@ if (AZURE_CONN_STR) {
         (async () => { try { await containerClient.createIfNotExists(); } catch (e) { console.log("Container info:", e.message); } })();
     } catch (err) { console.error("Blob Storage Error:", err.message); }
 }
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ 
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 } // Limit file size to 5MB to prevent crashes
+});
 
 // --- AUTHENTICATION MIDDLEWARE ---
 function authenticateToken(req, res, next) {

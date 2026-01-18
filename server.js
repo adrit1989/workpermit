@@ -598,6 +598,18 @@ app.post('/api/save-worker', authenticateToken, async (req, res) => {
             res.json({ success: true });
         }
         else if (Action === 'delete') {
+            // SECURITY FIX: Requesters can only delete their own workers
+            if (req.user.role === 'Requester') {
+                const check = await pool.request()
+                    .input('w', WorkerID)
+                    .query("SELECT RequestorEmail FROM Workers WHERE WorkerID=@w");
+                
+                if (check.recordset.length === 0) return res.status(404).json({ error: "Not found" });
+                
+                if (check.recordset[0].RequestorEmail !== req.user.email) {
+                    return res.status(403).json({ error: "Unauthorized: You can only delete your own workers." });
+                }
+            }
             await pool.request().input('w', WorkerID).query("DELETE FROM Workers WHERE WorkerID=@w");
             res.json({ success: true });
         }
@@ -795,7 +807,6 @@ app.post('/api/update-status', authenticateToken, async (req, res) => {
         // --- REQUIREMENT B: AUTO-PROCESS 1ST RENEWAL ---
         if (renewals.length === 1) {
             const r1 = renewals[0];
-            // Only update if currently pending
             if (r1.status === 'pending_review' || r1.status === 'pending_approval') {
                 if (action === 'reject') {
                     r1.status = 'rejected';
@@ -803,13 +814,11 @@ app.post('/api/update-status', authenticateToken, async (req, res) => {
                     r1.rej_reason = "Rejected along with Main Permit";
                 } 
                 else if (role === 'Reviewer' && action === 'review') {
-                    // Reviewer reviews Permit -> Renewal moves to Pending Approval
                     r1.status = 'pending_approval';
                     r1.rev_name = user;
                     r1.rev_at = now;
                 } 
                 else if (role === 'Approver' && action === 'approve') {
-                    // Approver approves Permit -> Renewal becomes Approved
                     r1.status = 'approved';
                     r1.app_name = user;
                     r1.app_at = now;
@@ -1051,6 +1060,11 @@ app.get('/api/download-pdf/:id', authenticateToken, async (req, res) => {
         
         const p = result.recordset[0];
 
+        // SECURITY FIX: Check Ownership for Requesters
+        if (req.user.role === 'Requester' && p.RequesterEmail !== req.user.email) {
+            return res.status(403).send("Unauthorized: You cannot access this permit.");
+        }
+
         // 1. Check if the permit is Closed and has a stored URL
         if ((p.Status === 'Closed' || p.Status.includes('Closure')) && p.FinalPdfUrl) {
             if (!containerClient) {
@@ -1058,26 +1072,22 @@ app.get('/api/download-pdf/:id', authenticateToken, async (req, res) => {
                 return res.status(500).send("Storage Error");
             }
             try {
-                // Format used in saving: `closed-permits/${PermitID}_FINAL.pdf`
                 const blobName = `closed-permits/${p.PermitID}_FINAL.pdf`;
                 const blockBlobClient = containerClient.getBlockBlobClient(blobName);
 
-                // Check if blob exists
                 const exists = await blockBlobClient.exists();
                 if (!exists) {
                     console.error("Blob not found in Azure:", blobName);
                     return res.status(404).send("Archived PDF not found.");
                 }
 
-                // Download and stream to response
                 const downloadBlockBlobResponse = await blockBlobClient.download(0);
                 
                 res.setHeader('Content-Type', 'application/pdf');
                 res.setHeader('Content-Disposition', `attachment; filename=${p.PermitID}.pdf`);
                 
-                // Pipe the Azure stream directly to the Express response
                 downloadBlockBlobResponse.readableStreamBody.pipe(res);
-                return; // Stop here, do not generate fresh PDF
+                return;
 
             } catch (azureError) {
                 console.error("Azure Download Error:", azureError.message);
@@ -1085,7 +1095,7 @@ app.get('/api/download-pdf/:id', authenticateToken, async (req, res) => {
             }
         }
 
-        // 2. Fallback logic for ACTIVE permits (Generating on the fly)
+        // 2. Fallback logic for ACTIVE permits
         const d = p.FullDataJSON ? JSON.parse(p.FullDataJSON) : {};
         const renewals = p.RenewalsJSON ? JSON.parse(p.RenewalsJSON) : [];
         
@@ -1107,21 +1117,25 @@ app.get('/api/download-pdf/:id', authenticateToken, async (req, res) => {
 app.get('/api/view-photo/:filename', authenticateToken, async (req, res) => {
     try {
         const filename = req.params.filename;
+        const permitId = filename.split('-')[0] + '-' + filename.split('-')[1];
+
         if (!containerClient) return res.status(500).send("Storage not configured");
 
+        // SECURITY FIX: Check Ownership
+        if (req.user.role === 'Requester') {
+             const pool = await getConnection();
+             const r = await pool.request().input('p', sql.NVarChar, permitId).query("SELECT RequesterEmail FROM Permits WHERE PermitID=@p");
+             if (r.recordset.length === 0 || r.recordset[0].RequesterEmail !== req.user.email) {
+                 return res.status(403).send("Unauthorized: You do not have permission to view this photo.");
+             }
+        }
+
         const blockBlobClient = containerClient.getBlockBlobClient(filename);
-        
-        // Check if exists
         const exists = await blockBlobClient.exists();
         if (!exists) return res.status(404).send("Photo not found");
 
-        // Download
         const downloadBlockBlobResponse = await blockBlobClient.download(0);
-        
-        // Set correct content type
         res.setHeader('Content-Type', downloadBlockBlobResponse.contentType || 'image/jpeg');
-        
-        // Pipe the stream
         downloadBlockBlobResponse.readableStreamBody.pipe(res);
 
     } catch (e) {

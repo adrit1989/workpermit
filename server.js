@@ -911,6 +911,12 @@ app.post('/api/renewal', authenticateToken, upload.any(), async (req, res) => {
             const re = new Date(data.RenewalValidTo);
 
             if (re <= rs) return res.status(400).json({ error: "End time must be after Start time" });
+            const pStart = new Date(cur.recordset[0].ValidFrom);
+            const pEnd = new Date(cur.recordset[0].ValidTo);
+
+            if (rs < pStart || re > pEnd) {
+                return res.status(400).json({ error: "Renewal cannot be outside the Main Permit validity period." });
+            }
             
             // REQUIREMENT A: Backend Validation for 8 Hours
             const diffMs = re - rs;

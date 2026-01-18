@@ -99,14 +99,71 @@
              <button onclick="window.openWorkerForm('create')" id="btn-add-worker" class="w-full bg-orange-600 text-white py-3 rounded-lg font-bold mb-4 shadow hidden">+ Add New Worker</button>
              <table class="mobile-table w-full text-left text-sm" id="table-workers"><thead class="hidden md:table-header-group bg-gray-100 text-gray-700"><tr><th>Name</th><th>Father Name</th><th>ID Details</th><th>Address & Contact</th><th>Requestor</th><th>Status</th><th>Action</th></tr></thead><tbody class="divide-y divide-gray-200"></tbody></table>
         </div>
-
         <div id="view-dashboard">
-            <div class="flex justify-between items-center mb-4 px-1"><h2 class="text-xl font-bold text-gray-800">Dashboard</h2><button onclick="window.showNewPermit()" id="btn-new-permit" class="bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow hidden">+ New</button></div>
-            <div class="grid grid-cols-3 gap-2 mb-4"><button onclick="window.showAddUser()" id="btn-add-user" class="bg-purple-100 text-purple-700 py-2 rounded font-bold text-sm hidden">Users</button><button onclick="window.showMap()" id="btn-view-map" class="bg-blue-100 text-blue-700 py-2 rounded font-bold text-sm hidden">Map</button><button onclick="window.downloadSecureExcel()" id="btn-download-excel" class="bg-green-100 text-green-700 py-2 rounded font-bold text-sm hidden">Excel</button>
-            <div id="charts-container" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 hidden"><div class="glass h-64"><canvas id="chartStatus"></canvas></div><div class="glass h-64"><canvas id="chartType"></canvas></div></div>
-            <h3 class="font-bold text-gray-500 uppercase text-xs mb-2 tracking-wide">Action Required</h3><div class="mb-6"><table class="mobile-table w-full text-left text-sm" id="table-pending"><thead class="bg-red-50 text-red-900"><tr><th class="p-2">ID</th><th>Type</th><th>Location</th><th>Status</th><th>Pending With</th><th>Action</th></tr></thead><tbody></tbody></table></div>
-            <h3 class="font-bold text-gray-500 uppercase text-xs mb-2 tracking-wide">Active Permits</h3><div class="mb-6"><table class="mobile-table w-full text-left text-sm" id="table-active"><thead class="bg-green-50 text-green-900"><tr><th class="p-2">ID</th><th>Type</th><th>Location</th><th>Status</th><th>Action</th></tr></thead><tbody></tbody></table></div>
-            <h3 class="font-bold text-gray-500 uppercase text-xs mb-2 tracking-wide">Closed / Other</h3><div><table class="mobile-table w-full text-left text-sm" id="table-other"><thead class="bg-gray-50 text-gray-700"><tr><th class="p-2">ID</th><th>Type</th><th>Location</th><th>Status</th><th>Action</th></tr></thead><tbody></tbody></table></div>
+            <div class="flex justify-between items-center mb-4 px-1">
+                <h2 class="text-xl font-bold text-gray-800">Dashboard</h2>
+                <button onclick="window.showNewPermit()" id="btn-new-permit" class="bg-orange-600 text-white px-4 py-2 rounded-lg font-bold shadow hidden">+ New</button>
+            </div>
+            
+            <div class="grid grid-cols-3 gap-2 mb-4">
+                <button onclick="window.showAddUser()" id="btn-add-user" class="bg-purple-100 text-purple-700 py-2 rounded font-bold text-sm hidden">Users</button>
+                <button onclick="window.showMap()" id="btn-view-map" class="bg-blue-100 text-blue-700 py-2 rounded font-bold text-sm hidden">Map</button>
+                <button onclick="window.downloadSecureExcel()" id="btn-download-excel" class="bg-green-100 text-green-700 py-2 rounded font-bold text-sm hidden">Excel</button>
+            </div>
+
+            <div id="charts-container" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 hidden">
+                <div class="glass h-64"><canvas id="chartStatus"></canvas></div>
+                <div class="glass h-64"><canvas id="chartType"></canvas></div>
+            </div>
+            
+            <h3 class="font-bold text-gray-500 uppercase text-xs mb-2 tracking-wide">Action Required</h3>
+            <div class="mb-6 overflow-x-auto">
+                <table class="mobile-table w-full text-left text-sm" id="table-pending">
+                    <thead class="bg-red-50 text-red-900 border-b-2 border-red-200">
+                        <tr>
+                            <th class="p-3 w-24">ID</th>
+                            <th class="p-3 w-24">Type</th>
+                            <th class="p-3">Location</th>
+                            <th class="p-3 w-32">Status</th>
+                            <th class="p-3 w-32">Pending With</th>
+                            <th class="p-3 w-24">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100"></tbody>
+                </table>
+            </div>
+            
+            <h3 class="font-bold text-gray-500 uppercase text-xs mb-2 tracking-wide">Active Permits</h3>
+            <div class="mb-6 overflow-x-auto">
+                <table class="mobile-table w-full text-left text-sm" id="table-active">
+                    <thead class="bg-green-50 text-green-900 border-b-2 border-green-200">
+                        <tr>
+                            <th class="p-3 w-24">ID</th>
+                            <th class="p-3 w-24">Type</th>
+                            <th class="p-3">Location</th>
+                            <th class="p-3 w-32">Status</th>
+                            <th class="p-3 w-32">Pending With</th> <th class="p-3 w-24">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100"></tbody>
+                </table>
+            </div>
+            
+            <h3 class="font-bold text-gray-500 uppercase text-xs mb-2 tracking-wide">Closed / Other</h3>
+            <div class="overflow-x-auto">
+                <table class="mobile-table w-full text-left text-sm" id="table-other">
+                    <thead class="bg-gray-50 text-gray-700 border-b-2 border-gray-200">
+                        <tr>
+                            <th class="p-3 w-24">ID</th>
+                            <th class="p-3 w-24">Type</th>
+                            <th class="p-3">Location</th>
+                            <th class="p-3 w-32">Status</th>
+                            <th class="p-3 w-32">Pending With</th> <th class="p-3 w-24">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100"></tbody>
+                </table>
+            </div>
         </div>
 
         <div id="view-add-user" class="hidden flex justify-center fixed inset-0 z-50 bg-black/50 items-center p-4"><div class="glass w-full max-w-sm relative animate-scale-up"><button onclick="window.showDashboard()" class="absolute top-2 right-2 text-gray-400 hover:text-gray-800 text-xl font-bold px-2">✕</button><h3 class="font-bold mb-4 text-lg">Add New User</h3><form onsubmit="event.preventDefault(); window.submitNewUser();" class="space-y-3"><input id="new-user-name" placeholder="Full Name" required><input id="new-user-email" placeholder="Email Address" required><select id="new-user-role"><option>Requester</option><option>Reviewer</option><option>Approver</option></select><input id="new-user-pass" type="password" placeholder="Set Password" required><button class="w-full bg-purple-600 text-white py-3 rounded-lg font-bold shadow">Create User</button></form></div></div>
@@ -1111,4 +1168,5 @@
     </script>
 </body>
 </html>
+
 

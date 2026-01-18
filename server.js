@@ -781,32 +781,6 @@ app.post('/api/update-status', authenticateToken, async (req, res) => {
         const now = getNowIST();
 
         Object.assign(d, extras);
-
-        // --- NEW LOGIC: AUTO-PROCESS 1ST RENEWAL (Requirement B) ---
-        if (renewals.length === 1) {
-            const r1 = renewals[0];
-            // Only update if currently pending
-            if (r1.status === 'pending_review' || r1.status === 'pending_approval') {
-                if (action === 'reject') {
-                    r1.status = 'rejected';
-                    r1.rej_by = user;
-                    r1.rej_reason = "Rejected along with Main Permit";
-                } 
-                else if (role === 'Reviewer' && action === 'review') {
-                    // Reviewer reviews Permit -> Renewal moves to Pending Approval
-                    r1.status = 'pending_approval';
-                    r1.rev_name = user;
-                    r1.rev_at = now;
-                } 
-                else if (role === 'Approver' && action === 'approve') {
-                    // Approver approves Permit -> Renewal becomes Approved
-                    r1.status = 'approved';
-                    r1.app_name = user;
-                    r1.app_at = now;
-                }
-            }
-        }
-        // -----------------------------------------------------------
         
         // Status Logic (Standard flow)
         if (action === 'reject_closure') { st = 'Active'; }

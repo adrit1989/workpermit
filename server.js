@@ -657,15 +657,21 @@ app.post('/api/dashboard', authenticateAccess, async (req, res) => {
 /* =====================================================
    SAVE PERMIT (RECTIFIED ID LOGIC & LOGGING)
 ===================================================== */
+/* =====================================================
+   SAVE PERMIT (WITH DEBUG LOGGING)
+===================================================== */
 app.post('/api/save-permit', authenticateAccess, upload.any(), async (req, res) => {
+  console.log("=== [DEBUG] Starting Save Permit Request ==="); 
   try {
-    console.log("--- SAVE PERMIT START ---"); 
     const requesterEmail = req.user.email;
+    console.log("User:", requesterEmail);
+
     let vf, vt;
     try {
       vf = req.body.ValidFrom ? new Date(req.body.ValidFrom) : null;
       vt = req.body.ValidTo ? new Date(req.body.ValidTo) : null;
-    } catch {
+    } catch (e) {
+      console.error("[DEBUG] Date Error:", e.message);
       return res.status(400).json({ error: "Invalid Date Format" });
     }
 
@@ -674,36 +680,40 @@ app.post('/api/save-permit', authenticateAccess, upload.any(), async (req, res) 
 
     const pool = await getConnection();
     let pid = req.body.PermitID;
+    console.log("[DEBUG] Received PermitID from Frontend:", pid);
 
-    // --- FIX: MATHEMATICAL ID GENERATION ---
-    // --- FIX: MATHEMATICAL ID GENERATION ---
+    // --- ID GENERATION LOGIC ---
     if (!pid || pid === 'undefined' || pid === 'null' || pid === '') {
-      // 1. Ask SQL to extract the NUMBER (substring) and find the mathematical MAX
+      console.log("[DEBUG] Generating NEW Permit ID...");
+      
+      // LOG THE MAX VALUE QUERY RESULT
       const idRes = await pool.request().query(
         "SELECT MAX(CAST(SUBSTRING(PermitID, 4, 10) AS INT)) as MaxVal FROM Permits WHERE PermitID LIKE 'WP-%'"
       );
       
-      let nextNum = 1000; // Default if table is empty
-      
-      // 2. If a number exists (e.g., 100), make the next one 101
+      console.log("[DEBUG] Max ID found in DB:", idRes.recordset[0].MaxVal);
+
+      let nextNum = 1000; 
       if (idRes.recordset.length > 0 && idRes.recordset[0].MaxVal) {
         nextNum = idRes.recordset[0].MaxVal + 1;
       }
       
       pid = `WP-${nextNum}`;
-      console.log("Generated New ID:", pid); // Watch logs: Should say WP-101
+      console.log("[DEBUG] Calculated New ID:", pid);
     }
 
-    // Check if ID exists to decide INSERT vs UPDATE
+    // CHECK IF ID ALREADY EXISTS
     const chk = await pool.request().input('p', sql.NVarChar, pid)
       .query("SELECT Status FROM Permits WHERE PermitID=@p");
     
-    // Validate Status (Prevent editing Closed permits)
+    console.log("[DEBUG] Does ID Exist?", chk.recordset.length > 0 ? "YES" : "NO");
+
     if (chk.recordset.length && chk.recordset[0].Status.includes('Closed')) {
-      console.error("Attempt to edit closed permit:", pid);
+      console.log("[DEBUG] Blocked: Permit is Closed");
       return res.status(400).json({ error: "Permit CLOSED" });
     }
 
+    // DATA PREPARATION
     let workers = req.body.SelectedWorkers;
     if (typeof workers === 'string') { try { workers = JSON.parse(workers); } catch { workers = []; } }
 
@@ -714,6 +724,7 @@ app.post('/api/save-permit', authenticateAccess, upload.any(), async (req, res) 
       if (renImg) {
         const blobName = `${pid}-1stRenewal.jpg`;
         photoUrl = await uploadToAzure(renImg.buffer, blobName);
+        console.log("[DEBUG] Uploaded Renewal Photo:", photoUrl);
       }
       renewalsArr.push({
         status: 'pending_review',
@@ -738,7 +749,7 @@ app.post('/api/save-permit', authenticateAccess, upload.any(), async (req, res) 
 
     const q = pool.request()
       .input('p', sql.NVarChar, pid)
-      .input('s', sql.NVarChar, 'Pending Review') // Always reset status on save/edit
+      .input('s', sql.NVarChar, 'Pending Review')
       .input('w', sql.NVarChar, req.body.WorkType)
       .input('re', sql.NVarChar, requesterEmail)
       .input('rv', sql.NVarChar, req.body.ReviewerEmail)
@@ -750,24 +761,28 @@ app.post('/api/save-permit', authenticateAccess, upload.any(), async (req, res) 
       .input('j', sql.NVarChar(sql.MAX), JSON.stringify(data))
       .input('ren', sql.NVarChar(sql.MAX), renewalsJsonStr);
 
+    // EXECUTE QUERY AND LOG RESULT
     if (chk.recordset.length) {
-      console.log("Executing UPDATE for:", pid);
+      console.log(`[DEBUG] Executing UPDATE command for ${pid}...`);
       await q.query("UPDATE Permits SET FullDataJSON=@j, WorkType=@w, ValidFrom=@vf, ValidTo=@vt, Latitude=@lat, Longitude=@lng, Status=@s, ReviewerEmail=@rv, ApproverEmail=@ap, RenewalsJSON=@ren WHERE PermitID=@p");
+      console.log("[DEBUG] UPDATE Complete.");
     } else {
-      console.log("Executing INSERT for:", pid);
+      console.log(`[DEBUG] Executing INSERT command for ${pid}...`);
       await q.query("INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, FullDataJSON, RenewalsJSON) VALUES (@p,@s,@w,@re,@rv,@ap,@vf,@vt,@lat,@lng,@j,@ren)");
+      console.log("[DEBUG] INSERT Complete.");
     }
 
-    console.log("--- SAVE SUCCESS ---");
     res.json({ success: true, permitId: pid });
 
   } catch (err) {
-    console.error("!!! SQL SAVE ERROR !!!");
+    // --- THIS IS THE MOST IMPORTANT LOG ---
+    console.error("!!! [DEBUG] SQL ERROR !!!");
     console.error("Message:", err.message);
-    res.status(500).json({ error: "Database Save Failed: " + err.message });
+    console.error("Code:", err.code); 
+    console.error("Stack:", err.stack);
+    res.status(500).json({ error: "Database Error: " + err.message });
   }
 });
-
 // --- 5. Update Status (With Reference Deletion Logic) ---
 app.post('/api/update-status', authenticateAccess, async (req, res) => {
   try {

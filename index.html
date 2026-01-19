@@ -255,7 +255,18 @@
                 </div>
 
                 <div class="glass"><h3 class="section-title">2. Checklists</h3><div id="checklists-wrapper" class="space-y-4"></div></div>
-                <div class="glass" id="worker-select-section"><h3 class="section-title">Workers (Approved)</h3><div id="worker-checkboxes" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div><div id="worker-readonly-table" class="hidden overflow-x-auto"><table class="mobile-table w-full text-xs text-left"><thead class="hidden md:table-header-group"><tr><th>Name</th><th>Gender</th><th>Age</th><th>Contractor</th></tr></thead><tbody class="divide-y"></tbody></table></div></div>
+                <div class="glass" id="worker-select-section">
+                    <h3 class="section-title">Workers (Approved)</h3>
+                    <div id="worker-checkboxes" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+                    <div id="worker-readonly-table" class="hidden overflow-x-auto">
+                        <table class="mobile-table w-full text-xs text-left">
+                            <thead class="hidden md:table-header-group">
+                                <tr><th>Name</th><th>Gender</th><th>Age</th><th>ID Details</th><th>Requestor</th><th>Approved On / By</th></tr>
+                            </thead>
+                            <tbody class="divide-y"></tbody>
+                        </table>
+                    </div>
+                </div>
                 <div class="glass" id="hazards-section"><h3 class="section-title">3. Hazards</h3><div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-4" id="hazards-container"></div><div id="other-hazard-div" class="hidden mb-2"><input id="H_Others_Detail" name="H_Others_Detail" placeholder="Specify other hazards..." class="w-full"></div></div>
                 
                 <div id="fs-reviewer-section" class="glass hidden border-l-4 border-yellow-500">
@@ -468,16 +479,21 @@
                 const tr = document.createElement('tr');
                 tr.className = "cursor-pointer hover:bg-orange-50 transition border-b";
                 
+                // Action Button Logic
                 let actionBtn = document.createElement('span');
                 actionBtn.className = "bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-bold";
                 actionBtn.innerText = "OPEN";
+                
+                // FIX E: Download Button Logic
                 if (p.Status === 'Closed') {
                     actionBtn = document.createElement('button');
                     actionBtn.className = "btn-pdf";
                     actionBtn.innerText = "Download PDF";
                     actionBtn.type="button";
                     actionBtn.onclick = (e) => { e.stopPropagation(); downloadSecurePDF(p.PermitID); };
-                } else if (p.Status === 'Active' && !p.Status.includes('Renewal')) {
+                } else if (p.Status === 'Active') {
+                    // Logic: Show button for ALL users if active. 
+                    // Note: If permit is "Renewal Pending...", status is NOT 'Active', so button won't show, which matches requirement E.
                     actionBtn = document.createElement('button');
                     actionBtn.className = "btn-pdf";
                     actionBtn.innerText = "Download PDF";
@@ -634,7 +650,6 @@
             const addedBy = data ? data.added_by : currentUser.name;
             const addedAt = data ? data.added_at : getNow();
             const hiddenFields = `<input type="hidden" class="iocl-added-by" value="${addedBy}"><input type="hidden" class="iocl-added-at" value="${addedAt}">`;
-            // Ensure inputs correctly capture data.desig and data.contact
             div.innerHTML = `${hiddenFields}<input class="iocl-name border p-1 w-1/3" placeholder="Name" value="${data?data.name:''}"><input class="iocl-desig border p-1 w-1/3" placeholder="Desig" value="${data?data.desig:''}"><input class="iocl-contact border p-1 w-1/3" placeholder="Contact" value="${data?data.contact:''}"><button type="button" class="text-red-500 font-bold px-2 btn-del-iocl">x</button>`;
             div.querySelector('.btn-del-iocl').onclick = () => markIOCLDeleted(div);
             document.getElementById(containerId).appendChild(div);
@@ -659,8 +674,8 @@
                 const isDel = r.classList.contains('marked-deleted');
                 const obj = {
                     name: nameVal,
-                    desig: r.querySelector('.iocl-desig').value, // Explicitly grab desig value
-                    contact: r.querySelector('.iocl-contact').value, // Explicitly grab contact value
+                    desig: r.querySelector('.iocl-desig').value, 
+                    contact: r.querySelector('.iocl-contact').value,
                     added_by: r.querySelector('.iocl-added-by').value,
                     added_at: r.querySelector('.iocl-added-at').value,
                     is_deleted: isDel
@@ -685,7 +700,6 @@
                     const rowClass = x.is_deleted ? 'marked-deleted' : '';
                     let audit = `Add: ${x.added_by} (${x.added_at})`;
                     if(x.is_deleted) audit += `<br><span class="audit-del">Del: ${x.deleted_by} (${x.deleted_at})</span>`;
-                    // Strictly render x.desig and x.contact from saved object
                     return `<tr class="${rowClass}"><td>${escapeHtml(x.name)}</td><td>${escapeHtml(x.desig)}</td><td>${escapeHtml(x.contact)}</td><td class="audit-text">${audit}</td></tr>`;
                 }).join('');
             }
@@ -698,7 +712,9 @@
              currentPermitId = id; currentPermitIOCLData = p.IOCLSupervisors || []; permitRequirePhoto = (p.RequireRenewalPhotos === 'Y');
              document.getElementById("permit-header-display").innerText = `${id} | ${p.Status}`;
              document.getElementById("permit-worker-audit-display").classList.remove("hidden");
-             document.getElementById("assigned-worker-audit").innerHTML = `<table class="mobile-table w-full text-xs"><thead><tr><th>Name</th><th>ID</th></tr></thead><tbody>${p.SelectedWorkers.map(w=>`<tr><td>${w.Name}</td><td>${w.ID}</td></tr>`).join('')}</tbody></table>`;
+             
+             // FIX D: Show approved workers in read-only table in permit view
+             document.getElementById("assigned-worker-audit").innerHTML = `<table class="mobile-table w-full text-xs"><thead><tr><th>Name</th><th>ID Details</th><th>Requestor</th><th>Approved On / By</th></tr></thead><tbody>${p.SelectedWorkers.map(w=>`<tr><td>${w.Name}</td><td>${w.IDType}: ${w.ID}</td><td>${w.RequestorName}</td><td>${w.ApprovedBy} (${w.ApprovedAt})</td></tr>`).join('')}</tbody></table>`;
 
              const rS=document.getElementById("ReviewerEmail"), aS=document.getElementById("ApproverEmail"); 
              rS.innerHTML=""; aS.innerHTML=""; 
@@ -714,21 +730,34 @@
              await loadWorkers('permit_dropdown'); 
              currentPermitWorkers = p.SelectedWorkers;
              
+             // FIX C: Worker Visibility Logic (Strict)
              const wDiv = document.getElementById('worker-checkboxes');
              const wTable = document.getElementById('worker-readonly-table');
              if(currentUser.Role === 'Requester' && (p.Status === 'New' || p.Status.includes('Pending Review'))) {
                  wDiv.classList.remove('hidden'); wTable.classList.add('hidden');
              } else {
                  wDiv.classList.add('hidden'); wTable.classList.remove('hidden');
-                 wTable.querySelector('tbody').innerHTML = currentPermitWorkers.map(w => `<tr><td>${w.Name}</td><td>${w.Gender}</td><td>${w.Age}</td><td>${p.RequesterName}</td></tr>`).join('');
+                 wTable.querySelector('tbody').innerHTML = currentPermitWorkers.map(w => `<tr><td>${w.Name}</td><td>${w.Gender}</td><td>${w.Age}</td><td>${w.IDType}: ${w.ID}</td><td>${p.RequesterName}</td><td>${w.ApprovedBy} (${w.ApprovedAt})</td></tr>`).join('');
              }
 
              const rens = JSON.parse(p.RenewalsJSON || "[]");
              currentRenewalCount = rens.length;
+             
+             // FIX A: Renewal Table Headers
              document.querySelector("#table-renewals tbody").innerHTML = rens.map(r => {
                  const photoHtml = r.photoUrl ? `<button type="button" class="text-blue-600 font-bold underline text-xs btn-view-photo" data-url="${r.photoUrl}">View Photo</button>` : 'N/A';
-                 return `<tr><td>Start: ${r.valid_from}</td><td>${r.hc}/${r.toxic}/${r.oxygen}</td><td>${r.worker_list||'-'}</td><td>${photoHtml}</td><td>${r.req_name}</td><td>${r.rev_name||'-'}</td><td>${r.app_name||'-'}</td><td>${r.status}</td></tr>`;
+                 return `<tr>
+                    <td>Start: ${r.valid_from}<br>End: ${r.valid_till}</td>
+                    <td>${r.hc}/${r.toxic}/${r.oxygen}<br><span class="text-[10px] text-gray-500">${r.precautions||'-'}</span></td>
+                    <td>${r.worker_list||'-'}</td>
+                    <td>${photoHtml}</td>
+                    <td>${escapeHtml(r.req_name)}<br><span class="text-[10px] text-gray-500">${r.req_at}</span></td>
+                    <td>${escapeHtml(r.rev_name||'-')}<br><span class="text-[10px] text-gray-500">${r.rev_at||''}</span></td>
+                    <td>${escapeHtml(r.app_name||'-')}<br><span class="text-[10px] text-gray-500">${r.app_at||''}</span></td>
+                    <td><span class="font-bold ${r.status==='rejected'?'text-red-600':'text-green-600'}">${r.status}</span></td>
+                 </tr>`;
              }).join('');
+             
              document.querySelectorAll('.btn-view-photo').forEach(b => b.addEventListener('click', (e) => viewSecurePhoto(e.target.dataset.url)));
 
              if(rens.length > 0) document.getElementById("renewals-section").classList.remove('hidden');
@@ -740,13 +769,18 @@
 
              const actionsDiv = document.getElementById("actions"); actionsDiv.innerHTML = "";
              
+             // FIX A: Enable 1st Renewal Action Buttons
              document.getElementById("first-renewal-decision").classList.add('hidden');
              if(rens.length === 1) {
                  if(currentUser.Role === 'Reviewer' && p.Status === 'Pending Review' && rens[0].status === 'pending_review') {
                      document.getElementById("first-renewal-decision").classList.remove('hidden');
+                     const rRadios = document.getElementsByName('FirstRenewalAction');
+                     for(const r of rRadios) r.disabled = false;
                  }
                  if(currentUser.Role === 'Approver' && p.Status === 'Pending Approval' && rens[0].status === 'pending_approval') {
                      document.getElementById("first-renewal-decision").classList.remove('hidden');
+                     const rRadios = document.getElementsByName('FirstRenewalAction');
+                     for(const r of rRadios) r.disabled = false;
                  }
              }
 
@@ -769,11 +803,13 @@
                  currentPermitIOCLData.forEach(d => addIOCLRow('iocl-sup-container-app', d));
                  if(p.Status === 'Pending Approval') {
                      document.getElementById("Approver_Remarks").disabled=false; 
+                     // FIX B: Enable Photo Requirement
                      document.getElementById("RequireRenewalPhotos").disabled = false;
                      const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-3 rounded-lg font-bold flex-1"; b1.innerText = "Reject"; b1.type="button"; b1.addEventListener('click', () => upd('reject'));
                      const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-3 rounded-lg font-bold flex-1 ml-2"; b2.innerText = "Approve"; b2.type="button"; b2.addEventListener('click', () => upd('approve'));
                      actionsDiv.append(b1, b2);
                  } else if (p.Status === 'Active') {
+                     // FIX C: Update Supervisors Button (Only for Approver)
                      const btnUpd = document.createElement("button"); btnUpd.className = "bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow flex-1"; btnUpd.innerText = "Update Supervisors"; btnUpd.type="button"; btnUpd.onclick = () => upd('approve'); actionsDiv.appendChild(btnUpd);
                  }
              }
@@ -806,11 +842,6 @@
              document.getElementById("signature-history").classList.remove('hidden');
              setText("sig-app", p.Approver_Sig || 'Pending'); setText("sig-clos", p.Closure_Approver_Sig || 'Pending');
              document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-form").classList.remove('hidden');
-             
-             if (rens.length === 1 && (p.Status.includes('Pending Review') || p.Status.includes('Pending Approval'))) {
-                 const rRadios = document.getElementsByName('FirstRenewalAction');
-                 for(const r of rRadios) r.disabled = false;
-             }
         }
 
         async function savePermit() {

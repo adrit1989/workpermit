@@ -38,23 +38,25 @@ app.use(cors({
 }));
 
 // --- 2. SECURITY: STRICT CSP (Prevent XSS) ---
+// FIXED: Explicitly allow 'unsafe-inline' for scripts and styles to fix the "Loading..." error
 app.use(
   helmet({
     contentSecurityPolicy: {
-      useDefaults: true,
+      useDefaults: false, // Turn off defaults to have full control
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: [
           "'self'",
-          "'unsafe-inline'", // <--- FIXED: Allows your index.html script to run
+          "'unsafe-inline'", // Allows <script>...</script>
+          "'unsafe-eval'",   // Sometimes needed for Chart.js / Maps
           "https://cdn.tailwindcss.com",
           "https://cdn.jsdelivr.net",
           "https://maps.googleapis.com" 
         ],
         styleSrc: [
           "'self'",
-          "https://fonts.googleapis.com",
-          "'unsafe-inline'" // Required for Tailwind
+          "'unsafe-inline'", // Allows <style>...</style>
+          "https://fonts.googleapis.com"
         ],
         fontSrc: [
           "'self'",
@@ -71,7 +73,10 @@ app.use(
           "'self'",
           "https://maps.googleapis.com",
           "https://cdn.jsdelivr.net"
-        ]
+        ],
+        frameSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [] // Optional: Force HTTPS
       }
     }
   })
@@ -196,7 +201,7 @@ async function uploadToAzure(buffer, blobName, mimeType = "image/jpeg") {
     }
 }
 
-// --- 6. FUNCTIONAL: FULL PDF GENERATOR (No Abbreviations) ---
+// --- 6. FUNCTIONAL: FULL PDF GENERATOR ---
 async function drawPermitPDF(doc, p, d, renewalsList) {
     const workType = (d.WorkType || "PERMIT").toUpperCase();
     const status = p.Status || "Active";

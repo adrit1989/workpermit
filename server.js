@@ -18,24 +18,42 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 
-// --- SECURITY MIDDLEWARE ---
+// --- 1. SECURITY: STRICT CORS POLICY ---
+const allowedOrigins = [
+  "https://workpermit-a8hueufcdzc0ftcd.centralindia-01.azurewebsites.net",
+  "http://localhost:3000"
+];
+
+app.use(cors({
+  origin: (origin, cb) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      return cb(new Error('CORS Policy Blocked this Origin'), false);
+    }
+    return cb(null, true);
+  },
+  credentials: true,
+  methods: "GET,POST,PUT,DELETE,OPTIONS"
+}));
+
+// --- 2. SECURITY: STRICT CSP (Prevent XSS) ---
 app.use(
   helmet({
     contentSecurityPolicy: {
+      useDefaults: true,
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: [
           "'self'",
-          "'unsafe-inline'",
           "https://cdn.tailwindcss.com",
           "https://cdn.jsdelivr.net",
-          "https://maps.googleapis.com"
+          "https://maps.googleapis.com" 
         ],
-        scriptSrcAttr: ["'unsafe-inline'"],
         styleSrc: [
           "'self'",
-          "'unsafe-inline'",
-          "https://fonts.googleapis.com"
+          "https://fonts.googleapis.com",
+          "'unsafe-inline'" // Required for some Tailwind features
         ],
         fontSrc: [
           "'self'",
@@ -52,14 +70,17 @@ app.use(
           "'self'",
           "https://maps.googleapis.com",
           "https://cdn.jsdelivr.net"
-        ],
-      },
-    },
+        ]
+      }
+    }
   })
 );
-app.use(cors());
+
 app.use(bodyParser.json({ limit: '50mb' }));
-app.use(express.static(path.join(__dirname, '.')));
+
+// --- 3. SECURITY: SAFE STATIC SERVING ---
+// Only serve the specific 'public' folder, never root
+app.use('/public', express.static(path.join(__dirname, 'public')));
 
 // --- CONFIGURATION ---
 if (!process.env.JWT_SECRET) {
@@ -69,7 +90,14 @@ if (!process.env.JWT_SECRET) {
 const JWT_SECRET = process.env.JWT_SECRET;
 const AZURE_CONN_STR = process.env.AZURE_STORAGE_CONNECTION_STRING;
 
-// --- RATE LIMITER ---
+// --- 4. SECURITY: GLOBAL RATE LIMITING ---
+const apiLimiter = rateLimit({
+    windowMs: 10 * 1000, // 10 seconds
+    max: 50, 
+    message: "Too many requests, please try again later."
+});
+app.use('/api/', apiLimiter);
+
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, 
     max: 100, 
@@ -85,21 +113,46 @@ if (AZURE_CONN_STR) {
         (async () => { try { await containerClient.createIfNotExists(); } catch (e) { console.log("Container info:", e.message); } })();
     } catch (err) { console.error("Blob Storage Error:", err.message); }
 }
+
 const upload = multer({ 
     storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024 } // Limit file size to 5MB to prevent crashes
+    limits: { fileSize: 10 * 1024 * 1024 } // 10MB Limit (DoS Protection)
 });
 
-// --- AUTHENTICATION MIDDLEWARE ---
-function authenticateToken(req, res, next) {
+// --- 5. SECURITY: ENHANCED AUTH MIDDLEWARE (Token Revocation) ---
+async function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; 
     if (!token) return res.sendStatus(401); 
 
-    jwt.verify(token, JWT_SECRET, (err, user) => {
+    jwt.verify(token, JWT_SECRET, async (err, user) => {
         if (err) return res.sendStatus(403); 
-        req.user = user; 
-        next(); 
+        
+        try {
+            // Check if password was changed AFTER token was issued
+            const pool = await getConnection();
+            const r = await pool.request()
+                .input('e', sql.NVarChar, user.email)
+                .query('SELECT LastPasswordChange FROM Users WHERE Email=@e');
+            
+            if (r.recordset.length === 0) return res.sendStatus(401);
+
+            const dbLastPwd = r.recordset[0].LastPasswordChange 
+                ? Math.floor(new Date(r.recordset[0].LastPasswordChange).getTime() / 1000)
+                : 0;
+            
+            const tokenLastPwd = user.lastPwd || 0;
+
+            if (dbLastPwd > tokenLastPwd) {
+                return res.status(401).json({ error: "Session expired: Password was changed." });
+            }
+
+            req.user = user; 
+            next(); 
+        } catch (dbErr) {
+            console.error("Auth DB Error:", dbErr.message);
+            return res.sendStatus(500);
+        }
     });
 }
 
@@ -142,7 +195,7 @@ async function uploadToAzure(buffer, blobName, mimeType = "image/jpeg") {
     }
 }
 
-// --- CORE PDF GENERATOR ---
+// --- 6. FUNCTIONAL: FULL PDF GENERATOR (No Abbreviations) ---
 async function drawPermitPDF(doc, p, d, renewalsList) {
     const workType = (d.WorkType || "PERMIT").toUpperCase();
     const status = p.Status || "Active";
@@ -529,15 +582,21 @@ app.post('/api/login', loginLimiter, async (req, res) => {
 
         const user = r.recordset[0];
         
-        // SECURE PASSWORD CHECK (Assuming hashed DB, fall back if migrating)
         const validPassword = await bcrypt.compare(req.body.password, user.Password);
-        
         if (!validPassword) return res.json({ success: false });
 
         if (user.Role !== req.body.role) return res.json({ success: false });
 
-        // GENERATE JWT TOKEN
-        const token = jwt.sign({ name: user.Name, email: user.Email, role: user.Role }, JWT_SECRET, { expiresIn: '8h' });
+        // TOKEN LOGIC WITH INVALIDATION
+        const lastPwdTime = user.LastPasswordChange 
+            ? Math.floor(new Date(user.LastPasswordChange).getTime() / 1000) 
+            : 0;
+
+        const token = jwt.sign(
+            { name: user.Name, email: user.Email, role: user.Role, lastPwd: lastPwdTime }, 
+            JWT_SECRET, 
+            { expiresIn: '8h' }
+        );
 
         res.json({ 
             success: true, 
@@ -545,10 +604,41 @@ app.post('/api/login', loginLimiter, async (req, res) => {
             user: { Name: user.Name, Email: user.Email, Role: user.Role } 
         });
 
-    } catch (e) { res.status(500).json({ error: e.message }) }
+    } catch (e) { 
+        console.error(e); // Keep server logs detailed
+        res.status(500).json({ error: "Internal Server Error" }); // Send generic error to client
+    }
 });
 
-// 2. SECURE ADD USER
+// 2. SECURE PASSWORD CHANGE (NEW)
+app.post('/api/change-password', authenticateToken, async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        const pool = await getConnection();
+        
+        const r = await pool.request().input('e', req.user.email).query("SELECT * FROM Users WHERE Email=@e");
+        if (!r.recordset.length) return res.status(404).json({error: "User not found"});
+        
+        const user = r.recordset[0];
+        const valid = await bcrypt.compare(currentPassword, user.Password);
+        if (!valid) return res.status(400).json({error: "Invalid current password"});
+        
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        
+        // Updates password AND timestamp (invalidating all old tokens)
+        await pool.request()
+            .input('p', hashedPassword)
+            .input('e', req.user.email)
+            .query("UPDATE Users SET Password=@p, LastPasswordChange=GETDATE() WHERE Email=@e");
+            
+        res.json({success: true});
+    } catch(e) {
+        console.error(e);
+        res.status(500).json({error: "Internal Server Error"});
+    }
+});
+
+// 3. SECURE ADD USER
 app.post('/api/add-user', authenticateToken, async (req, res) => {
     if (req.user.role !== 'Approver') return res.sendStatus(403);
     try {
@@ -566,13 +656,15 @@ app.post('/api/add-user', authenticateToken, async (req, res) => {
             .query("INSERT INTO Users (Name,Email,Role,Password) VALUES (@n,@e,@r,@p)");
         
         res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }) }
+    } catch (e) { 
+        res.status(500).json({ error: "Internal Server Error" });
+    }
 });
 
-// WORKER MANAGEMENT (RESTORED ROUTES)
+// --- WORKER MANAGEMENT ---
 app.post('/api/save-worker', authenticateToken, async (req, res) => {
     try {
-        const { WorkerID, Action, Role, Details, RequestorEmail, RequestorName } = req.body; // Removed ApproverName from destructuring
+        const { WorkerID, Action, Role, Details, RequestorEmail, RequestorName } = req.body; 
         const pool = await getConnection();
         if ((Action === 'create' || Action === 'edit_request') && Details && parseInt(Details.Age) < 18) return res.status(400).json({ error: "Worker must be 18+" });
 
@@ -601,7 +693,6 @@ app.post('/api/save-worker', authenticateToken, async (req, res) => {
             res.json({ success: true });
         }
         else if (Action === 'delete') {
-            // SECURITY FIX: Requesters can only delete their own workers
             if (req.user.role === 'Requester') {
                 const check = await pool.request()
                     .input('w', WorkerID)
@@ -625,13 +716,12 @@ app.post('/api/save-worker', authenticateToken, async (req, res) => {
             let appBy = null; let appOn = null;
 
             if (Action === 'approve') {
-                // Security Check: Only Approver/Reviewer can approve
                 if (req.user.role === 'Requester') return res.status(403).json({ error: "Unauthorized" });
 
                 if (st.includes('Pending Review')) st = st.replace('Review', 'Approval');
                 else if (st.includes('Pending Approval')) {
                     st = 'Approved';
-                    appBy = req.user.name; // Securely get name from token
+                    appBy = req.user.name; 
                     appOn = getNowIST();
                     dataObj.Current = { ...dataObj.Pending, ApprovedBy: appBy, ApprovedAt: appOn };
                     dataObj.Pending = null;
@@ -644,7 +734,9 @@ app.post('/api/save-worker', authenticateToken, async (req, res) => {
                 .query("UPDATE Workers SET Status=@s, DataJSON=@j, ApprovedBy=@aby, ApprovedOn=@aon WHERE WorkerID=@w");
             res.json({ success: true });
         }
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { 
+        res.status(500).json({ error: "Internal Server Error" }); 
+    }
 });
 
 app.post('/api/get-workers', authenticateToken, async (req, res) => {
@@ -661,16 +753,15 @@ app.post('/api/get-workers', authenticateToken, async (req, res) => {
         });
         if (req.body.context === 'permit_dropdown') res.json(list.filter(w => w.Status === 'Approved'));
         else {
-            // Use req.user instead of req.body for role and email
             if (req.user.role === 'Requester') res.json(list.filter(w => w.RequestorEmail === req.user.email || w.Status === 'Approved'));
             else res.json(list);
         }
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { res.status(500).json({ error: "Internal Server Error" }); }
 });
 
 // PROTECTED ROUTES
 
-app.get('/api/users', async (req, res) => {
+app.get('/api/users', authenticateToken, async (req, res) => {
     try {
         const pool = await getConnection();
         const r = await pool.request().query('SELECT Name, Email, Role FROM Users');
@@ -680,12 +771,12 @@ app.get('/api/users', async (req, res) => {
             Reviewers: r.recordset.filter(u => u.Role === 'Reviewer').map(mapU),
             Approvers: r.recordset.filter(u => u.Role === 'Approver').map(mapU)
         });
-    } catch (e) { res.status(500).json({ error: e.message }) }
+    } catch (e) { res.status(500).json({ error: "Internal Server Error" }) }
 });
 
 app.post('/api/dashboard', authenticateToken, async (req, res) => {
     try {
-        const { role, email } = req.user; // Get from Token
+        const { role, email } = req.user; 
         const pool = await getConnection();
         const r = await pool.request().query("SELECT PermitID, Status, ValidFrom, ValidTo, RequesterEmail, ReviewerEmail, ApproverEmail, FullDataJSON, FinalPdfUrl FROM Permits");
         
@@ -697,14 +788,12 @@ app.post('/api/dashboard', authenticateToken, async (req, res) => {
         
         const f = p.filter(x => (role === 'Requester' ? x.RequesterEmail === email : true));
         res.json(f.sort((a, b) => b.PermitID.localeCompare(a.PermitID)));
-    } catch (e) { res.status(500).json({ error: e.message }) }
+    } catch (e) { res.status(500).json({ error: "Internal Server Error" }) }
 });
 
 app.post('/api/save-permit', authenticateToken, upload.any(), async (req, res) => {
     try {
-        console.log("Received Permit Submit Request:", req.body.PermitID);
-        // SECURITY FIX: User identity from Token
-        const requesterEmail = req.user.email;
+        const requesterEmail = req.user.email; // Secure user ID
 
         let vf, vt;
         try {
@@ -757,7 +846,6 @@ app.post('/api/save-permit', authenticateToken, upload.any(), async (req, res) =
         const renewalsJsonStr = JSON.stringify(renewalsArr);
         const data = { ...req.body, SelectedWorkers: workers, PermitID: pid, CreatedDate: getNowIST(), GSR_Accepted: 'Y' };
         
-        // --- CRITICAL FIX FOR 500 ERROR (Empty GPS handling) ---
         const safeLat = (req.body.Latitude && req.body.Latitude !== 'undefined') ? String(req.body.Latitude) : null;
         const safeLng = (req.body.Longitude && req.body.Longitude !== 'undefined') ? String(req.body.Longitude) : null;
 
@@ -765,7 +853,7 @@ app.post('/api/save-permit', authenticateToken, upload.any(), async (req, res) =
             .input('p', sql.NVarChar, pid)
             .input('s', sql.NVarChar, 'Pending Review')
             .input('w', sql.NVarChar, req.body.WorkType)
-            .input('re', sql.NVarChar, requesterEmail) // Use secure email
+            .input('re', sql.NVarChar, requesterEmail)
             .input('rv', sql.NVarChar, req.body.ReviewerEmail)
             .input('ap', sql.NVarChar, req.body.ApproverEmail)
             .input('vf', sql.DateTime, vf).input('vt', sql.DateTime, vt)
@@ -782,17 +870,13 @@ app.post('/api/save-permit', authenticateToken, upload.any(), async (req, res) =
         res.json({ success: true, permitId: pid });
     } catch (e) {
         console.error(e);
-        res.status(500).json({ error: e.message });
+        res.status(500).json({ error: "Internal Server Error" });
     }
 });
 
-// --- UPDATED SECURE UPDATE-STATUS ROUTE ---
 app.post('/api/update-status', authenticateToken, async (req, res) => {
     try {
-        // SECURITY FIX: Do not destructure 'role' or 'user' from req.body.
         const { PermitID, action, ...extras } = req.body;
-        
-        // SECURITY FIX: Always get identity from the validated Token
         const role = req.user.role; 
         const user = req.user.name; 
 
@@ -807,7 +891,6 @@ app.post('/api/update-status', authenticateToken, async (req, res) => {
 
         Object.assign(d, extras);
 
-        // --- REQUIREMENT B: AUTO-PROCESS 1ST RENEWAL ---
         if (renewals.length === 1) {
             const r1 = renewals[0];
             if (r1.status === 'pending_review' || r1.status === 'pending_approval') {
@@ -829,7 +912,6 @@ app.post('/api/update-status', authenticateToken, async (req, res) => {
             }
         }
         
-        // Status Logic
         if (action === 'reject_closure') { st = 'Active'; }
         else if (action === 'approve_closure' && role === 'Reviewer') {
             st = 'Closure Pending Approval';
@@ -858,7 +940,6 @@ app.post('/api/update-status', authenticateToken, async (req, res) => {
             d.Reviewer_Sig = `${user} on ${now}`;
         }
 
-        // ARCHIVE Logic
         let finalPdfUrl = null;
         let finalJson = JSON.stringify(d);
 
@@ -891,13 +972,11 @@ app.post('/api/update-status', authenticateToken, async (req, res) => {
         }
         res.json({ success: true, archived: !!finalPdfUrl });
 
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { res.status(500).json({ error: "Internal Server Error" }); }
 });
 
-// --- UPDATED SECURE RENEWAL ROUTE ---
 app.post('/api/renewal', authenticateToken, upload.any(), async (req, res) => {
     try {
-        // SECURITY FIX: Extract identity from Token, not Body
         const { PermitID, action, rejectionReason, renewalWorkers, oddHourReq, ...data } = req.body;
         const userRole = req.user.role; 
         const userName = req.user.name;
@@ -921,13 +1000,11 @@ app.post('/api/renewal', authenticateToken, upload.any(), async (req, res) => {
                 return res.status(400).json({ error: "Renewal cannot be outside the Main Permit validity period." });
             }
             
-            // REQUIREMENT A: Backend Validation for 8 Hours
             const diffMs = re - rs;
             if (diffMs > 8 * 60 * 60 * 1000) {
                 return res.status(400).json({ error: "Renewal duration cannot exceed 8 hours." });
             }
 
-            // --- OVERLAP CHECK ---
             if (r.length > 0) {
                 const last = r[r.length - 1];
                 if (last.status !== 'rejected') {
@@ -968,7 +1045,7 @@ app.post('/api/renewal', authenticateToken, upload.any(), async (req, res) => {
         let newStatus = r[r.length - 1].status === 'approved' ? 'Active' : (r[r.length - 1].status === 'rejected' ? 'Active' : 'Renewal Pending ' + (userRole === 'Requester' ? 'Review' : 'Approval'));
         await pool.request().input('p', PermitID).input('r', JSON.stringify(r)).input('s', newStatus).query("UPDATE Permits SET RenewalsJSON=@r, Status=@s WHERE PermitID=@p");
         res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { res.status(500).json({ error: "Internal Server Error" }); }
 });
 
 app.post('/api/permit-data', authenticateToken, async (req, res) => { 
@@ -986,10 +1063,8 @@ app.post('/api/permit-data', authenticateToken, async (req, res) => {
                 FullDataJSON: null 
             }); 
         } else res.json({ error: "404" }); 
-    } catch (e) { res.status(500).json({ error: e.message }) } 
+    } catch (e) { res.status(500).json({ error: "Internal Server Error" }) } 
 });
-
-// --- MISSING ROUTES RESTORED ---
 
 app.post('/api/map-data', authenticateToken, async (req, res) => {
     try {
@@ -1002,7 +1077,7 @@ app.post('/api/map-data', authenticateToken, async (req, res) => {
             ...JSON.parse(x.FullDataJSON)
         })));
     } catch (e) {
-        res.status(500).json({ error: e.message })
+        res.status(500).json({ error: "Internal Server Error" })
     }
 });
 
@@ -1017,7 +1092,7 @@ app.post('/api/stats', authenticateToken, async (req, res) => {
         });
         res.json({ success: true, statusCounts: s, typeCounts: t });
     } catch (e) {
-        res.status(500).json({ error: e.message })
+        res.status(500).json({ error: "Internal Server Error" })
     }
 });
 
@@ -1057,7 +1132,7 @@ app.get('/api/download-excel', authenticateToken, async (req, res) => {
         await workbook.xlsx.write(res);
         res.end();
     } catch (e) {
-        res.status(500).send(e.message);
+        res.status(500).send("Internal Server Error");
     }
 });
 
@@ -1069,12 +1144,10 @@ app.get('/api/download-pdf/:id', authenticateToken, async (req, res) => {
         
         const p = result.recordset[0];
 
-        // SECURITY FIX: Check Ownership for Requesters
         if (req.user.role === 'Requester' && p.RequesterEmail !== req.user.email) {
             return res.status(403).send("Unauthorized: You cannot access this permit.");
         }
 
-        // 1. Check if the permit is Closed and has a stored URL
         if ((p.Status === 'Closed' || p.Status.includes('Closure')) && p.FinalPdfUrl) {
             if (!containerClient) {
                 console.error("Azure Container Client not initialized");
@@ -1086,7 +1159,6 @@ app.get('/api/download-pdf/:id', authenticateToken, async (req, res) => {
 
                 const exists = await blockBlobClient.exists();
                 if (!exists) {
-                    console.error("Blob not found in Azure:", blobName);
                     return res.status(404).send("Archived PDF not found.");
                 }
 
@@ -1104,7 +1176,6 @@ app.get('/api/download-pdf/:id', authenticateToken, async (req, res) => {
             }
         }
 
-        // 2. Fallback logic for ACTIVE permits
         const d = p.FullDataJSON ? JSON.parse(p.FullDataJSON) : {};
         const renewals = p.RenewalsJSON ? JSON.parse(p.RenewalsJSON) : [];
         
@@ -1118,11 +1189,10 @@ app.get('/api/download-pdf/:id', authenticateToken, async (req, res) => {
 
     } catch (e) {
         console.error(e);
-        if (!res.headersSent) res.status(500).send(e.message);
+        if (!res.headersSent) res.status(500).send("Internal Server Error");
     }
 });
 
-// --- NEW ROUTE: SECURE PHOTO VIEWING ---
 app.get('/api/view-photo/:filename', authenticateToken, async (req, res) => {
     try {
         const filename = req.params.filename;
@@ -1130,7 +1200,6 @@ app.get('/api/view-photo/:filename', authenticateToken, async (req, res) => {
 
         if (!containerClient) return res.status(500).send("Storage not configured");
 
-        // SECURITY FIX: Check Ownership
         if (req.user.role === 'Requester') {
              const pool = await getConnection();
              const r = await pool.request().input('p', sql.NVarChar, permitId).query("SELECT RequesterEmail FROM Permits WHERE PermitID=@p");
@@ -1152,7 +1221,9 @@ app.get('/api/view-photo/:filename', authenticateToken, async (req, res) => {
         res.status(500).send("Error retrieving photo");
     }
 });
-
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 // START SERVER
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log('Server running on port ' + PORT));

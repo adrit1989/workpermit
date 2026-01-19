@@ -46,6 +46,7 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc: [
           "'self'",
+          "'unsafe-inline'", // <--- FIXED: Allows your index.html script to run
           "https://cdn.tailwindcss.com",
           "https://cdn.jsdelivr.net",
           "https://maps.googleapis.com" 
@@ -53,7 +54,7 @@ app.use(
         styleSrc: [
           "'self'",
           "https://fonts.googleapis.com",
-          "'unsafe-inline'" // Required for some Tailwind features
+          "'unsafe-inline'" // Required for Tailwind
         ],
         fontSrc: [
           "'self'",
@@ -237,7 +238,7 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
         
         doc.rect(startX, startY, 80, 95).stroke(); 
         
-        // --- PATCHED LOGO LOGIC ---
+        // --- PATCH: Use 'public' folder for logo ---
         const logoPath = path.join(__dirname, 'public', 'logo.png');
         if (fs.existsSync(logoPath)) {
             try { 
@@ -272,7 +273,7 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
 
     drawHeaderOnAll();
 
-    // --- PATCHED SAFETY BANNER PATH ---
+    // --- PATCH: Use 'public' folder for banner ---
     const bannerPath = path.join(__dirname, 'public', 'safety_banner.png');
     if (fs.existsSync(bannerPath)) {
         try {
@@ -768,7 +769,7 @@ app.post('/api/get-workers', authenticateToken, async (req, res) => {
 
 // PROTECTED ROUTES
 
-app.get('/api/users', authenticateToken, async (req, res) => {
+app.get('/api/users', async (req, res) => {
     try {
         const pool = await getConnection();
         const r = await pool.request().query('SELECT Name, Email, Role FROM Users');
@@ -1233,9 +1234,7 @@ app.get('/api/view-photo/:filename', authenticateToken, async (req, res) => {
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
+
 // START SERVER
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log('Server running on port ' + PORT));

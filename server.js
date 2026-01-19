@@ -41,10 +41,11 @@ app.use(
           "https://maps.googleapis.com"
         ],
         styleSrc: [
-          "'self'",
-          (req, res) => `'nonce-${res.locals.nonce}'`, // Allow inline styles with nonce
-          "https://fonts.googleapis.com"
-        ],
+  "'self'",
+  (req, res) => `'nonce-${res.locals.nonce}'`,
+  "https://fonts.googleapis.com",
+  "'unsafe-inline'"
+]
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         imgSrc: ["'self'", "data:", "blob:", "https://maps.gstatic.com", "https://maps.googleapis.com"],
         connectSrc: ["'self'", "https://maps.googleapis.com", "https://cdn.jsdelivr.net"]
@@ -706,7 +707,7 @@ app.post('/api/get-workers', authenticateToken, async (req, res) => {
 
 // PROTECTED ROUTES
 
-app.get('/api/users', authenticateToken, async (req, res) => {
+app.get('/api/users', async (req, res) => {
     try {
         const pool = await getConnection();
         const r = await pool.request().query('SELECT Name, Email, Role FROM Users');

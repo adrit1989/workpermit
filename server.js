@@ -13,14 +13,14 @@ const { getConnection, sql } = require('./db');
 
 // SECURITY
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs'); // Uses bcryptjs for Azure Linux compatibility
+const bcrypt = require('bcryptjs'); // Fixed: Use bcryptjs for Azure
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 
 // APP SETUP
 const app = express();
-app.set('trust proxy', 1); // Required for Azure App Service stability
+app.set('trust proxy', 1); // Fixed: Required for Azure App Service
 app.use(cookieParser());
 
 /* --- NONCE CSP --- */
@@ -212,7 +212,7 @@ async function uploadToAzure(buffer, blobName, mimeType = "image/jpeg") {
 }
 
 /* =====================================================
-   PDF GENERATOR (Crash-Proof)
+   PDF GENERATOR
 ===================================================== */
 
 async function drawPermitPDF(doc, p, d, renewalsList) {
@@ -484,7 +484,6 @@ app.post('/api/logout', async (req, res) => {
    CORE API ROUTES
 ===================================================== */
 
-// Fixed: Public route for login dropdown
 app.get('/api/users', async (req, res) => {
   try {
     const pool = await getConnection();
@@ -655,11 +654,11 @@ app.post('/api/dashboard', authenticateAccess, async (req, res) => {
 });
 
 /* =====================================================
-   SAVE PERMIT (Fixed: CORRECT UPDATE LOGIC)
+   SAVE PERMIT (RECTIFIED ID LOGIC & LOGGING)
 ===================================================== */
-
 app.post('/api/save-permit', authenticateAccess, upload.any(), async (req, res) => {
   try {
+    console.log("--- SAVE PERMIT START ---"); 
     const requesterEmail = req.user.email;
     let vf, vt;
     try {
@@ -669,31 +668,36 @@ app.post('/api/save-permit', authenticateAccess, upload.any(), async (req, res) 
       return res.status(400).json({ error: "Invalid Date Format" });
     }
 
-    if (!vf || !vt) return res.status(400).json({ error:"Start & End required" });
-    if (vt <= vf) return res.status(400).json({ error:"End > Start required" });
-    if (req.body.Desc && req.body.Desc.length > 500)
-      return res.status(400).json({ error:"Description too long" });
+    if (!vf || !vt) return res.status(400).json({ error: "Start & End required" });
+    if (vt <= vf) return res.status(400).json({ error: "End > Start required" });
 
     const pool = await getConnection();
     let pid = req.body.PermitID;
 
+    // --- FIX: MATHEMATICAL ID GENERATION ---
     if (!pid || pid === 'undefined' || pid === 'null' || pid === '') {
-      const idRes = await pool.request().query("SELECT TOP 1 PermitID FROM Permits ORDER BY Id DESC");
-      const lastId = idRes.recordset.length ? idRes.recordset[0].PermitID : 'WP-1000';
-      const numPart = parseInt(lastId.split('-')[1] || 1000);
-      pid = `WP-${numPart + 1}`;
+      const idRes = await pool.request().query("SELECT MAX(CAST(SUBSTRING(PermitID, 4, 10) AS INT)) as MaxVal FROM Permits WHERE PermitID LIKE 'WP-%'");
+      
+      let nextNum = 1000;
+      if (idRes.recordset[0].MaxVal) {
+        nextNum = idRes.recordset[0].MaxVal + 1;
+      }
+      pid = `WP-${nextNum}`;
+      console.log("Generated New ID:", pid);
     }
 
+    // Check if ID exists to decide INSERT vs UPDATE
     const chk = await pool.request().input('p', sql.NVarChar, pid)
       .query("SELECT Status FROM Permits WHERE PermitID=@p");
     
-    if (chk.recordset.length && chk.recordset[0].Status.includes('Closed'))
+    // Validate Status (Prevent editing Closed permits)
+    if (chk.recordset.length && chk.recordset[0].Status.includes('Closed')) {
+      console.error("Attempt to edit closed permit:", pid);
       return res.status(400).json({ error: "Permit CLOSED" });
+    }
 
     let workers = req.body.SelectedWorkers;
-    if (typeof workers === 'string') {
-      try { workers = JSON.parse(workers); } catch { workers = []; }
-    }
+    if (typeof workers === 'string') { try { workers = JSON.parse(workers); } catch { workers = []; } }
 
     let renewalsArr = [];
     if (req.body.InitRen === 'Y') {
@@ -726,7 +730,7 @@ app.post('/api/save-permit', authenticateAccess, upload.any(), async (req, res) 
 
     const q = pool.request()
       .input('p', sql.NVarChar, pid)
-      .input('s', sql.NVarChar, 'Pending Review')
+      .input('s', sql.NVarChar, 'Pending Review') // Always reset status on save/edit
       .input('w', sql.NVarChar, req.body.WorkType)
       .input('re', sql.NVarChar, requesterEmail)
       .input('rv', sql.NVarChar, req.body.ReviewerEmail)
@@ -739,17 +743,20 @@ app.post('/api/save-permit', authenticateAccess, upload.any(), async (req, res) 
       .input('ren', sql.NVarChar(sql.MAX), renewalsJsonStr);
 
     if (chk.recordset.length) {
-      // FIX: Added Status, ReviewerEmail, ApproverEmail to UPDATE to prevent stale metadata
-      await q.query("UPDATE Permits SET FullDataJSON=@j, WorkType=@w, ValidFrom=@vf, ValidTo=@vt, Latitude=@lat, Longitude=@lng, Status=@s, ReviewerEmail=@rv, ApproverEmail=@ap WHERE PermitID=@p");
+      console.log("Executing UPDATE for:", pid);
+      await q.query("UPDATE Permits SET FullDataJSON=@j, WorkType=@w, ValidFrom=@vf, ValidTo=@vt, Latitude=@lat, Longitude=@lng, Status=@s, ReviewerEmail=@rv, ApproverEmail=@ap, RenewalsJSON=@ren WHERE PermitID=@p");
     } else {
+      console.log("Executing INSERT for:", pid);
       await q.query("INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, FullDataJSON, RenewalsJSON) VALUES (@p,@s,@w,@re,@rv,@ap,@vf,@vt,@lat,@lng,@j,@ren)");
     }
 
+    console.log("--- SAVE SUCCESS ---");
     res.json({ success: true, permitId: pid });
 
   } catch (err) {
-    console.error("Save Permit Error:", err);
-    res.status(500).json({ error:"Internal Server Error" });
+    console.error("!!! SQL SAVE ERROR !!!");
+    console.error("Message:", err.message);
+    res.status(500).json({ error: "Database Save Failed: " + err.message });
   }
 });
 

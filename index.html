@@ -11,12 +11,32 @@
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyADwuqMDCwNSaZKBnWURDCYdqlMxfiWBnU" async></script>
     
     <style nonce="NONCE_PLACEHOLDER">
-        /* Utility overrides if app.css misses them */
+        /* --- CRITICAL UI FIXES (Issue B) --- */
+        /* Restore borders that the CSS reset removed */
+        input, select, textarea { 
+            width: 100%; 
+            border: 1px solid #d1d5db !important; /* Force border */
+            padding: 10px 12px; 
+            border-radius: 8px; 
+            font-size: 1rem; 
+            background: #fff; 
+            margin-bottom: 0.5rem; 
+        }
+        input:focus, select:focus, textarea:focus { 
+            border-color: #ea580c !important; 
+            outline: none; 
+            box-shadow: 0 0 0 2px #fdba74; 
+        }
+        input:disabled, select:disabled, textarea:disabled { 
+            background-color: #f9fafb; 
+            color: #6b7280; 
+            border-color: #e5e7eb !important; 
+        }
+
+        /* Utility overrides */
         .hidden { display: none !important; }
         .glass { background: white; padding: 1rem; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 1rem; border: 1px solid #e5e7eb; }
         .loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); display: none; justify-content: center; align-items: center; z-index: 2000; font-size: 1.5rem; color: #ea580c; font-weight: bold; flex-direction: column; gap: 10px; }
-        
-        /* Specific dynamic styles */
         .marked-deleted { text-decoration: line-through; color: red; opacity: 0.6; }
     </style>
 </head>
@@ -703,7 +723,12 @@
              
              // --- LOGIC PORTED FROM REFERENCE: STATE MACHINE ---
              if(currentUser.Role === 'Requester' && p.Status === 'New') {
-                  const btn = document.createElement("button"); btn.className = "w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg"; btn.innerText = "Submit Permit"; btn.addEventListener('click', savePermit); actionsDiv.appendChild(btn);
+                  const btn = document.createElement("button"); 
+                  btn.className = "w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg"; 
+                  btn.innerText = "Submit Permit"; 
+                  btn.type = "button"; // FIX: Prevent form submission
+                  btn.addEventListener('click', savePermit); 
+                  actionsDiv.appendChild(btn);
                   document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false);
              }
              
@@ -711,8 +736,8 @@
              if(currentUser.Role === 'Reviewer' && p.Status === 'Pending Review') {
                  document.getElementById("fs-reviewer-section").classList.remove('hidden');
                  document.querySelectorAll('#fs-reviewer-section *, #hazards-section input').forEach(e=>e.disabled=false);
-                 const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-3 rounded-lg font-bold flex-1"; b1.innerText = "Reject"; b1.addEventListener('click', () => upd('reject'));
-                 const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-3 rounded-lg font-bold flex-1 ml-2"; b2.innerText = "Review"; b2.addEventListener('click', () => upd('review'));
+                 const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-3 rounded-lg font-bold flex-1"; b1.innerText = "Reject"; b1.type="button"; b1.addEventListener('click', () => upd('reject'));
+                 const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-3 rounded-lg font-bold flex-1 ml-2"; b2.innerText = "Review"; b2.type="button"; b2.addEventListener('click', () => upd('review'));
                  actionsDiv.append(b1, b2);
              }
 
@@ -720,8 +745,8 @@
              if(currentUser.Role === 'Approver' && p.Status === 'Pending Approval') {
                  document.getElementById("fs-approver-section").classList.remove('hidden');
                  document.getElementById("Approver_Remarks").disabled=false; 
-                 const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-3 rounded-lg font-bold flex-1"; b1.innerText = "Reject"; b1.addEventListener('click', () => upd('reject'));
-                 const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-3 rounded-lg font-bold flex-1 ml-2"; b2.innerText = "Approve"; b2.addEventListener('click', () => upd('approve'));
+                 const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-3 rounded-lg font-bold flex-1"; b1.innerText = "Reject"; b1.type="button"; b1.addEventListener('click', () => upd('reject'));
+                 const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-3 rounded-lg font-bold flex-1 ml-2"; b2.innerText = "Approve"; b2.type="button"; b2.addEventListener('click', () => upd('approve'));
                  actionsDiv.append(b1, b2);
              }
 
@@ -730,8 +755,8 @@
                  document.getElementById("closure-section").classList.remove('hidden');
                  document.getElementById("div-closure-rev").classList.remove('hidden'); 
                  document.getElementById("Closure_Reviewer_Remarks").disabled=false;
-                 const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-3 rounded-lg font-bold flex-1"; b1.innerText = "Reject Closure"; b1.addEventListener('click', () => upd('reject_closure'));
-                 const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-3 rounded-lg font-bold flex-1 ml-2"; b2.innerText = "Verify Closure"; b2.addEventListener('click', () => upd('approve_closure'));
+                 const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-3 rounded-lg font-bold flex-1"; b1.innerText = "Reject Closure"; b1.type="button"; b1.addEventListener('click', () => upd('reject_closure'));
+                 const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-3 rounded-lg font-bold flex-1 ml-2"; b2.innerText = "Verify Closure"; b2.type="button"; b2.addEventListener('click', () => upd('approve_closure'));
                  actionsDiv.append(b1, b2);
              }
 
@@ -739,8 +764,8 @@
                  document.getElementById("closure-section").classList.remove('hidden');
                  document.getElementById("div-closure-app").classList.remove('hidden'); 
                  document.getElementById("Closure_Approver_Remarks").disabled=false;
-                 const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-3 rounded-lg font-bold flex-1"; b1.innerText = "Reject Closure"; b1.addEventListener('click', () => upd('reject_closure'));
-                 const b2 = document.createElement("button"); b2.className = "bg-black text-white px-4 py-3 rounded-lg font-bold flex-1 ml-2"; b2.innerText = "Close Permit"; b2.addEventListener('click', () => upd('approve'));
+                 const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-3 rounded-lg font-bold flex-1"; b1.innerText = "Reject Closure"; b1.type="button"; b1.addEventListener('click', () => upd('reject_closure'));
+                 const b2 = document.createElement("button"); b2.className = "bg-black text-white px-4 py-3 rounded-lg font-bold flex-1 ml-2"; b2.innerText = "Close Permit"; b2.type="button"; b2.addEventListener('click', () => upd('approve'));
                  actionsDiv.append(b1, b2);
              }
              
@@ -771,7 +796,7 @@
                     photoDiv.classList.add('hidden');
                  }
 
-                 const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-6 py-3 rounded-lg font-bold shadow flex-1"; b1.innerText = "Job Complete"; b1.addEventListener('click', () => upd('initiate_closure'));
+                 const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-6 py-3 rounded-lg font-bold shadow flex-1"; b1.innerText = "Job Complete"; b1.type="button"; b1.addEventListener('click', () => upd('initiate_closure'));
                  actionsDiv.appendChild(b1);
              }
 
@@ -807,11 +832,18 @@
              loadWorkers('permit_dropdown');
              document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false);
              
+             // --- FIX A (PART 1): SHOW GSR ---
+             document.getElementById("gsr-container").classList.remove('hidden');
+             
              const actionsDiv = document.getElementById("actions");
              actionsDiv.innerHTML = "";
              const btn = document.createElement("button");
              btn.className = "w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg";
              btn.innerText = "Submit Permit";
+             
+             // --- FIX A (PART 2): PREVENT FORM SUBMIT REFRESH ---
+             btn.type = "button";
+             
              btn.addEventListener('click', savePermit);
              actionsDiv.appendChild(btn);
         }

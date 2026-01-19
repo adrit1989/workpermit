@@ -389,6 +389,8 @@
         const API = "/api";
         let authToken = null, currentUser = null, usersData = {}, mapInstance = null, chartS = null, chartT = null;
         let currentPermitId = null, currentPermitWorkers = [], currentRenewalCount = 0, permitRequirePhoto = false, currentPermitIOCLData = [];
+        let isRefreshing = false; // Added for refresh logic
+
         const CL_DATA = { A: ["1. Equipment / Work Area inspected.", "2. Surrounding area checked.", "3. Manholes covered.", "4. Hazards considered.", "5. Equipment blinded.", "6. Drained.", "7. Steamed.", "8. Flushed.", "9. Fire Access.", "10. Iron Sulfide.", "11. Electrical Isolation.", "12. Gas Test.", "13. Firefighting.", "14. Cordoned.", "15. CCTV.", "16. Ventilation."], B: ["1. Exit.", "2. Standby.", "3. Gas trap.", "4. Spark shield.", "5. Grounding.", "6. Standby (Confined).", "7. Communication.", "8. Rescue.", "9. Cooling.", "10. Inert Gas.", "11. ELCB.", "12. Cylinders.", "13. Spark arrestor.", "14. Welding loc.", "15. Height."], C: ["1. PESO spark elimination."], D: ["1. Shoring.", "2. Soil distance.", "3. Access.", "4. Vehicle ban."] };
         const HAZARDS = ["Lack of Oxygen", "H2S", "Toxic Gases", "Combustible gases", "Pyrophoric Iron", "Corrosive Chemicals", "cave in formation", "Others"];
         const PPE = ["Helmet", "Safety Shoes", "Hand gloves", "Boiler suit", "Face Shield", "Apron", "Goggles", "Dust Respirator", "Fresh Air Mask", "Lifeline", "Safety Harness", "Airline", "Earmuff", "IFR"];
@@ -443,20 +445,54 @@
         function safeSet(id, val) { const el = document.getElementById(id); if(el) el.value = val; }
         function getNow() { return new Date().toLocaleString("en-GB").replace(',',''); }
 
-        async function apiCall(ep, meth="GET", body=null) {
+        // --- UPDATED API CALL WITH REFRESH LOGIC ---
+        async function apiCall(ep, meth="GET", body=null, retry=true) { 
             document.getElementById('loader').style.display = 'flex';
             try {
                 const headers = {'Content-Type':'application/json'};
                 if(authToken) headers['Authorization'] = `Bearer ${authToken}`;
-                const opts={method:meth, headers:headers};
-                if(body)opts.body=JSON.stringify(body);
-                const res = await fetch(API+ep,opts); 
+                
+                const opts = {method:meth, headers:headers};
+                if(body) opts.body = JSON.stringify(body);
+                
+                opts.credentials = 'include'; // Required for Cookies
+
+                let res = await fetch(API+ep, opts);
+
+                // Auto Refresh Logic
+                if (res.status === 403 && retry) {
+                    if(!isRefreshing) {
+                        isRefreshing = true;
+                        const refreshRes = await fetch(API+'/refresh', { 
+                            method: 'POST', 
+                            headers: {'Content-Type': 'application/json'},
+                            credentials: 'include'
+                        });
+                        const refreshData = await refreshRes.json();
+                        isRefreshing = false;
+
+                        if (refreshData.success) {
+                            authToken = refreshData.token; 
+                            return await apiCall(ep, meth, body, false); 
+                        } else {
+                            alert("Session expired. Please login again.");
+                            location.reload();
+                            return { error: "Auth Failed" };
+                        }
+                    }
+                }
+
                 if (res.status === 401 || res.status === 403) {
-                    if(authToken) { alert("Session expired."); location.reload(); }
+                    if(authToken && !retry) { alert("Session expired."); location.reload(); }
                     return { error: "Auth" };
                 }
                 return await res.json();
-            } finally { document.getElementById('loader').style.display = 'none'; }
+            } catch(e) {
+                console.error(e);
+                return { error: "Network Error" };
+            } finally { 
+                document.getElementById('loader').style.display = 'none'; 
+            }
         }
 
         async function loadUsers() {
@@ -638,7 +674,6 @@
                     const row = document.createElement('tr');
                     const approvalInfo = w.ApprovedBy ? `<div class="text-xs text-green-700 font-bold">${escapeHtml(w.ApprovedBy)}<br>${w.ApprovedAt}</div>` : '-';
 
-                    // FIX: Added Gender, Age, Added By Columns
                     row.innerHTML = `
                         <td>${escapeHtml(w.Name)}</td>
                         <td>${escapeHtml(w.Gender)}</td>
@@ -647,7 +682,7 @@
                         <td>${escapeHtml(w.Contact)}</td>
                         <td>${escapeHtml(w.RequestorName)}</td>
                         <td>${approvalInfo}</td>
-                        <td></td>`; // Action cell populated below
+                        <td></td>`; 
                     
                     const actionCell = row.lastElementChild;
                     
@@ -670,7 +705,6 @@
         async function workerAction(id, act) { await apiCall('/save-worker', 'POST', {WorkerID:id, Action:act, Role:currentUser.Role, ApproverName: currentUser.name}); loadWorkers('dashboard'); }
         function toggleOtherID() { const val = document.getElementById("w-id-type").value; document.getElementById("w-id-type-other").classList.toggle("hidden", val !== "Other"); }
 
-        // --- UPDATED IOCL SUPERVISOR FUNCTIONS ---
         function addIOCLRow(containerId, data = null) {
             if(data && data.is_deleted) return; 
 
@@ -760,7 +794,6 @@
             document.getElementById("permit-header-display").innerText = `${id} | ${p.Status}`;
             document.getElementById("permit-worker-audit-display").classList.remove("hidden");
             
-            // FIX: Worker Audit Table (Added Gender/Age/AddedBy)
             document.getElementById("assigned-worker-audit").innerHTML = `
                 <table class="mobile-table w-full text-xs">
                     <thead>
@@ -813,7 +846,6 @@
             const rens = JSON.parse(p.RenewalsJSON || "[]");
             currentRenewalCount = rens.length;
             
-            // FIX: Renewal Table with Full Timestamps AND Worker Names
             document.querySelector("#table-renewals tbody").innerHTML = rens.map(r => {
                 const photoHtml = r.photoUrl ? `<button type="button" class="text-blue-600 font-bold underline text-xs btn-view-photo" data-url="${r.photoUrl}">View Photo</button>` : 'N/A';
                 return `<tr>
@@ -1158,5 +1190,3 @@
     </script>
 </body>
 </html>
-
-

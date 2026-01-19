@@ -241,10 +241,6 @@
                             <input name="InitRenO2" placeholder="O2 %">
                         </div>
                         <input name="InitRenPrec" placeholder="Special Precautions for Renewal" class="w-full mt-2">
-                         <div class="mt-2 border-t pt-2">
-                            <label class="text-xs font-bold text-red-600 uppercase block mb-1">Mandatory Photo (1st Renewal)</label>
-                            <input type="file" id="ren-cam-1" name="InitRenImage" accept="image/*" capture="environment" class="text-sm">
-                        </div>
                         <p class="text-[10px] text-gray-400 mt-1">* Applied to all selected workers</p>
                     </div>
                 </div>
@@ -985,7 +981,7 @@
                  document.getElementById("form-renewal").classList.remove('hidden'); document.querySelectorAll('#form-renewal input').forEach(e => e.disabled = false);
                  const renSel = document.getElementById('renewal-worker-select');
                  renSel.innerHTML = currentPermitWorkers.map(w => `<label class="flex items-center gap-1 text-xs bg-white p-1 rounded border"><input type="checkbox" value="${escapeHtml(w.Name)}" checked class="ren-worker-cb"> ${escapeHtml(w.Name)}</label>`).join('');
-                 const showPhotoBox = (currentRenewalCount > 0 && permitRequirePhoto);
+                 const showPhotoBox = permitRequirePhoto;
                  const photoDiv = document.getElementById("renewal-photo-container"); const msgEl = document.getElementById("photo-mandate-msg");
                  if(showPhotoBox) { photoDiv.classList.remove('hidden'); msgEl.innerText = "* Photo Upload is MANDATORY."; msgEl.classList.add("text-red-600", "font-bold"); } else { photoDiv.classList.add('hidden'); }
                  const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-6 py-3 rounded-lg font-bold shadow flex-1"; b1.innerText = "Job Complete"; b1.type="button"; b1.addEventListener('click', () => upd('initiate_closure')); actionsDiv.appendChild(b1);
@@ -1158,7 +1154,7 @@
             }
             if(currentUser.Role === 'Requester') {
                 const fileInput = document.getElementById("ren-cam-sub");
-                const isPhotoMandatory = (currentRenewalCount > 0 && permitRequirePhoto);
+                const isPhotoMandatory = permitRequirePhoto;
                 if(isPhotoMandatory && fileInput.files.length === 0) return alert("MANDATORY Photo required");
                 if(fileInput.files.length > 0) fd.append('RenewalImage', fileInput.files[0]);
             }

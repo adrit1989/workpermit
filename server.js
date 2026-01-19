@@ -19,7 +19,7 @@ const crypto = require('crypto');
 
 const app = express();
 
-// --- 1. NONCE GENERATOR (SECURITY) ---
+// --- 1. NONCE GENERATOR ---
 app.use((req, res, next) => {
   res.locals.nonce = crypto.randomBytes(16).toString('base64');
   next();
@@ -34,15 +34,13 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc: [
           "'self'",
-          // STRICT: Only allow scripts that match the Nonce
           (req, res) => `'nonce-${res.locals.nonce}'`,
-          "https://cdn.tailwindcss.com", 
+          "https://cdn.tailwindcss.com",
           "https://cdn.jsdelivr.net",
           "https://maps.googleapis.com"
         ],
         styleSrc: [
           "'self'",
-          // LOOSE: Allow inline styles for Tailwind/Maps to render correctly
           "'unsafe-inline'", 
           "https://fonts.googleapis.com"
         ],
@@ -134,7 +132,7 @@ async function uploadToAzure(buffer, blobName, mimeType = "image/jpeg") {
     } catch (error) { return null; }
 }
 
-// --- PDF GENERATOR (RESTORED FULL LOGIC) ---
+// --- PDF GENERATOR ---
 async function drawPermitPDF(doc, p, d, renewalsList) {
     const workType = (d.WorkType || "PERMIT").toUpperCase();
     const status = p.Status || "Active";
@@ -193,7 +191,6 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
     
     doc.rect(25, startY - 5, 545, doc.y - startY + 5).stroke(); doc.y += 10;
     
-    // Checklists Logic
     const CHECKLIST_DATA = {
         A: [ "1. Equipment / Work Area inspected.", "2. Surrounding area checked.", "3. Manholes covered.", "4. Hazards considered.", "5. Equipment blinded.", "6. Drained.", "7. Steamed.", "8. Flushed.", "9. Fire Access.", "10. Iron Sulfide.", "11. Electrical Isolation.", "12. Gas Test.", "13. Firefighting.", "14. Cordoned.", "15. CCTV.", "16. Ventilation." ],
         B: [ "1. Exit.", "2. Standby.", "3. Gas trap.", "4. Spark shield.", "5. Grounding.", "6. Standby (Confined).", "7. Communication.", "8. Rescue.", "9. Cooling.", "10. Inert Gas.", "11. ELCB.", "12. Cylinders.", "13. Spark arrestor.", "14. Welding loc.", "15. Height." ],
@@ -232,7 +229,6 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
     drawChecklist("SECTION C: For vehicle Entry in Hazardous area", CHECKLIST_DATA.C, 'C'); 
     drawChecklist("SECTION D: EXCAVATION", CHECKLIST_DATA.D, 'D');
 
-    // Signatures
     if (doc.y > 650) { doc.addPage(); drawHeader(doc, bgColor, compositePermitNo); doc.y = 135; }
     doc.font('Helvetica-Bold').text("SIGNATURES", 30, doc.y);
     doc.y += 15; const sY = doc.y;
@@ -241,7 +237,6 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
     doc.rect(386, sY, 179, 40).stroke().text(`APP: ${d.Approver_Sig || '-'}\nRem: ${d.Approver_Remarks || '-'}`, 391, sY + 5, { width: 169 });
     doc.y = sY + 50;
 
-    // Renewals Table (RESTORED IMAGE LOGIC)
     if (doc.y > 650) { doc.addPage(); drawHeader(doc, bgColor, compositePermitNo); doc.y = 135; }
     doc.font('Helvetica-Bold').text("CLEARANCE RENEWAL", 30, doc.y); doc.y += 15;
     let ry = doc.y;
@@ -278,29 +273,21 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
         doc.rect(120, ry, 55, rowHeight).stroke().text(`HC: ${r.hc}\nTox: ${r.toxic}\nO2: ${r.oxygen}`, 122, ry + 5, { width: 53 });
         doc.rect(175, ry, 60, rowHeight).stroke().text(r.worker_list ? r.worker_list.join(', ') : 'All', 177, ry + 5, { width: 58 });
         
-        // --- RESTORED: Image Logic with Timeout ---
         doc.rect(235, ry, 50, rowHeight).stroke();
         if (r.photoUrl && containerClient) {
             try {
                 const blobName = r.photoUrl.split('/').pop();
                 const blockBlobClient = containerClient.getBlockBlobClient(blobName);
-                
-                // Add Timeout to prevent hanging
                 const downloadPromise = blockBlobClient.download(0);
                 const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000));
-                
                 const downloadBlockBlobResponse = await Promise.race([downloadPromise, timeoutPromise]);
                 const chunks = [];
                 for await (const chunk of downloadBlockBlobResponse.readableStreamBody) { chunks.push(chunk); }
                 const imageBuffer = Buffer.concat(chunks);
-                
                 try {
                     doc.image(imageBuffer, 237, ry + 2, { fit: [46, rowHeight - 4], align: 'center', valign: 'center' });
                 } catch (imgErr) { console.log("Img draw err", imgErr); }
-            } catch (err) { 
-                console.log("Blob err/Timeout", err.message); 
-                doc.text("Err", 237, ry+25, {width:46, align:'center'}); 
-            }
+            } catch (err) { console.log("Blob err/Timeout", err.message); doc.text("Err", 237, ry+25, {width:46, align:'center'}); }
         } else {
             doc.text("No Photo", 237, ry + 25, { width: 46, align: 'center' });
         }
@@ -379,7 +366,6 @@ app.post('/api/save-worker', authenticateToken, async (req, res) => {
             const idRes = await pool.request().query("SELECT TOP 1 WorkerID FROM Workers ORDER BY WorkerID DESC");
             const wid = `W-${parseInt(idRes.recordset.length > 0 ? idRes.recordset[0].WorkerID.split('-')[1] : 1000) + 1}`;
             const dataObj = { Current: {}, Pending: { ...Details, RequestorName: RequestorName } };
-
             await pool.request().input('w', wid).input('s', 'Pending Review').input('r', RequestorEmail).input('j', JSON.stringify(dataObj)).input('idt', sql.NVarChar, Details.IDType).query("INSERT INTO Workers (WorkerID, Status, RequestorEmail, DataJSON, IDType) VALUES (@w, @s, @r, @j, @idt)");
             res.json({ success: true });
         }
@@ -388,7 +374,6 @@ app.post('/api/save-worker', authenticateToken, async (req, res) => {
             if (cur.recordset.length === 0) return res.status(404).json({ error: "Worker not found" });
             let dataObj = JSON.parse(cur.recordset[0].DataJSON);
             dataObj.Pending = { ...dataObj.Current, ...Details, RequestorName: RequestorName || dataObj.Current.RequestorName };
-
             await pool.request().input('w', WorkerID).input('s', 'Edit Pending Review').input('j', JSON.stringify(dataObj)).input('idt', sql.NVarChar, Details.IDType).query("UPDATE Workers SET Status=@s, DataJSON=@j, IDType=@idt WHERE WorkerID=@w");
             res.json({ success: true });
         }
@@ -407,7 +392,6 @@ app.post('/api/save-worker', authenticateToken, async (req, res) => {
             let st = cur.recordset[0].Status;
             let dataObj = JSON.parse(cur.recordset[0].DataJSON);
             let appBy = null; let appOn = null;
-
             if (Action === 'approve') {
                 if (req.user.role === 'Requester') return res.status(403).json({ error: "Unauthorized" });
                 if (st.includes('Pending Review')) st = st.replace('Review', 'Approval');
@@ -418,7 +402,6 @@ app.post('/api/save-worker', authenticateToken, async (req, res) => {
                     dataObj.Pending = null;
                 }
             } else if (Action === 'reject') { st = 'Rejected'; dataObj.Pending = null; }
-
             await pool.request().input('w', WorkerID).input('s', st).input('j', JSON.stringify(dataObj)).input('aby', sql.NVarChar, appBy).input('aon', sql.NVarChar, appOn).query("UPDATE Workers SET Status=@s, DataJSON=@j, ApprovedBy=@aby, ApprovedOn=@aon WHERE WorkerID=@w");
             res.json({ success: true });
         }
@@ -579,7 +562,6 @@ app.post('/api/renewal', authenticateToken, upload.any(), async (req, res) => {
             if (re <= rs) return res.status(400).json({ error: "End time error" });
             if ((re - rs) > 8 * 60 * 60 * 1000) return res.status(400).json({ error: "Max 8 Hours" });
 
-            // --- RESTORED LOGIC: OVERLAP CHECK ---
             if (r.length > 0) {
                 const last = r[r.length - 1];
                 if (last.status !== 'rejected') {

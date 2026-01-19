@@ -169,6 +169,7 @@
                         <div><label class="text-xs font-bold text-gray-500">Specific Work</label><input name="WorkTypeOther" id="WorkTypeOther"></div>
                         <div><label class="text-xs font-bold text-gray-500">Location (GPS) - Optional</label><div class="flex gap-2"><input name="ExactLocation" id="ExactLocation" class="flex-1" placeholder="Coords (Optional)"><button type="button" id="btn-get-geo" class="bg-orange-100 text-orange-600 px-4 rounded-lg font-bold border border-orange-200">📍 GPS</button></div></div>
                         <input type="hidden" id="Latitude" name="Latitude"><input type="hidden" id="Longitude" name="Longitude">
+                        
                         <div><label class="text-xs font-bold text-gray-500">Location Details</label><input name="WorkLocationDetail" id="WorkLocationDetail"></div>
                         <div><label class="text-xs font-bold text-gray-500">Section/Unit</label><input name="LocationUnit" id="LocationUnit" value="Pipeline"></div>
                         <div><label class="text-xs font-bold text-gray-500">Valid From</label><input type="datetime-local" name="ValidFrom" id="ValidFrom"></div>
@@ -187,7 +188,7 @@
                 
                 <div id="init-renewal-wrapper" class="glass border-l-4 border-purple-500 bg-purple-50 hidden">
                     <label class="flex items-center gap-2 font-bold cursor-pointer text-purple-800">
-                        <input type="checkbox" id="chk-init-renewal" name="InitRen" value="Y" class="w-5 h-5"> Request 1st Renewal with Permit
+                        <input type="checkbox" name="InitRen" value="Y" id="chk-init-renewal" class="w-5 h-5"> Request 1st Renewal with Permit
                     </label>
                     <div id="div-init-renewal" class="hidden mt-3 p-3 bg-white rounded border border-purple-200">
                         <div class="text-xs font-bold text-gray-500 mb-2">Renewal Details</div>
@@ -224,7 +225,7 @@
                 <div class="glass"><h3 class="section-title">2. Checklists</h3><div id="checklists-wrapper" class="space-y-4"></div></div>
                 
                 <div class="glass" id="worker-select-section">
-                    <h3 class="section-title">Workers</h3>
+                    <h3 class="section-title">Workers (Approved)</h3>
                     <div id="worker-checkboxes" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
                     <div id="worker-readonly-table" class="hidden overflow-x-auto"><table class="mobile-table w-full text-xs text-left"><thead class="hidden md:table-header-group"><tr><th>Name</th><th>Gender</th><th>Age</th><th>Contractor</th></tr></thead><tbody class="divide-y"></tbody></table></div>
                 </div>
@@ -278,7 +279,7 @@
                                 <span id="odd-hour-req-status" class="text-xs font-bold text-gray-600"></span>
                             </div>
                             <label class="flex items-center gap-2 cursor-pointer p-2 bg-white rounded border border-indigo-200">
-                                <input type="checkbox" id="odd-hour-allow-check" class="w-5 h-5 accent-indigo-600">
+                                <input type="checkbox" id="odd-hour-allow-check" onchange="window.toggleRenewalApproveBtn()" class="w-5 h-5 accent-indigo-600">
                                 <span class="text-sm font-bold text-indigo-800">I allow work during Odd Hours</span>
                             </label>
                         </div>
@@ -512,7 +513,7 @@
                     actionBtn = document.createElement('button');
                     actionBtn.className = "btn-pdf";
                     actionBtn.innerText = "Download PDF";
-                    actionBtn.addEventListener('click', (e) => { e.stopPropagation(); downloadSecurePDF(p.PermitID); });
+                    actionBtn.onclick = (e) => { e.stopPropagation(); downloadSecurePDF(p.PermitID); };
                 }
 
                 // Status Color
@@ -652,7 +653,6 @@
                     row.innerHTML = `<td>${escapeHtml(w.Name)}</td><td>${escapeHtml(w.Father)}</td><td>${w.IDType}: ${w.ID}</td><td>${w.Contact}</td><td>${w.RequestorName}</td><td>${w.Status}</td><td>${actionBtns}</td>`;
                     t.appendChild(row);
                 });
-                // Attach dynamic listeners for workers table
                 document.querySelectorAll('.btn-w-app').forEach(b => b.addEventListener('click', () => workerAction(b.dataset.id, 'approve')));
                 document.querySelectorAll('.btn-w-rej').forEach(b => b.addEventListener('click', () => workerAction(b.dataset.id, 'reject')));
                 document.querySelectorAll('.btn-w-del').forEach(b => b.addEventListener('click', () => workerAction(b.dataset.id, 'delete')));
@@ -661,7 +661,7 @@
         async function workerAction(id, act) { await apiCall('/save-worker', 'POST', {WorkerID:id, Action:act, Role:currentUser.Role, ApproverName: currentUser.name}); loadWorkers('dashboard'); }
         function toggleOtherID() { const val = document.getElementById("w-id-type").value; document.getElementById("w-id-type-other").classList.toggle("hidden", val !== "Other"); }
 
-        // --- OPEN PERMIT (Simplified) ---
+        // --- OPEN PERMIT ---
         async function openPermit(id) {
              const p = await apiCall('/permit-data', 'POST', {permitId:id});
              currentPermitId = id; currentPermitIOCLData = p.IOCLSupervisors || []; permitRequirePhoto = (p.RequireRenewalPhotos === 'Y');
@@ -674,7 +674,6 @@
              rS.innerHTML=""; aS.innerHTML=""; 
              if(usersData){ usersData.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${escapeHtml(u.name)}</option>`); usersData.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${escapeHtml(u.name)}</option>`); }
 
-             // Populate Form
              document.querySelectorAll('#pf input, #pf select, #pf textarea').forEach(e => {
                 if(e.type==='radio'){ if(e.value===p[e.name]) e.checked=true; } 
                 else if(e.type==='checkbox'){ e.checked=(p[e.name]==='Y'); } 
@@ -686,16 +685,13 @@
              const workersArr = p.SelectedWorkers;
              currentPermitWorkers = workersArr;
              
-             // Renewals
              const rens = JSON.parse(p.RenewalsJSON || "[]");
              currentRenewalCount = rens.length;
              document.querySelector("#table-renewals tbody").innerHTML = rens.map(r => `<tr><td>Start: ${r.valid_from}</td><td>${r.status}</td></tr>`).join('');
              if(rens.length > 0) document.getElementById("renewals-section").classList.remove('hidden');
              
-             // Supervisors
              renderIOCLTable();
 
-             // Logic for Buttons
              const actionsDiv = document.getElementById("actions");
              actionsDiv.innerHTML = "";
              
@@ -704,7 +700,6 @@
                   document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false);
              }
              
-             // Reviewer Logic
              if(currentUser.Role === 'Reviewer' && p.Status === 'Pending Review') {
                  document.getElementById("fs-reviewer-section").classList.remove('hidden');
                  document.querySelectorAll('#fs-reviewer-section *, #hazards-section input').forEach(e=>e.disabled=false);
@@ -713,7 +708,6 @@
                  actionsDiv.append(b1, b2);
              }
 
-             // Approver Logic
              if(currentUser.Role === 'Approver' && p.Status === 'Pending Approval') {
                  document.getElementById("fs-approver-section").classList.remove('hidden');
                  document.getElementById("Approver_Remarks").disabled=false; 
@@ -722,7 +716,6 @@
                  actionsDiv.append(b1, b2);
              }
 
-             // Closure Logic (Reviewer)
              if(currentUser.Role === 'Reviewer' && p.Status === 'Closure Pending Review') {
                  document.getElementById("closure-section").classList.remove('hidden');
                  document.getElementById("div-closure-rev").classList.remove('hidden'); 
@@ -732,7 +725,6 @@
                  actionsDiv.append(b1, b2);
              }
 
-             // Closure Logic (Approver)
              if(currentUser.Role === 'Approver' && p.Status === 'Closure Pending Approval') {
                  document.getElementById("closure-section").classList.remove('hidden');
                  document.getElementById("div-closure-app").classList.remove('hidden'); 
@@ -742,7 +734,6 @@
                  actionsDiv.append(b1, b2);
              }
              
-             // Requester Closure Init
              const last = rens[rens.length-1];
              if(currentUser.Role === 'Requester' && (p.Status === 'Active' || p.Status.includes('Renewal')) && (!last || !last.status.includes('pending'))) {
                  document.getElementById("closure-section").classList.remove('hidden');
@@ -750,14 +741,12 @@
                  document.getElementById("Closure_Requestor_Remarks").disabled = false; 
                  document.getElementById("Site_Restored_Check").disabled = false;
                  
-                 // Show Renewal Form as well
                  document.getElementById("form-renewal").classList.remove('hidden'); document.querySelectorAll('#form-renewal input').forEach(e => e.disabled = false);
                  
                  const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-6 py-3 rounded-lg font-bold shadow flex-1"; b1.innerText = "Job Complete"; b1.addEventListener('click', () => upd('initiate_closure'));
                  actionsDiv.appendChild(b1);
              }
 
-             // Show History
              document.getElementById("signature-history").classList.remove('hidden');
              setText("sig-app", p.Approver_Sig || 'Pending');
              setText("sig-clos", p.Closure_Approver_Sig || 'Pending');
@@ -772,7 +761,6 @@
              document.querySelectorAll('input[type="checkbox"]').forEach(c => { if(c.name) fd.set(c.name, c.checked ? "Y" : "N"); });
              fd.set("GSR_Accepted", "Y");
              
-             // Gather Workers
              const selectedWorkers = [];
              document.querySelectorAll('#worker-checkboxes input:checked').forEach(c => selectedWorkers.push(JSON.parse(c.value)));
              fd.append("SelectedWorkers", JSON.stringify(selectedWorkers));
@@ -800,7 +788,6 @@
              actionsDiv.appendChild(btn);
         }
         
-        // IOCL Rows Logic
         function addIOCLRow(containerId, data={}) {
             const div = document.createElement('div'); div.className = "flex gap-1 iocl-row items-center mb-1";
             div.innerHTML = `<input class="iocl-name border p-1" placeholder="Name" value="${data.name||''}"><input class="iocl-desig border p-1" placeholder="Desig"><input class="iocl-contact border p-1" placeholder="Contact"><button type="button" class="text-red-500 font-bold px-2">x</button>`;
@@ -819,7 +806,6 @@
             if(currentPermitIOCLData.length) document.getElementById("iocl-sup-display-section").classList.remove('hidden');
         }
 
-        // --- DOWNLOADS & VIEW PHOTO ---
         async function downloadSecurePDF(id) {
              try {
                  const res = await fetch(`${API}/download-pdf/${id}`, { headers: {'Authorization': `Bearer ${authToken}`} });
@@ -854,7 +840,6 @@
             finally { loader.style.display = 'none'; }
         }
 
-        // Logic functions like checkDate, checkRenewalTime etc remain same
         function checkDate() { 
              const vf=new Date(document.getElementById("ValidFrom").value); 
              const vt=new Date(document.getElementById("ValidTo").value); 
@@ -879,6 +864,7 @@
              const btn = document.getElementById("btn-approve-renewal");
              if(btn) btn.disabled = !chk.checked;
         }
+        
         async function submitRenewal(act) {
             const getVal = (id) => document.getElementById(id).value;
             const fd = new FormData();
@@ -892,18 +878,15 @@
             fd.append('precautions', getVal("RenewalPrec"));
             fd.append('rejectionReason', getVal("RenewalRemark"));
             
-            // Workers
             const selWorkers = []; 
             document.querySelectorAll('#renewal-worker-select input:checked').forEach(c => selWorkers.push(c.value)); 
             fd.append('renewalWorkers', JSON.stringify(selWorkers));
 
-            // Odd Hour
             if(!document.getElementById("odd-hour-agreement").classList.contains("hidden")) {
                  if(currentUser.Role === 'Requester' && !document.getElementById("OddHourSafetyCheck").checked) return alert("Agree to Odd Hour Safety");
                  fd.append('oddHourReq', 'Y');
             }
 
-            // Photo
             if(currentUser.Role === 'Requester') {
                 const fileInput = document.getElementById("ren-cam-sub");
                 const isPhotoMandatory = (currentRenewalCount > 0 && permitRequirePhoto);
@@ -915,6 +898,7 @@
             const json = await res.json();
             if(json.success) { alert("Done"); showDashboard(); } else alert(json.error);
         }
+
         function showAddUser() { document.getElementById("view-add-user").classList.remove('hidden'); }
         async function submitNewUser() {
             const body = {
@@ -926,8 +910,21 @@
             const res = await apiCall('/add-user', 'POST', body);
             if(res.success) { alert("User Added"); document.getElementById("view-add-user").classList.add('hidden'); }
         }
-        function showDashboard() { document.getElementById("view-form").classList.add('hidden'); document.getElementById("view-map").classList.add('hidden'); document.getElementById("view-dashboard").classList.remove('hidden'); loadDashboard(); }
-        async function loadStats() { const res=await apiCall('/stats','POST'); if(chartS)chartS.destroy(); chartS=new Chart(document.getElementById('chartStatus'),{type:'doughnut',data:{labels:Object.keys(res.statusCounts),datasets:[{data:Object.values(res.statusCounts)}]}}); }
+
+        function showDashboard() {
+             document.getElementById("view-form").classList.add('hidden');
+             document.getElementById("view-map").classList.add('hidden');
+             document.getElementById("view-dashboard").classList.remove('hidden');
+             loadDashboard();
+        }
+
+        async function loadStats() {
+             const res=await apiCall('/stats','POST');
+             if(chartS)chartS.destroy();
+             chartS=new Chart(document.getElementById('chartStatus'),{type:'doughnut',data:{labels:Object.keys(res.statusCounts),datasets:[{data:Object.values(res.statusCounts)}]}});
+             if(chartT)chartT.destroy();
+             chartT=new Chart(document.getElementById('chartType'),{type:'bar',data:{labels:Object.keys(res.typeCounts),datasets:[{label:'Types',data:Object.values(res.typeCounts)}]}});
+        }
 
     </script>
 </body>

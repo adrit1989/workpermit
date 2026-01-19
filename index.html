@@ -813,13 +813,13 @@
             const rens = JSON.parse(p.RenewalsJSON || "[]");
             currentRenewalCount = rens.length;
             
-            // FIX: Renewal Table with Full Timestamps
+            // FIX: Renewal Table with Full Timestamps AND Worker Names
             document.querySelector("#table-renewals tbody").innerHTML = rens.map(r => {
                 const photoHtml = r.photoUrl ? `<button type="button" class="text-blue-600 font-bold underline text-xs btn-view-photo" data-url="${r.photoUrl}">View Photo</button>` : 'N/A';
                 return `<tr>
                     <td>Start: ${r.valid_from.replace('T', ' ')}<br>End: ${r.valid_till.replace('T', ' ')}</td>
                     <td>${r.hc} / ${r.toxic} / ${r.oxygen}<br><span class="text-[10px] text-gray-500">${r.precautions||'-'}</span></td>
-                    <td>${r.worker_list ? r.worker_list.length : 'All'} Workers</td>
+                    <td>${r.worker_list ? r.worker_list.join(', ') : 'All'}</td> 
                     <td>${photoHtml}</td>
                     <td>${escapeHtml(r.req_name)}<br><span class="text-[10px] text-gray-500">${r.req_at}</span></td>
                     <td>${escapeHtml(r.rev_name||'-')}<br><span class="text-[10px] text-gray-500">${r.rev_at||''}</span></td>

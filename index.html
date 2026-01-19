@@ -687,7 +687,13 @@
              
              const rens = JSON.parse(p.RenewalsJSON || "[]");
              currentRenewalCount = rens.length;
-             document.querySelector("#table-renewals tbody").innerHTML = rens.map(r => `<tr><td>Start: ${r.valid_from}</td><td>${r.status}</td></tr>`).join('');
+             document.querySelector("#table-renewals tbody").innerHTML = rens.map(r => {
+                 // Secure Photo View Button
+                 const photoHtml = r.photoUrl ? `<button type="button" class="text-blue-600 font-bold underline text-xs btn-view-photo" data-url="${r.photoUrl}">View Photo</button>` : 'N/A';
+                 return `<tr><td>Start: ${r.valid_from}</td><td>${r.hc}/${r.toxic}/${r.oxygen}</td><td>${r.worker_list||'-'}</td><td>${photoHtml}</td><td>${r.req_name}</td><td>${r.rev_name||'-'}</td><td>${r.app_name||'-'}</td><td>${r.status}</td></tr>`;
+             }).join('');
+             document.querySelectorAll('.btn-view-photo').forEach(b => b.addEventListener('click', (e) => viewSecurePhoto(e.target.dataset.url)));
+
              if(rens.length > 0) document.getElementById("renewals-section").classList.remove('hidden');
              
              renderIOCLTable();
@@ -695,11 +701,13 @@
              const actionsDiv = document.getElementById("actions");
              actionsDiv.innerHTML = "";
              
+             // --- LOGIC PORTED FROM REFERENCE: STATE MACHINE ---
              if(currentUser.Role === 'Requester' && p.Status === 'New') {
                   const btn = document.createElement("button"); btn.className = "w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg"; btn.innerText = "Submit Permit"; btn.addEventListener('click', savePermit); actionsDiv.appendChild(btn);
                   document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false);
              }
              
+             // Reviewer Logic
              if(currentUser.Role === 'Reviewer' && p.Status === 'Pending Review') {
                  document.getElementById("fs-reviewer-section").classList.remove('hidden');
                  document.querySelectorAll('#fs-reviewer-section *, #hazards-section input').forEach(e=>e.disabled=false);
@@ -708,6 +716,7 @@
                  actionsDiv.append(b1, b2);
              }
 
+             // Approver Logic
              if(currentUser.Role === 'Approver' && p.Status === 'Pending Approval') {
                  document.getElementById("fs-approver-section").classList.remove('hidden');
                  document.getElementById("Approver_Remarks").disabled=false; 
@@ -716,6 +725,7 @@
                  actionsDiv.append(b1, b2);
              }
 
+             // Closure Logic
              if(currentUser.Role === 'Reviewer' && p.Status === 'Closure Pending Review') {
                  document.getElementById("closure-section").classList.remove('hidden');
                  document.getElementById("div-closure-rev").classList.remove('hidden'); 
@@ -734,6 +744,7 @@
                  actionsDiv.append(b1, b2);
              }
              
+             // Renewal & Closure Initiation Logic
              const last = rens[rens.length-1];
              if(currentUser.Role === 'Requester' && (p.Status === 'Active' || p.Status.includes('Renewal')) && (!last || !last.status.includes('pending'))) {
                  document.getElementById("closure-section").classList.remove('hidden');
@@ -741,8 +752,25 @@
                  document.getElementById("Closure_Requestor_Remarks").disabled = false; 
                  document.getElementById("Site_Restored_Check").disabled = false;
                  
-                 document.getElementById("form-renewal").classList.remove('hidden'); document.querySelectorAll('#form-renewal input').forEach(e => e.disabled = false);
+                 document.getElementById("form-renewal").classList.remove('hidden'); 
+                 document.querySelectorAll('#form-renewal input').forEach(e => e.disabled = false);
                  
+                 // Render renewal worker checklist
+                 const renSel = document.getElementById('renewal-worker-select');
+                 renSel.innerHTML = currentPermitWorkers.map(w => `<label class="flex items-center gap-1 text-xs bg-white p-1 rounded border"><input type="checkbox" value="${escapeHtml(w.Name)}" checked class="ren-worker-cb"> ${escapeHtml(w.Name)}</label>`).join('');
+
+                 // Logic for Photo Mandate (From Reference)
+                 const showPhotoBox = (currentRenewalCount > 0 && permitRequirePhoto);
+                 const photoDiv = document.getElementById("renewal-photo-container");
+                 const msgEl = document.getElementById("photo-mandate-msg");
+                 if(showPhotoBox) {
+                    photoDiv.classList.remove('hidden');
+                    msgEl.innerText = "* Photo Upload is MANDATORY.";
+                    msgEl.classList.add("text-red-600", "font-bold");
+                 } else {
+                    photoDiv.classList.add('hidden');
+                 }
+
                  const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-6 py-3 rounded-lg font-bold shadow flex-1"; b1.innerText = "Job Complete"; b1.addEventListener('click', () => upd('initiate_closure'));
                  actionsDiv.appendChild(b1);
              }
@@ -788,6 +816,47 @@
              actionsDiv.appendChild(btn);
         }
         
+        async function upd(act) {
+            // Validation for Closure
+            if(act === 'initiate_closure') {
+                if(!document.getElementById("Site_Restored_Check").checked) return alert("Confirm Site Restored");
+            }
+
+            // Logic to grab the right IOCL Data
+            let ioclData = [];
+            const isReviewerEditing = (currentUser.Role === 'Reviewer' && !document.getElementById('iocl-reviewer-wrapper').classList.contains('hidden'));
+            const isApproverEditing = (currentUser.Role === 'Approver' && !document.getElementById('iocl-approver-wrapper').classList.contains('hidden'));
+            
+            if (isReviewerEditing) ioclData = getIOCLData('iocl-sup-container-rev');
+            else if (isApproverEditing) ioclData = getIOCLData('iocl-sup-container-app');
+            else ioclData = currentPermitIOCLData || [];
+
+            const body = { 
+                PermitID: currentPermitId, action: act, role: currentUser.Role, user: currentUser.name,
+                comment: (currentUser.Role==='Reviewer' ? getVal("Reviewer_Remarks") : getVal("Approver_Remarks")),
+                Closure_Requestor_Remarks: getVal("Closure_Requestor_Remarks"), 
+                Closure_Reviewer_Remarks: getVal("Closure_Reviewer_Remarks"), 
+                Closure_Approver_Remarks: getVal("Closure_Approver_Remarks"),
+                bgColor: getVal("PdfBgColor"), IOCLSupervisors: ioclData,
+                Site_Restored_Check: document.getElementById("Site_Restored_Check").checked ? 'Y' : 'N'
+            };
+            
+            if(currentUser.Role === 'Reviewer' && act === 'review') {
+                const fd = new FormData(document.getElementById("pf")); // grab checkbox data
+                document.querySelectorAll('#hazards-section input[type=checkbox]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
+                document.querySelectorAll('#ppe-container input[type=checkbox]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
+                body.Reviewer_Remarks = getVal("Reviewer_Remarks");
+                body.AdditionalPrecautions = getVal("AdditionalPrecautions");
+            }
+            if(currentUser.Role === 'Approver' && act === 'approve') { 
+                body.Approver_Remarks = getVal("Approver_Remarks"); 
+                body.RequireRenewalPhotos = document.getElementById("RequireRenewalPhotos").checked ? 'Y' : 'N';
+            }
+            
+            const res = await apiCall('/update-status', 'POST', body);
+            if(res.success) showDashboard(); else alert(res.error);
+        }
+
         function addIOCLRow(containerId, data={}) {
             const div = document.createElement('div'); div.className = "flex gap-1 iocl-row items-center mb-1";
             div.innerHTML = `<input class="iocl-name border p-1" placeholder="Name" value="${data.name||''}"><input class="iocl-desig border p-1" placeholder="Desig"><input class="iocl-contact border p-1" placeholder="Contact"><button type="button" class="text-red-500 font-bold px-2">x</button>`;
@@ -827,7 +896,7 @@
         window.viewSecurePhoto = async function(fullUrl) {
             if (!fullUrl) return alert("No photo URL found");
             const filename = fullUrl.split('/').pop();
-            loader.style.display = 'flex';
+            document.getElementById('loader').style.display = 'flex';
             try {
                 const res = await fetch(`${API}/view-photo/${filename}`, { method: 'GET', headers: {'Authorization': `Bearer ${authToken}`} });
                 if (res.status === 401) { alert("Session expired."); location.reload(); return; }
@@ -837,7 +906,7 @@
                 window.open(url, '_blank');
                 setTimeout(() => window.URL.revokeObjectURL(url), 60000);
             } catch (e) { alert("Failed to load photo"); }
-            finally { loader.style.display = 'none'; }
+            finally { document.getElementById('loader').style.display = 'none'; }
         }
 
         function checkDate() { 
@@ -879,9 +948,10 @@
             fd.append('rejectionReason', getVal("RenewalRemark"));
             
             const selWorkers = []; 
-            document.querySelectorAll('#renewal-worker-select input:checked').forEach(c => selWorkers.push(c.value)); 
+            document.querySelectorAll('.ren-worker-cb:checked').forEach(c => selWorkers.push(c.value)); 
             fd.append('renewalWorkers', JSON.stringify(selWorkers));
 
+            // Odd Hour Validation
             if(!document.getElementById("odd-hour-agreement").classList.contains("hidden")) {
                  if(currentUser.Role === 'Requester' && !document.getElementById("OddHourSafetyCheck").checked) return alert("Agree to Odd Hour Safety");
                  fd.append('oddHourReq', 'Y');
@@ -889,6 +959,7 @@
 
             if(currentUser.Role === 'Requester') {
                 const fileInput = document.getElementById("ren-cam-sub");
+                // Mandatory Photo Check
                 const isPhotoMandatory = (currentRenewalCount > 0 && permitRequirePhoto);
                 if(isPhotoMandatory && fileInput.files.length === 0) return alert("MANDATORY Photo required");
                 if(fileInput.files.length > 0) fd.append('RenewalImage', fileInput.files[0]);

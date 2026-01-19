@@ -316,7 +316,7 @@ async function uploadToAzure(buffer, blobName, mimeType = "image/jpeg") {
    USERS & WORKERS
 ===================================================== */
 
-app.get('/api/users', authenticateAccess, async (req, res) => {
+app.get('/api/users', async (req, res) => {
   try {
     const pool = await getConnection();
     const r = await pool.request().query("SELECT Name, Email, Role FROM Users");

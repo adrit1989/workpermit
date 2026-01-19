@@ -15,39 +15,42 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const crypto = require('crypto');
+const crypto = require('crypto'); // REQUIRED FOR NONCE
 
 const app = express();
 
-// --- 1. NONCE GENERATOR ---
+// --- 1. NONCE GENERATOR MIDDLEWARE ---
+// Must run BEFORE helmet so the nonce exists for the header
 app.use((req, res, next) => {
   res.locals.nonce = crypto.randomBytes(16).toString('base64');
   next();
 });
 
-// --- 2. SECURITY: MAXIMUM STRICTNESS CSP ---
+// --- 2. SECURITY: STRICT CSP WITH NONCE ---
 app.use(
   helmet({
     contentSecurityPolicy: {
-      useDefaults: false,
+      useDefaults: false, // We define everything manually for maximum control
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: [
           "'self'",
-          // Strict: Only allow scripts with our Nonce
+          // THE MAGIC: Allow only scripts with this specific random ID
           (req, res) => `'nonce-${res.locals.nonce}'`,
-          "https://cdn.jsdelivr.net", // For Chart.js
-          "https://maps.googleapis.com" // For Google Maps
+          "https://cdn.tailwindcss.com",
+          "https://cdn.jsdelivr.net",
+          "https://maps.googleapis.com"
         ],
         styleSrc: [
-          "'self'", 
-          // REMOVED 'unsafe-inline'. We now load styles from /public/app.css
-          "https://fonts.googleapis.com"
+          "'self'",
+          (req, res) => `'nonce-${res.locals.nonce}'`,
+          "https://fonts.googleapis.com",
+          "'unsafe-inline'" // Required for Tailwind CSS CDN to function correctly
         ],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         imgSrc: ["'self'", "data:", "blob:", "https://maps.gstatic.com", "https://maps.googleapis.com"],
         connectSrc: ["'self'", "https://maps.googleapis.com", "https://cdn.jsdelivr.net"],
-        frameSrc: ["'self'"],
+        frameSrc: ["'self'"], // Prevent clickjacking
         objectSrc: ["'none'"],
         upgradeInsecureRequests: []
       }
@@ -63,6 +66,7 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, cb) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return cb(null, true);
     if (allowedOrigins.indexOf(origin) === -1) {
       return cb(new Error('CORS Policy Blocked this Origin'), false);
@@ -74,20 +78,32 @@ app.use(cors({
 }));
 
 app.use(bodyParser.json({ limit: '50mb' }));
-// Serve the public folder (where app.css now lives)
+
+// --- 4. STATIC FILES ---
+// Only serve the specific 'public' folder, never root
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
+// --- CONFIGURATION ---
 if (!process.env.JWT_SECRET) {
-    console.error("FATAL: JWT_SECRET missing.");
+    console.error("FATAL ERROR: JWT_SECRET is not defined.");
     process.exit(1);
 }
 const JWT_SECRET = process.env.JWT_SECRET;
 const AZURE_CONN_STR = process.env.AZURE_STORAGE_CONNECTION_STRING;
 
-// --- 4. RATE LIMITS ---
-const apiLimiter = rateLimit({ windowMs: 10 * 1000, max: 50, message: "Too many requests" });
+// --- 5. RATE LIMITERS ---
+const apiLimiter = rateLimit({
+    windowMs: 10 * 1000, // 10 seconds
+    max: 50, 
+    message: "Too many requests, please try again later."
+});
 app.use('/api/', apiLimiter);
-const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, message: "Too many login attempts" });
+
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, 
+    max: 100, 
+    message: "Too many login attempts, please try again later."
+});
 
 // --- AZURE SETUP ---
 let containerClient;
@@ -101,11 +117,12 @@ if (AZURE_CONN_STR) {
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-// --- 5. AUTH MIDDLEWARE ---
+// --- 6. AUTH MIDDLEWARE (With Revocation) ---
 async function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; 
     if (!token) return res.sendStatus(401); 
+
     jwt.verify(token, JWT_SECRET, async (err, user) => {
         if (err) return res.sendStatus(403); 
         try {
@@ -120,30 +137,41 @@ async function authenticateToken(req, res, next) {
     });
 }
 
-// --- HELPER FUNCTIONS ---
-function getNowIST() { return new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace(',', ''); }
-function formatDate(dateStr) { if (!dateStr) return '-'; const d = new Date(dateStr); if (isNaN(d.getTime())) return dateStr; return d.toLocaleString("en-GB", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', ''); }
+// --- HELPERS ---
+function getNowIST() {
+    return new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace(',', '');
+}
+function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleString("en-GB", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '');
+}
 function getOrdinal(n) { const s = ["th", "st", "nd", "rd"]; const v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+
 async function uploadToAzure(buffer, blobName, mimeType = "image/jpeg") {
     if (!containerClient) return null;
     try {
         const blockBlobClient = containerClient.getBlockBlobClient(blobName);
         await blockBlobClient.uploadData(buffer, { blobHTTPHeaders: { blobContentType: mimeType } });
         return blockBlobClient.url;
-    } catch (error) { return null; }
+    } catch (error) { console.error("Azure Upload Error:", error); return null; }
 }
 
-// --- PDF GENERATOR ---
+// --- 7. PDF GENERATOR ---
 async function drawPermitPDF(doc, p, d, renewalsList) {
     const workType = (d.WorkType || "PERMIT").toUpperCase();
     const status = p.Status || "Active";
     let watermarkText = (status === 'Closed' || status.includes('Closure')) ? `CLOSED - ${workType}` : `ACTIVE - ${workType}`;
 
     const drawWatermark = () => {
-        doc.save(); doc.translate(doc.page.width/2, doc.page.height/2); doc.rotate(-45);
+        doc.save();
+        doc.translate(doc.page.width / 2, doc.page.height / 2);
+        doc.rotate(-45);
         doc.font('Helvetica-Bold').fontSize(60).fillColor('#ff0000').opacity(0.15);
         doc.text(watermarkText, -300, -30, { align: 'center', width: 600 });
-        doc.restore(); doc.opacity(1);
+        doc.restore();
+        doc.opacity(1);
     };
 
     const bgColor = d.PdfBgColor || 'White';
@@ -152,37 +180,171 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
     const drawHeader = (doc, bgColor, permitNoStr) => {
         if (bgColor && bgColor !== 'Auto' && bgColor !== 'White') {
             const colorMap = { 'Red': '#fee2e2', 'Green': '#dcfce7', 'Yellow': '#fef9c3' };
-            doc.save(); doc.fillColor(colorMap[bgColor] || 'white');
-            doc.rect(0, 0, doc.page.width, doc.page.height).fill(); doc.restore();
+            doc.save();
+            doc.fillColor(colorMap[bgColor] || 'white');
+            doc.rect(0, 0, doc.page.width, doc.page.height).fill();
+            doc.restore();
         }
+
         drawWatermark();
+
         const startX = 30, startY = 30;
-        doc.lineWidth(1); doc.rect(startX, startY, 535, 95).stroke(); doc.rect(startX, startY, 80, 95).stroke(); 
+        doc.lineWidth(1);
+        doc.rect(startX, startY, 535, 95).stroke();
+        doc.rect(startX, startY, 80, 95).stroke(); 
+        
+        // LOGO FIX
         const logoPath = path.join(__dirname, 'public', 'logo.png');
-        if (fs.existsSync(logoPath)) { try { doc.image(logoPath, startX, startY, { fit: [80, 95], align: 'center', valign: 'center' }); } catch (err) {} }
+        if (fs.existsSync(logoPath)) {
+            try { doc.image(logoPath, startX, startY, { fit: [80, 95], align: 'center', valign: 'center' }); } catch (err) {}
+        }
+
         doc.rect(startX + 80, startY, 320, 95).stroke();
-        doc.font('Helvetica-Bold').fontSize(11).fillColor('black').text('INDIAN OIL CORPORATION LIMITED', startX+80, startY+15, { width: 320, align: 'center' });
-        doc.fontSize(9).text('EASTERN REGION PIPELINES', startX+80, startY+30, { width: 320, align: 'center' });
-        doc.text('HSE DEPT.', startX+80, startY+45, { width: 320, align: 'center' });
-        doc.fontSize(8).text('COMPOSITE WORK/ COLD WORK/HOT WORK/ENTRY TO CONFINED SPACE/VEHICLE ENTRY / EXCAVATION WORK', startX+80, startY+65, { width: 320, align: 'center' });
+        doc.font('Helvetica-Bold').fontSize(11).fillColor('black').text('INDIAN OIL CORPORATION LIMITED', startX + 80, startY + 15, { width: 320, align: 'center' });
+        doc.fontSize(9).text('EASTERN REGION PIPELINES', startX + 80, startY + 30, { width: 320, align: 'center' });
+        doc.text('HSE DEPT.', startX + 80, startY + 45, { width: 320, align: 'center' });
+        doc.fontSize(8).text('COMPOSITE WORK/ COLD WORK/HOT WORK/ENTRY TO CONFINED SPACE/VEHICLE ENTRY / EXCAVATION WORK AT MAINLINE/RCP/SV', startX + 80, startY + 65, { width: 320, align: 'center' });
+
         doc.rect(startX + 400, startY, 135, 95).stroke();
         doc.fontSize(8).font('Helvetica');
-        doc.text('Doc No: ERPL/HS&E/25-26', startX+405, startY+60); doc.text('Issue No: 01', startX+405, startY+70); doc.text('Date: 01.09.2025', startX+405, startY+80);
-        if (permitNoStr) { doc.font('Helvetica-Bold').fontSize(10).fillColor('red'); doc.text(`Permit No: ${permitNoStr}`, startX+405, startY+15, { width: 130, align: 'left' }); doc.fillColor('black'); }
+        doc.text('Doc No: ERPL/HS&E/25-26', startX + 405, startY + 60);
+        doc.text('Issue No: 01', startX + 405, startY + 70);
+        doc.text('Date: 01.09.2025', startX + 405, startY + 80);
+
+        if (permitNoStr) {
+            doc.font('Helvetica-Bold').fontSize(10).fillColor('red');
+            doc.text(`Permit No: ${permitNoStr}`, startX + 405, startY + 15, { width: 130, align: 'left' });
+            doc.fillColor('black');
+        }
     };
 
-    drawHeader(doc, bgColor, compositePermitNo); doc.y = 135; doc.fontSize(9).font('Helvetica');
+    const drawHeaderOnAll = () => { drawHeader(doc, bgColor, compositePermitNo); doc.y = 135; doc.fontSize(9).font('Helvetica'); };
+    drawHeaderOnAll();
 
+    // BANNER FIX
     const bannerPath = path.join(__dirname, 'public', 'safety_banner.png');
-    if (fs.existsSync(bannerPath)) { try { doc.image(bannerPath, 30, doc.y, { width: 535, height: 100 }); doc.y += 110; } catch (err) {} }
-    
-    // Standard PDF body rendering (Simplified for brevity, assumes standard logic)
+    if (fs.existsSync(bannerPath)) {
+        try { doc.image(bannerPath, 30, doc.y, { width: 535, height: 100 }); doc.y += 110; } catch (err) {}
+    }
+
+    if (d.GSR_Accepted === 'Y') {
+        doc.rect(30, doc.y, 535, 20).fillColor('#e6fffa').fill();
+        doc.fillColor('black').stroke();
+        doc.rect(30, doc.y, 535, 20).stroke();
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#047857')
+            .text("✓ I have read, understood and accepted the IOCL Golden Safety Rules terms and penalties.", 35, doc.y + 5);
+        doc.y += 25;
+        doc.fillColor('black');
+    }
+
+    doc.font('Helvetica-Bold').fontSize(10).text(`Permit No: ${compositePermitNo}`, 30, doc.y);
+    doc.fontSize(9).font('Helvetica');
+    doc.y += 15;
+    const startY = doc.y;
+
     doc.text(`(i) Work clearance from: ${formatDate(p.ValidFrom)} to ${formatDate(p.ValidTo)}`, 30, doc.y);
+    doc.y += 15;
     doc.text(`(ii) Issued to: ${d.IssuedToDept || '-'} / ${d.Vendor || '-'}`, 30, doc.y);
+    doc.y += 15;
+    doc.text(`(iii) Location: ${d.WorkLocationDetail || '-'} [GPS: ${d.ExactLocation || 'No GPS'}]`, 30, doc.y);
+    doc.y += 15;
+    doc.text(`(iv) Description: ${d.Desc || '-'}`, 30, doc.y, { width: 535 });
+    doc.y += 20;
+    doc.text(`(v) Site Contact: ${d.RequesterName} / ${d.EmergencyContact || 'NA'}`, 30, doc.y);
+    doc.y += 15;
+    
+    // ... Additional PDF fields ...
+    doc.rect(25, startY - 5, 545, doc.y - startY + 5).stroke();
+    doc.y += 10;
+    
+    // CHECKLISTS
+    const CHECKLIST_DATA = {
+        A: [ "1. Equipment / Work Area inspected.", "2. Surrounding area checked, cleaned and covered. Oil/RAGS/Grass Etc removed.", "3. Manholes, Sewers, CBD etc. and hot nearby surface covered.", "4. Considered hazards from other routine, non-routine operations and concerned person alerted.", "5. Equipment blinded/ disconnected/ closed/ isolated/ wedge opened.", "6. Equipment properly drained and depressurized.", "7. Equipment properly steamed/purged.", "8. Equipment water flushed.", "9. Access for Free approach of Fire Tender.", "10. Iron Sulfide removed/ Kept wet.", "11. Equipment electrically isolated and tagged vide Permit no.", "12. Gas Test: HC / Toxic / O2 checked.", "13. Running water hose / Fire extinguisher provided. Fire water system available.", "14. Area cordoned off and Precautionary tag/Board provided.", "15. CCTV monitoring facility available at site.", "16. Proper ventilation and Lighting provided." ],
+        B: [ "1. Proper means of exit / escape provided.", "2. Standby personnel provided from Mainline/ Maint. / Contractor/HSE.", "3. Checked for oil and Gas trapped behind the lining in equipment.", "4. Shield provided against spark.", "5. Portable equipment / nozzle properly grounded.", "6. Standby persons provided for entry to confined space.", "7. Adequate Communication Provided to Stand by Person.", "8. Attendant Trained Provided With Rescue Equipment/SCABA.", "9. Space Adequately Cooled for Safe Entry Of Person.", "10. Continuous Inert Gas Flow Arranged.", "11. Check For Earthing/ELCB of all Temporary Electrical Connections being used for welding.", "12. Gas Cylinders are kept outside the confined Space.", "13. Spark arrestor Checked on mobile Equipments.", "14. Welding Machine Checked for Safe Location.", "15. Permit taken for working at height Vide Permit No." ],
+        C: ["1. PESO approved spark elimination system provided on the mobile equipment/ vehicle provided."],
+        D: [ "1. For excavated trench/ pit proper slop/ shoring/ shuttering provided to prevent soil collapse.", "2. Excavated soil kept at safe distance from trench/pit edge (min. pit depth).", "3. Safe means of access provided inside trench/pit.", "4. Movement of heavy vehicle prohibited." ]
+    };
+
+    const drawChecklist = (t, i, pr) => {
+        if (doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; }
+        doc.font('Helvetica-Bold').fillColor('black').fontSize(9).text(t, 30, doc.y + 10); doc.y += 25;
+        let y = doc.y;
+        doc.rect(30, y, 350, 20).stroke().text("Item", 35, y + 5); doc.rect(380, y, 60, 20).stroke().text("Sts", 385, y + 5); doc.rect(440, y, 125, 20).stroke().text("Rem", 445, y + 5); y += 20;
+        doc.font('Helvetica').fontSize(8);
+        i.forEach((x, k) => {
+            let rowH = 20;
+            if (pr === 'A' && k === 11) rowH = 45;
+            if (y + rowH > 750) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; y = 135; }
+            const st = d[`${pr}_Q${k + 1}`] || 'NA';
+            if (d[`${pr}_Q${k + 1}`]) {
+                doc.rect(30, y, 350, rowH).stroke().text(x, 35, y + 5, { width: 340 });
+                doc.rect(380, y, 60, rowH).stroke().text(st, 385, y + 5);
+                let detailTxt = d[`${pr}_Q${k + 1}_Detail`] || '';
+                if (pr === 'A' && k === 11) {
+                    const hc = d.GP_Q12_HC || '_';
+                    const tox = d.GP_Q12_ToxicGas || '_';
+                    const o2 = d.GP_Q12_Oxygen || '_';
+                    detailTxt = `HC: ${hc}% LEL\nTox: ${tox} PPM\nO2: ${o2}%`;
+                }
+                doc.rect(440, y, 125, rowH).stroke().text(detailTxt, 445, y + 5);
+                y += rowH;
+            }
+        }); doc.y = y;
+    };
+    drawChecklist("SECTION A: GENERAL", CHECKLIST_DATA.A, 'A');
+    drawChecklist("SECTION B : For Hot work / Entry to confined Space", CHECKLIST_DATA.B, 'B');
+    drawChecklist("SECTION C: For vehicle Entry in Hazardous area", CHECKLIST_DATA.C, 'C'); 
+    drawChecklist("SECTION D: EXCAVATION", CHECKLIST_DATA.D, 'D');
+
+    // Signatures, Renewals, etc.
+    if (doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; }
+    doc.font('Helvetica-Bold').text("SIGNATURES", 30, doc.y);
+    doc.y += 15; const sY = doc.y;
+    doc.rect(30, sY, 178, 40).stroke().text(`REQ: ${d.RequesterName} on ${d.CreatedDate || '-'}`, 35, sY + 5);
+    doc.rect(208, sY, 178, 40).stroke().text(`REV: ${d.Reviewer_Sig || '-'}\nRem: ${d.Reviewer_Remarks || '-'}`, 213, sY + 5, { width: 168 });
+    doc.rect(386, sY, 179, 40).stroke().text(`APP: ${d.Approver_Sig || '-'}\nRem: ${d.Approver_Remarks || '-'}`, 391, sY + 5, { width: 169 });
+    doc.y = sY + 50;
+
+    // Renewals Table
+    if (doc.y > 650) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; }
+    doc.font('Helvetica-Bold').text("CLEARANCE RENEWAL", 30, doc.y); doc.y += 15;
+    let ry = doc.y;
+    doc.rect(30, ry, 45, 25).stroke().text("From", 32, ry + 5);
+    doc.rect(75, ry, 45, 25).stroke().text("To", 77, ry + 5);
+    doc.rect(120, ry, 55, 25).stroke().text("Gas/Prec", 122, ry + 5);
+    doc.rect(175, ry, 60, 25).stroke().text("Workers", 177, ry + 5);
+    doc.rect(235, ry, 50, 25).stroke().text("Photo", 237, ry + 5);
+    doc.rect(285, ry, 70, 25).stroke().text("Req", 287, ry + 5);
+    doc.rect(355, ry, 70, 25).stroke().text("Rev", 357, ry + 5);
+    doc.rect(425, ry, 70, 25).stroke().text("App", 427, ry + 5);
+    doc.rect(495, ry, 70, 25).stroke().text("Reason", 497, ry + 5);
+    ry += 25;
+
+    const finalRenewals = renewalsList || JSON.parse(p.RenewalsJSON || "[]");
+    doc.font('Helvetica').fontSize(8);
+    for (const r of finalRenewals) {
+        const rowHeight = 60;
+        if (ry > 680) { doc.addPage(); drawHeaderOnAll(); doc.y = 135; ry = 135; }
+        doc.rect(30, ry, 45, rowHeight).stroke().text(r.valid_from.replace('T', '\n'), 32, ry + 5, { width: 43 });
+        doc.rect(75, ry, 45, rowHeight).stroke().text(r.valid_till.replace('T', '\n'), 77, ry + 5, { width: 43 });
+        doc.rect(120, ry, 55, rowHeight).stroke().text(`HC: ${r.hc}\nTox: ${r.toxic}\nO2: ${r.oxygen}`, 122, ry + 5, { width: 53 });
+        doc.rect(175, ry, 60, rowHeight).stroke().text(r.worker_list ? r.worker_list.join(', ') : 'All', 177, ry + 5, { width: 58 });
+        
+        doc.rect(235, ry, 50, rowHeight).stroke();
+        // Image logic handled in buffer prep
+        if(r.photoUrl) doc.text("Photo attached", 237, ry+25, {width:46, align:'center'});
+
+        doc.rect(285, ry, 70, rowHeight).stroke().text(`${r.req_name}\n${r.req_at}`, 287, ry + 5, { width: 66 });
+        doc.rect(355, ry, 70, rowHeight).stroke().text(`${r.rev_name || '-'}\n${r.rev_at || ''}`, 357, ry + 5, { width: 66 });
+        doc.rect(425, ry, 70, rowHeight).stroke().text(`${r.app_name || '-'}\n${r.app_at || ''}`, 427, ry + 5, { width: 66 });
+        doc.rect(495, ry, 70, rowHeight).stroke().text(r.status, 497, ry + 5, { width: 66 });
+        ry += rowHeight;
+    }
     doc.end();
 }
 
 // --- API ROUTES ---
+
 app.post('/api/login', loginLimiter, async (req, res) => {
     try {
         const pool = await getConnection();
@@ -197,6 +359,7 @@ app.post('/api/login', loginLimiter, async (req, res) => {
     } catch (e) { res.status(500).json({ error: "Server Error" }); }
 });
 
+// PUBLIC ROUTE (Fixes session expired loop)
 app.get('/api/users', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -242,6 +405,7 @@ app.post('/api/save-permit', authenticateToken, upload.any(), async (req, res) =
 
         let workers = [];
         try { workers = JSON.parse(req.body.SelectedWorkers); } catch(e) {}
+
         let renewalsArr = [];
         if (req.body.InitRen === 'Y') {
             const renImageFile = req.files ? req.files.find(f => f.fieldname === 'InitRenImage') : null;
@@ -253,6 +417,8 @@ app.post('/api/save-permit', authenticateToken, upload.any(), async (req, res) =
                 worker_list: workers.map(w => w.Name), photoUrl: photoUrl
             });
         }
+        
+        // RENAMED TO FIX CRASH
         const permitData = { ...req.body, SelectedWorkers: workers, PermitID: pid, CreatedDate: getNowIST(), GSR_Accepted: 'Y' };
         
         const q = pool.request()
@@ -291,6 +457,7 @@ app.post('/api/update-status', authenticateToken, async (req, res) => {
                 else if (role === 'Approver' && action === 'approve') { r1.status = 'approved'; r1.app_name = user; r1.app_at = now; }
             }
         }
+        
         if (action === 'reject_closure') st = 'Active';
         else if (role === 'Reviewer' && action === 'approve_closure') { st = 'Closure Pending Approval'; d.Closure_Reviewer_Sig = `${user} on ${now}`; d.Closure_Reviewer_Date = now; }
         else if (role === 'Approver' && action === 'approve' && st.includes('Closure')) { st = 'Closed'; d.Closure_Issuer_Sig = `${user} on ${now}`; d.Closure_Approver_Date = now; d.Closure_Approver_Sig = `${user} on ${now}`; }
@@ -356,6 +523,207 @@ app.post('/api/renewal', authenticateToken, upload.any(), async (req, res) => {
         await pool.request().input('p', PermitID).input('r', JSON.stringify(r)).input('s', newStatus).query("UPDATE Permits SET RenewalsJSON=@r, Status=@s WHERE PermitID=@p");
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: "Server Error" }); }
+});
+
+app.post('/api/save-worker', authenticateToken, async (req, res) => {
+    try {
+        const { WorkerID, Action, Role, Details, RequestorEmail, RequestorName } = req.body; 
+        const pool = await getConnection();
+        if ((Action === 'create' || Action === 'edit_request') && Details && parseInt(Details.Age) < 18) return res.status(400).json({ error: "Worker must be 18+" });
+
+        if (Action === 'create') {
+            const idRes = await pool.request().query("SELECT TOP 1 WorkerID FROM Workers ORDER BY WorkerID DESC");
+            const wid = `W-${parseInt(idRes.recordset.length > 0 ? idRes.recordset[0].WorkerID.split('-')[1] : 1000) + 1}`;
+            const dataObj = { Current: {}, Pending: { ...Details, RequestorName: RequestorName } };
+
+            await pool.request().input('w', wid).input('s', 'Pending Review').input('r', RequestorEmail).input('j', JSON.stringify(dataObj)).input('idt', sql.NVarChar, Details.IDType).query("INSERT INTO Workers (WorkerID, Status, RequestorEmail, DataJSON, IDType) VALUES (@w, @s, @r, @j, @idt)");
+            res.json({ success: true });
+        }
+        else if (Action === 'edit_request') {
+            const cur = await pool.request().input('w', WorkerID).query("SELECT DataJSON FROM Workers WHERE WorkerID=@w");
+            if (cur.recordset.length === 0) return res.status(404).json({ error: "Worker not found" });
+            let dataObj = JSON.parse(cur.recordset[0].DataJSON);
+            dataObj.Pending = { ...dataObj.Current, ...Details, RequestorName: RequestorName || dataObj.Current.RequestorName };
+
+            await pool.request().input('w', WorkerID).input('s', 'Edit Pending Review').input('j', JSON.stringify(dataObj)).input('idt', sql.NVarChar, Details.IDType).query("UPDATE Workers SET Status=@s, DataJSON=@j, IDType=@idt WHERE WorkerID=@w");
+            res.json({ success: true });
+        }
+        else if (Action === 'delete') {
+            if (req.user.role === 'Requester') {
+                const check = await pool.request().input('w', WorkerID).query("SELECT RequestorEmail FROM Workers WHERE WorkerID=@w");
+                if (check.recordset.length === 0) return res.status(404).json({ error: "Not found" });
+                if (check.recordset[0].RequestorEmail !== req.user.email) return res.status(403).json({ error: "Unauthorized" });
+            }
+            await pool.request().input('w', WorkerID).query("DELETE FROM Workers WHERE WorkerID=@w");
+            res.json({ success: true });
+        }
+        else {
+            const cur = await pool.request().input('w', WorkerID).query("SELECT Status, DataJSON FROM Workers WHERE WorkerID=@w");
+            if (cur.recordset.length === 0) return res.status(404).json({ error: "Worker not found" });
+            let st = cur.recordset[0].Status;
+            let dataObj = JSON.parse(cur.recordset[0].DataJSON);
+            let appBy = null; let appOn = null;
+
+            if (Action === 'approve') {
+                if (req.user.role === 'Requester') return res.status(403).json({ error: "Unauthorized" });
+                if (st.includes('Pending Review')) st = st.replace('Review', 'Approval');
+                else if (st.includes('Pending Approval')) {
+                    st = 'Approved';
+                    appBy = req.user.name; appOn = getNowIST();
+                    dataObj.Current = { ...dataObj.Pending, ApprovedBy: appBy, ApprovedAt: appOn };
+                    dataObj.Pending = null;
+                }
+            } else if (Action === 'reject') { st = 'Rejected'; dataObj.Pending = null; }
+
+            await pool.request().input('w', WorkerID).input('s', st).input('j', JSON.stringify(dataObj)).input('aby', sql.NVarChar, appBy).input('aon', sql.NVarChar, appOn).query("UPDATE Workers SET Status=@s, DataJSON=@j, ApprovedBy=@aby, ApprovedOn=@aon WHERE WorkerID=@w");
+            res.json({ success: true });
+        }
+    } catch (e) { res.status(500).json({ error: "Internal Server Error" }); }
+});
+
+app.post('/api/get-workers', authenticateToken, async (req, res) => {
+    try {
+        const pool = await getConnection();
+        const r = await pool.request().query("SELECT * FROM Workers");
+        const list = r.recordset.map(w => {
+            const d = JSON.parse(w.DataJSON);
+            const details = d.Pending || d.Current || {};
+            details.IDType = w.IDType || details.IDType;
+            details.ApprovedBy = w.ApprovedBy || details.ApprovedBy;
+            details.ApprovedAt = w.ApprovedOn || details.ApprovedAt;
+            return { ...details, WorkerID: w.WorkerID, Status: w.Status, RequestorEmail: w.RequestorEmail, IsEdit: w.Status.includes('Edit') };
+        });
+        if (req.body.context === 'permit_dropdown') res.json(list.filter(w => w.Status === 'Approved'));
+        else {
+            if (req.user.role === 'Requester') res.json(list.filter(w => w.RequestorEmail === req.user.email || w.Status === 'Approved'));
+            else res.json(list);
+        }
+    } catch (e) { res.status(500).json({ error: "Internal Server Error" }); }
+});
+
+app.post('/api/add-user', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'Approver') return res.sendStatus(403);
+    try {
+        const pool = await getConnection();
+        const check = await pool.request().input('e', req.body.email).query("SELECT * FROM Users WHERE Email=@e");
+        if (check.recordset.length) return res.status(400).json({ error: "User Exists" });
+        const hashedPassword = await bcrypt.hash(req.body.password, 10);
+        await pool.request().input('n', req.body.name).input('e', req.body.email).input('r', req.body.role).input('p', hashedPassword).query("INSERT INTO Users (Name,Email,Role,Password) VALUES (@n,@e,@r,@p)");
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: "Internal Server Error" }); }
+});
+
+app.post('/api/change-password', authenticateToken, async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        const pool = await getConnection();
+        const r = await pool.request().input('e', req.user.email).query("SELECT * FROM Users WHERE Email=@e");
+        if (!r.recordset.length) return res.status(404).json({error: "User not found"});
+        const user = r.recordset[0];
+        if (!(await bcrypt.compare(currentPassword, user.Password))) return res.status(400).json({error: "Invalid current password"});
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await pool.request().input('p', hashedPassword).input('e', req.user.email).query("UPDATE Users SET Password=@p, LastPasswordChange=GETDATE() WHERE Email=@e");
+        res.json({success: true});
+    } catch(e) { res.status(500).json({error: "Internal Server Error"}); }
+});
+
+app.post('/api/permit-data', authenticateToken, async (req, res) => { 
+    try { 
+        const pool = await getConnection(); 
+        const r = await pool.request().input('p', sql.NVarChar, req.body.permitId).query("SELECT * FROM Permits WHERE PermitID=@p"); 
+        if (r.recordset.length) {
+            const jsonStr = r.recordset[0].FullDataJSON;
+            const data = jsonStr ? JSON.parse(jsonStr) : {};
+            res.json({ ...data, Status: r.recordset[0].Status, RenewalsJSON: r.recordset[0].RenewalsJSON, RequireRenewalPhotos: data.RequireRenewalPhotos || 'N', FullDataJSON: null }); 
+        } else res.json({ error: "404" }); 
+    } catch (e) { res.status(500).json({ error: "Internal Server Error" }) } 
+});
+
+app.post('/api/map-data', authenticateToken, async (req, res) => {
+    try {
+        const pool = await getConnection();
+        const r = await pool.request().query("SELECT PermitID, FullDataJSON, Latitude, Longitude FROM Permits WHERE Status='Active'");
+        res.json(r.recordset.map(x => ({ PermitID: x.PermitID, lat: parseFloat(x.Latitude), lng: parseFloat(x.Longitude), ...JSON.parse(x.FullDataJSON) })));
+    } catch (e) { res.status(500).json({ error: "Internal Server Error" }) }
+});
+
+app.post('/api/stats', authenticateToken, async (req, res) => {
+    try {
+        const pool = await getConnection();
+        const r = await pool.request().query("SELECT Status, WorkType FROM Permits");
+        const s = {}, t = {};
+        r.recordset.forEach(x => { s[x.Status] = (s[x.Status] || 0) + 1; t[x.WorkType] = (t[x.WorkType] || 0) + 1; });
+        res.json({ success: true, statusCounts: s, typeCounts: t });
+    } catch (e) { res.status(500).json({ error: "Internal Server Error" }) }
+});
+
+app.get('/api/download-excel', authenticateToken, async (req, res) => {
+    try {
+        const pool = await getConnection();
+        const result = await pool.request().query("SELECT * FROM Permits ORDER BY Id DESC");
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet('Permits');
+        sheet.columns = [ { header: 'Permit ID', key: 'id', width: 15 }, { header: 'Status', key: 'status', width: 20 }, { header: 'Work', key: 'wt', width: 25 }, { header: 'Requester', key: 'req', width: 25 }, { header: 'Location', key: 'loc', width: 30 }, { header: 'Vendor', key: 'ven', width: 20 }, { header: 'Valid From', key: 'vf', width: 20 }, { header: 'Valid To', key: 'vt', width: 20 } ];
+        sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+        sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFED7D31' } };
+        result.recordset.forEach(r => {
+            const d = r.FullDataJSON ? JSON.parse(r.FullDataJSON) : {};
+            sheet.addRow({ id: r.PermitID, status: r.Status, wt: d.WorkType || '-', req: d.RequesterName || '-', loc: d.ExactLocation || '-', ven: d.Vendor || '-', vf: formatDate(r.ValidFrom), vt: formatDate(r.ValidTo) });
+        });
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=IndianOil_Permits.xlsx');
+        await workbook.xlsx.write(res);
+        res.end();
+    } catch (e) { res.status(500).send("Internal Server Error"); }
+});
+
+app.get('/api/download-pdf/:id', authenticateToken, async (req, res) => {
+    try {
+        const pool = await getConnection();
+        const result = await pool.request().input('p', req.params.id).query("SELECT * FROM Permits WHERE PermitID = @p");
+        if (!result.recordset.length) return res.status(404).send('Not Found');
+        const p = result.recordset[0];
+        if (req.user.role === 'Requester' && p.RequesterEmail !== req.user.email) return res.status(403).send("Unauthorized: You cannot access this permit.");
+        if ((p.Status === 'Closed' || p.Status.includes('Closure')) && p.FinalPdfUrl) {
+            if (!containerClient) { console.error("Azure Container Client not initialized"); return res.status(500).send("Storage Error"); }
+            try {
+                const blobName = `closed-permits/${p.PermitID}_FINAL.pdf`;
+                const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+                if (!await blockBlobClient.exists()) return res.status(404).send("Archived PDF not found.");
+                const downloadBlockBlobResponse = await blockBlobClient.download(0);
+                res.setHeader('Content-Type', 'application/pdf');
+                res.setHeader('Content-Disposition', `attachment; filename=${p.PermitID}.pdf`);
+                downloadBlockBlobResponse.readableStreamBody.pipe(res);
+                return;
+            } catch (azureError) { console.error("Azure Download Error:", azureError.message); return res.status(500).send("Error retrieving file from storage."); }
+        }
+        const d = p.FullDataJSON ? JSON.parse(p.FullDataJSON) : {};
+        const renewals = p.RenewalsJSON ? JSON.parse(p.RenewalsJSON) : [];
+        const doc = new PDFDocument({ margin: 30, size: 'A4', bufferPages: true });
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=${p.PermitID}.pdf`);
+        doc.pipe(res);
+        await drawPermitPDF(doc, p, d, renewals);
+        doc.end();
+    } catch (e) { console.error(e); if (!res.headersSent) res.status(500).send("Internal Server Error"); }
+});
+
+app.get('/api/view-photo/:filename', authenticateToken, async (req, res) => {
+    try {
+        const filename = req.params.filename;
+        const permitId = filename.split('-')[0] + '-' + filename.split('-')[1];
+        if (!containerClient) return res.status(500).send("Storage not configured");
+        if (req.user.role === 'Requester') {
+             const pool = await getConnection();
+             const r = await pool.request().input('p', sql.NVarChar, permitId).query("SELECT RequesterEmail FROM Permits WHERE PermitID=@p");
+             if (r.recordset.length === 0 || r.recordset[0].RequesterEmail !== req.user.email) return res.status(403).send("Unauthorized: You do not have permission to view this photo.");
+        }
+        const blockBlobClient = containerClient.getBlockBlobClient(filename);
+        if (!await blockBlobClient.exists()) return res.status(404).send("Photo not found");
+        const downloadBlockBlobResponse = await blockBlobClient.download(0);
+        res.setHeader('Content-Type', downloadBlockBlobResponse.contentType || 'image/jpeg');
+        downloadBlockBlobResponse.readableStreamBody.pipe(res);
+    } catch (e) { console.error("Photo retrieval error:", e.message); res.status(500).send("Error retrieving photo"); }
 });
 
 // --- 8. SERVE FRONTEND (WITH NONCE) ---

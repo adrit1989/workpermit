@@ -73,7 +73,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const REFRESH_SECRET = process.env.REFRESH_SECRET || (process.env.JWT_SECRET + "_refresh");
 const AZURE_CONN_STR = process.env.AZURE_STORAGE_CONNECTION_STRING;
 
-// --- FIX: RATE LIMITER CRASH PREVENTION ---
+// RATE LIMIT
 const safeKeyGenerator = (req) => {
     return req.ip ? req.ip.replace(/:\d+$/, '') : req.ip;
 };
@@ -226,7 +226,7 @@ async function uploadToAzure(buffer, blobName, mimeType = "image/jpeg") {
 }
 
 /* =====================================================
-   PDF GENERATOR (Restored Full Logic)
+   PDF GENERATOR
 ===================================================== */
 
 async function drawPermitPDF(doc, p, d, renewalsList) {
@@ -869,11 +869,15 @@ app.post('/api/dashboard', authenticateAccess, async (req, res) => {
         FinalPdfUrl: x.FinalPdfUrl
       }
     });
-    const f = (role === 'Requester')
-      ? p.filter(x => x.RequesterEmail === email)
-      : p;
     
-    // --- FIX: DASHBOARD SORTING (NUMERIC) ---
+    // --- UPDATED: STRICT ASSIGNMENT FILTERING FOR ALL ROLES ---
+    const f = p.filter(x => {
+        if (role === 'Requester') return x.RequesterEmail === email;
+        if (role === 'Reviewer') return x.ReviewerEmail === email;
+        if (role === 'Approver') return x.ApproverEmail === email;
+        return false;
+    });
+    
     res.json(f.sort((a,b) => {
         const numA = parseInt(a.PermitID.split('-')[1] || 0);
         const numB = parseInt(b.PermitID.split('-')[1] || 0);
@@ -1290,8 +1294,10 @@ app.get('/api/download-pdf/:id', authenticateAccess, async (req, res) => {
 
     const p = result.recordset[0];
 
-    if (req.user.role==='Requester' && p.RequesterEmail!==req.user.email)
-      return res.status(403).send("Unauthorized");
+    // --- UPDATED: STRICT ACCESS CHECK FOR PDF DOWNLOAD ---
+    if (req.user.role === 'Requester' && p.RequesterEmail !== req.user.email) return res.status(403).send("Unauthorized");
+    if (req.user.role === 'Reviewer' && p.ReviewerEmail !== req.user.email) return res.status(403).send("Unauthorized");
+    if (req.user.role === 'Approver' && p.ApproverEmail !== req.user.email) return res.status(403).send("Unauthorized");
 
     // REFERENCE LOGIC: Check Blob Storage for closed permits
     if ((p.Status==='Closed' || p.Status.includes('Closure')) && p.FinalPdfUrl) {
@@ -1339,14 +1345,16 @@ app.get('/api/view-photo/:filename', authenticateAccess, async (req, res) => {
 
     if (!containerClient) return res.status(500).send("Storage not configured");
 
-    if (req.user.role==='Requester') {
-      const pool = await getConnection();
-      const r = await pool.request().input('p', sql.NVarChar, permitId)
-        .query("SELECT RequesterEmail FROM Permits WHERE PermitID=@p");
-      if (!r.recordset.length || r.recordset[0].RequesterEmail!==req.user.email) {
-        return res.status(403).send("Unauthorized");
-      }
-    }
+    const pool = await getConnection();
+    const r = await pool.request().input('p', sql.NVarChar, permitId).query("SELECT RequesterEmail, ReviewerEmail, ApproverEmail FROM Permits WHERE PermitID=@p");
+    
+    if (!r.recordset.length) return res.status(404).send("Permit Not Found");
+    const p = r.recordset[0];
+
+    // --- UPDATED: STRICT ACCESS CHECK FOR PHOTO VIEW ---
+    if (req.user.role === 'Requester' && p.RequesterEmail !== req.user.email) return res.status(403).send("Unauthorized");
+    if (req.user.role === 'Reviewer' && p.ReviewerEmail !== req.user.email) return res.status(403).send("Unauthorized");
+    if (req.user.role === 'Approver' && p.ApproverEmail !== req.user.email) return res.status(403).send("Unauthorized");
 
     const blob = containerClient.getBlockBlobClient(filename);
     if (!await blob.exists()) return res.status(404).send("Photo not found");

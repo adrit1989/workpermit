@@ -5,56 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>ERPL Mainline Permit</title>
     
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/public/app.css">
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyADwuqMDCwNSaZKBnWURDCYdqlMxfiWBnU" async></script>
     
     <style nonce="NONCE_PLACEHOLDER">
-        body { background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 16px; -webkit-tap-highlight-color: transparent; }
+        /* Utility overrides if app.css misses them */
+        .hidden { display: none !important; }
         .glass { background: white; padding: 1rem; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 1rem; border: 1px solid #e5e7eb; }
-        input, select, textarea { width: 100%; border: 1px solid #d1d5db; padding: 10px 12px; border-radius: 8px; font-size: 1rem; background: #fff; margin-bottom: 0.5rem; }
-        input:focus, select:focus, textarea:focus { border-color: #ea580c; outline: none; ring: 2px solid #fdba74; }
-        input:disabled, select:disabled, textarea:disabled { background-color: #f9fafb; color: #6b7280; border-color: #e5e7eb; }
-        button { touch-action: manipulation; transition: transform 0.1s; cursor: pointer; }
-        button:active { transform: scale(0.98); }
-        .section-title { font-weight: 800; color: #c2410c; margin: 1.5rem 0 1rem 0; border-bottom: 2px solid #fdba74; padding-bottom: 0.5rem; font-size: 1.1rem; }
         .loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); display: none; justify-content: center; align-items: center; z-index: 2000; font-size: 1.5rem; color: #ea580c; font-weight: bold; flex-direction: column; gap: 10px; }
         
-        .btn-pdf { display: inline-block; padding: 8px 12px; background-color: #dc2626; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 0.8rem; text-align: center; cursor: pointer; }
-        .btn-pdf:hover { background-color: #b91c1c; }
-
-        /* Responsive Tables */
-        @media (max-width: 768px) {
-            .mobile-table thead { display: none; }
-            .mobile-table tr { display: block; margin-bottom: 1rem; background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1rem; position: relative; }
-            .mobile-table td { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f3f4f6; padding: 0.75rem 0; text-align: right; }
-            .mobile-table td:last-child { border-bottom: none; padding-bottom: 0; }
-            .mobile-table td::before { content: attr(data-label); font-weight: 600; margin-right: 1rem; color: #6b7280; flex-shrink: 0; }
-            .checklist-row { flex-direction: column; align-items: flex-start; }
-            #actions { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid #e5e7eb; padding: 1rem; z-index: 100; flex-direction: column; gap: 0.5rem; }
-            #actions button { width: 100%; padding: 12px; font-size: 1.1rem; }
-            #view-map { flex-direction: column; }
-            #map-list { height: 35%; width: 100%; order: 2; border-top: 2px solid #ccc; }
-            #map-container { height: 65%; width: 100%; order: 1; }
-        }
-
-        @media (min-width: 769px) {
-            .desktop-container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-            table.mobile-table { width: 100%; border-collapse: collapse; display: table; }
-            table.mobile-table thead { display: table-header-group; background: #ea580c; color: white; }
-            table.mobile-table tr { display: table-row; border: none; background: transparent; }
-            table.mobile-table th { background: #ea580c; color: white; padding: 12px; text-align: left; border-bottom: 2px solid #c2410c; }
-            table.mobile-table td { display: table-cell; border-bottom: 1px solid #e5e7eb; padding: 12px; vertical-align: top; }
-            #view-map { flex-direction: row; }
-            #map-list { width: 350px; height: 100%; border-right: 1px solid #ddd; overflow-y: auto; position: static; }
-            #map-container { flex: 1; height: 100%; position: static; }
-        }
+        /* Specific dynamic styles */
+        .marked-deleted { text-decoration: line-through; color: red; opacity: 0.6; }
     </style>
 </head>
 <body>
     <div id="loader" class="loader">
         <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-orange-600 mx-auto mb-2"></div>
-        <div class="font-bold text-orange-600">Processing...</div>
+        <div>Processing...</div>
     </div>
 
     <div id="view-login" class="flex items-center justify-center min-h-screen p-4 bg-orange-50">
@@ -82,7 +51,10 @@
     </div>
 
     <div id="app-container" class="max-w-7xl mx-auto p-2 pb-24 hidden desktop-container">
-        <div class="mb-4"><img src="/public/safety_banner.png" class="w-full h-auto rounded-xl shadow-lg border-2 border-orange-600 object-cover"></div>
+        
+        <div class="mb-4">
+            <img src="/public/safety_banner.png" alt="Golden Safety Rules" class="w-full h-auto rounded-xl shadow-lg border-2 border-orange-600 object-cover">
+        </div>
         
         <div class="flex justify-between items-center mb-4 bg-orange-600 p-4 rounded-xl shadow-lg text-white sticky top-2 z-40">
            <div class="flex items-center gap-3">
@@ -186,7 +158,7 @@
                  <div id="assigned-worker-audit" class="overflow-x-auto"></div>
             </div>
 
-            <form id="pf" class="space-y-4">
+            <form id="pf" class="space-y-4" enctype="multipart/form-data">
                 <input type="hidden" id="PermitID" name="PermitID">
                 <input type="hidden" id="Status" name="Status">
                 
@@ -197,7 +169,6 @@
                         <div><label class="text-xs font-bold text-gray-500">Specific Work</label><input name="WorkTypeOther" id="WorkTypeOther"></div>
                         <div><label class="text-xs font-bold text-gray-500">Location (GPS) - Optional</label><div class="flex gap-2"><input name="ExactLocation" id="ExactLocation" class="flex-1" placeholder="Coords (Optional)"><button type="button" id="btn-get-geo" class="bg-orange-100 text-orange-600 px-4 rounded-lg font-bold border border-orange-200">📍 GPS</button></div></div>
                         <input type="hidden" id="Latitude" name="Latitude"><input type="hidden" id="Longitude" name="Longitude">
-                        
                         <div><label class="text-xs font-bold text-gray-500">Location Details</label><input name="WorkLocationDetail" id="WorkLocationDetail"></div>
                         <div><label class="text-xs font-bold text-gray-500">Section/Unit</label><input name="LocationUnit" id="LocationUnit" value="Pipeline"></div>
                         <div><label class="text-xs font-bold text-gray-500">Valid From</label><input type="datetime-local" name="ValidFrom" id="ValidFrom"></div>
@@ -216,7 +187,7 @@
                 
                 <div id="init-renewal-wrapper" class="glass border-l-4 border-purple-500 bg-purple-50 hidden">
                     <label class="flex items-center gap-2 font-bold cursor-pointer text-purple-800">
-                        <input type="checkbox" name="InitRen" value="Y" id="chk-init-renewal" class="w-5 h-5"> Request 1st Renewal with Permit
+                        <input type="checkbox" id="chk-init-renewal" name="InitRen" value="Y" class="w-5 h-5"> Request 1st Renewal with Permit
                     </label>
                     <div id="div-init-renewal" class="hidden mt-3 p-3 bg-white rounded border border-purple-200">
                         <div class="text-xs font-bold text-gray-500 mb-2">Renewal Details</div>
@@ -253,7 +224,7 @@
                 <div class="glass"><h3 class="section-title">2. Checklists</h3><div id="checklists-wrapper" class="space-y-4"></div></div>
                 
                 <div class="glass" id="worker-select-section">
-                    <h3 class="section-title">Workers (Approved)</h3>
+                    <h3 class="section-title">Workers</h3>
                     <div id="worker-checkboxes" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
                     <div id="worker-readonly-table" class="hidden overflow-x-auto"><table class="mobile-table w-full text-xs text-left"><thead class="hidden md:table-header-group"><tr><th>Name</th><th>Gender</th><th>Age</th><th>Contractor</th></tr></thead><tbody class="divide-y"></tbody></table></div>
                 </div>
@@ -307,7 +278,7 @@
                                 <span id="odd-hour-req-status" class="text-xs font-bold text-gray-600"></span>
                             </div>
                             <label class="flex items-center gap-2 cursor-pointer p-2 bg-white rounded border border-indigo-200">
-                                <input type="checkbox" id="odd-hour-allow-check" onchange="window.toggleRenewalApproveBtn()" class="w-5 h-5 accent-indigo-600">
+                                <input type="checkbox" id="odd-hour-allow-check" class="w-5 h-5 accent-indigo-600">
                                 <span class="text-sm font-bold text-indigo-800">I allow work during Odd Hours</span>
                             </label>
                         </div>
@@ -352,7 +323,7 @@
                 
                 <div id="closure-section" class="glass hidden">
                     <h3 class="section-title">Closure</h3>
-                    <label class="flex items-center gap-2 mb-4 font-bold text-red-600 p-2 bg-red-50 rounded" id="lbl-site-restored"><input type="checkbox" id="Site_Restored_Check" class="w-5 h-5"> Site Restored & Cleaned</label>
+                    <label class="flex items-center gap-2 mb-4 font-bold text-red-600 p-2 bg-red-50 rounded" id="lbl-site-restored"><input type="checkbox" id="Site_Restored_Check" name="Site_Restored_Check" class="w-5 h-5"> Site Restored & Cleaned</label>
                     <div id="div-closure-req" class="hidden space-y-2"><label class="text-xs font-bold text-gray-500">Requester Remarks</label><textarea id="Closure_Requestor_Remarks" placeholder="Remarks" class="w-full"></textarea><span id="ts-clos-req" class="text-xs text-gray-400 block text-right"></span></div>
                     <div id="div-closure-rev" class="hidden mt-4 space-y-2"><label class="text-xs font-bold text-gray-500">Reviewer Remarks</label><textarea id="Closure_Reviewer_Remarks" placeholder="Remarks" class="w-full"></textarea><span id="ts-clos-rev" class="text-xs text-gray-400 block text-right"></span></div>
                     <div id="div-closure-app" class="hidden mt-4 space-y-2"><label class="text-xs font-bold text-gray-500">Approver Remarks</label><textarea id="Closure_Approver_Remarks" placeholder="Remarks" class="w-full"></textarea><span id="ts-clos-app" class="text-xs text-gray-400 block text-right"></span></div>
@@ -397,10 +368,12 @@
         const HAZARDS = ["Lack of Oxygen", "H2S", "Toxic Gases", "Combustible gases", "Pyrophoric Iron", "Corrosive Chemicals", "cave in formation", "Others"];
         const PPE = ["Helmet", "Safety Shoes", "Hand gloves", "Boiler suit", "Face Shield", "Apron", "Goggles", "Dust Respirator", "Fresh Air Mask", "Lifeline", "Safety Harness", "Airline", "Earmuff", "IFR"];
 
+        // --- DOM LOADED ---
         document.addEventListener('DOMContentLoaded', () => {
             loadUsers();
             renderUI();
 
+            // Event Listeners - Secure Attachment
             const loginForm = document.getElementById('login-form');
             if(loginForm) loginForm.addEventListener('submit', (e) => { e.preventDefault(); handleLogin(); });
 
@@ -446,6 +419,7 @@
             document.getElementById('ValidTo')?.addEventListener('change', checkDate);
         });
 
+        // --- HELPERS ---
         function escapeHtml(text) {
             if (!text) return text;
             return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -455,6 +429,7 @@
         function safeSet(id, val) { const el = document.getElementById(id); if(el) el.value = val; }
         function getNow() { return new Date().toLocaleString("en-GB").replace(',',''); }
 
+        // --- API ---
         async function apiCall(ep, meth="GET", body=null) {
             document.getElementById('loader').style.display = 'flex';
             try {
@@ -471,6 +446,7 @@
             } finally { document.getElementById('loader').style.display = 'none'; }
         }
 
+        // --- CORE LOGIC ---
         async function loadUsers() {
             try { const u = await apiCall('/users'); usersData = u; loadUserNames(); } catch(e){}
         }
@@ -527,6 +503,7 @@
                 const tr = document.createElement('tr');
                 tr.className = "cursor-pointer hover:bg-orange-50 transition border-b";
                 
+                // Action Button Logic
                 let actionBtn = document.createElement('span');
                 actionBtn.className = "bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-bold";
                 actionBtn.innerText = "OPEN";
@@ -535,9 +512,10 @@
                     actionBtn = document.createElement('button');
                     actionBtn.className = "btn-pdf";
                     actionBtn.innerText = "Download PDF";
-                    actionBtn.onclick = (e) => { e.stopPropagation(); downloadSecurePDF(p.PermitID); };
+                    actionBtn.addEventListener('click', (e) => { e.stopPropagation(); downloadSecurePDF(p.PermitID); });
                 }
 
+                // Status Color
                 let statusClass = p.Status.includes('Pending') ? 'text-red-600' : (p.Status==='Active' ? 'text-green-600' : 'text-gray-600');
                 
                 tr.innerHTML = `
@@ -565,6 +543,7 @@
             });
         }
 
+        // --- RENDER UTILS ---
         function renderUI() {
             let h = '';
             ['A','B','C','D'].forEach(sec => {
@@ -575,6 +554,7 @@
                 h += `</div>`;
             });
             document.getElementById('checklists-wrapper').innerHTML = h;
+            // Attach toggle listeners
             document.querySelectorAll('.sec-toggle').forEach(r => r.addEventListener('change', (e) => {
                 const val = e.target.value; const sec = e.target.dataset.sec;
                 document.querySelectorAll(`input[name^="${sec}_Q"][value="${val}"]`).forEach(rn => rn.checked = true);
@@ -589,6 +569,7 @@
             document.getElementById('ppe-container').innerHTML = PPE.map(p => `<label class="flex items-center gap-2 border p-3 rounded-lg bg-gray-50 hover:bg-blue-50 transition"><input type="checkbox" name="P_${p.replace(/ /g,'')}" value="Y" class="w-5 h-5 text-blue-600"> <span class="text-sm font-medium">${p}</span></label>`).join('');
         }
 
+        // --- MAP & GEO ---
         function getGeo() {
             if (!navigator.geolocation) return alert("Geolocation not supported");
             const btn = document.getElementById("btn-get-geo");
@@ -618,6 +599,7 @@
         }
         function showMap() { document.getElementById("view-dashboard").classList.add('hidden'); document.getElementById("view-map").classList.remove('hidden'); loadMapData(); }
         
+        // --- WORKER FUNCTIONS ---
         function toggleWorkerMode() {
             const dash = document.getElementById("view-dashboard");
             const work = document.getElementById("view-worker-management");
@@ -670,6 +652,7 @@
                     row.innerHTML = `<td>${escapeHtml(w.Name)}</td><td>${escapeHtml(w.Father)}</td><td>${w.IDType}: ${w.ID}</td><td>${w.Contact}</td><td>${w.RequestorName}</td><td>${w.Status}</td><td>${actionBtns}</td>`;
                     t.appendChild(row);
                 });
+                // Attach dynamic listeners for workers table
                 document.querySelectorAll('.btn-w-app').forEach(b => b.addEventListener('click', () => workerAction(b.dataset.id, 'approve')));
                 document.querySelectorAll('.btn-w-rej').forEach(b => b.addEventListener('click', () => workerAction(b.dataset.id, 'reject')));
                 document.querySelectorAll('.btn-w-del').forEach(b => b.addEventListener('click', () => workerAction(b.dataset.id, 'delete')));
@@ -678,6 +661,7 @@
         async function workerAction(id, act) { await apiCall('/save-worker', 'POST', {WorkerID:id, Action:act, Role:currentUser.Role, ApproverName: currentUser.name}); loadWorkers('dashboard'); }
         function toggleOtherID() { const val = document.getElementById("w-id-type").value; document.getElementById("w-id-type-other").classList.toggle("hidden", val !== "Other"); }
 
+        // --- OPEN PERMIT (Simplified) ---
         async function openPermit(id) {
              const p = await apiCall('/permit-data', 'POST', {permitId:id});
              currentPermitId = id; currentPermitIOCLData = p.IOCLSupervisors || []; permitRequirePhoto = (p.RequireRenewalPhotos === 'Y');
@@ -690,6 +674,7 @@
              rS.innerHTML=""; aS.innerHTML=""; 
              if(usersData){ usersData.Reviewers.forEach(u=>rS.innerHTML+=`<option value="${u.email}">${escapeHtml(u.name)}</option>`); usersData.Approvers.forEach(u=>aS.innerHTML+=`<option value="${u.email}">${escapeHtml(u.name)}</option>`); }
 
+             // Populate Form
              document.querySelectorAll('#pf input, #pf select, #pf textarea').forEach(e => {
                 if(e.type==='radio'){ if(e.value===p[e.name]) e.checked=true; } 
                 else if(e.type==='checkbox'){ e.checked=(p[e.name]==='Y'); } 
@@ -697,17 +682,20 @@
                 e.disabled=true; 
              });
 
-             await loadWorkers('permit_dropdown'); 
+             await loadWorkers('permit_dropdown'); // Just to clear checkboxes
              const workersArr = p.SelectedWorkers;
              currentPermitWorkers = workersArr;
              
+             // Renewals
              const rens = JSON.parse(p.RenewalsJSON || "[]");
              currentRenewalCount = rens.length;
              document.querySelector("#table-renewals tbody").innerHTML = rens.map(r => `<tr><td>Start: ${r.valid_from}</td><td>${r.status}</td></tr>`).join('');
              if(rens.length > 0) document.getElementById("renewals-section").classList.remove('hidden');
              
+             // Supervisors
              renderIOCLTable();
 
+             // Logic for Buttons
              const actionsDiv = document.getElementById("actions");
              actionsDiv.innerHTML = "";
              
@@ -716,6 +704,7 @@
                   document.querySelectorAll('input, textarea, select').forEach(e=>e.disabled=false);
              }
              
+             // Reviewer Logic
              if(currentUser.Role === 'Reviewer' && p.Status === 'Pending Review') {
                  document.getElementById("fs-reviewer-section").classList.remove('hidden');
                  document.querySelectorAll('#fs-reviewer-section *, #hazards-section input').forEach(e=>e.disabled=false);
@@ -724,6 +713,7 @@
                  actionsDiv.append(b1, b2);
              }
 
+             // Approver Logic
              if(currentUser.Role === 'Approver' && p.Status === 'Pending Approval') {
                  document.getElementById("fs-approver-section").classList.remove('hidden');
                  document.getElementById("Approver_Remarks").disabled=false; 
@@ -732,6 +722,7 @@
                  actionsDiv.append(b1, b2);
              }
 
+             // Closure Logic (Reviewer)
              if(currentUser.Role === 'Reviewer' && p.Status === 'Closure Pending Review') {
                  document.getElementById("closure-section").classList.remove('hidden');
                  document.getElementById("div-closure-rev").classList.remove('hidden'); 
@@ -741,6 +732,7 @@
                  actionsDiv.append(b1, b2);
              }
 
+             // Closure Logic (Approver)
              if(currentUser.Role === 'Approver' && p.Status === 'Closure Pending Approval') {
                  document.getElementById("closure-section").classList.remove('hidden');
                  document.getElementById("div-closure-app").classList.remove('hidden'); 
@@ -750,6 +742,7 @@
                  actionsDiv.append(b1, b2);
              }
              
+             // Requester Closure Init
              const last = rens[rens.length-1];
              if(currentUser.Role === 'Requester' && (p.Status === 'Active' || p.Status.includes('Renewal')) && (!last || !last.status.includes('pending'))) {
                  document.getElementById("closure-section").classList.remove('hidden');
@@ -757,12 +750,14 @@
                  document.getElementById("Closure_Requestor_Remarks").disabled = false; 
                  document.getElementById("Site_Restored_Check").disabled = false;
                  
+                 // Show Renewal Form as well
                  document.getElementById("form-renewal").classList.remove('hidden'); document.querySelectorAll('#form-renewal input').forEach(e => e.disabled = false);
                  
                  const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-6 py-3 rounded-lg font-bold shadow flex-1"; b1.innerText = "Job Complete"; b1.addEventListener('click', () => upd('initiate_closure'));
                  actionsDiv.appendChild(b1);
              }
 
+             // Show History
              document.getElementById("signature-history").classList.remove('hidden');
              setText("sig-app", p.Approver_Sig || 'Pending');
              setText("sig-clos", p.Closure_Approver_Sig || 'Pending');
@@ -777,6 +772,7 @@
              document.querySelectorAll('input[type="checkbox"]').forEach(c => { if(c.name) fd.set(c.name, c.checked ? "Y" : "N"); });
              fd.set("GSR_Accepted", "Y");
              
+             // Gather Workers
              const selectedWorkers = [];
              document.querySelectorAll('#worker-checkboxes input:checked').forEach(c => selectedWorkers.push(JSON.parse(c.value)));
              fd.append("SelectedWorkers", JSON.stringify(selectedWorkers));
@@ -804,6 +800,7 @@
              actionsDiv.appendChild(btn);
         }
         
+        // IOCL Rows Logic
         function addIOCLRow(containerId, data={}) {
             const div = document.createElement('div'); div.className = "flex gap-1 iocl-row items-center mb-1";
             div.innerHTML = `<input class="iocl-name border p-1" placeholder="Name" value="${data.name||''}"><input class="iocl-desig border p-1" placeholder="Desig"><input class="iocl-contact border p-1" placeholder="Contact"><button type="button" class="text-red-500 font-bold px-2">x</button>`;
@@ -822,6 +819,7 @@
             if(currentPermitIOCLData.length) document.getElementById("iocl-sup-display-section").classList.remove('hidden');
         }
 
+        // --- DOWNLOADS & VIEW PHOTO ---
         async function downloadSecurePDF(id) {
              try {
                  const res = await fetch(`${API}/download-pdf/${id}`, { headers: {'Authorization': `Bearer ${authToken}`} });
@@ -856,6 +854,7 @@
             finally { loader.style.display = 'none'; }
         }
 
+        // Logic functions like checkDate, checkRenewalTime etc remain same
         function checkDate() { 
              const vf=new Date(document.getElementById("ValidFrom").value); 
              const vt=new Date(document.getElementById("ValidTo").value); 
@@ -880,7 +879,6 @@
              const btn = document.getElementById("btn-approve-renewal");
              if(btn) btn.disabled = !chk.checked;
         }
-        
         async function submitRenewal(act) {
             const getVal = (id) => document.getElementById(id).value;
             const fd = new FormData();
@@ -894,15 +892,18 @@
             fd.append('precautions', getVal("RenewalPrec"));
             fd.append('rejectionReason', getVal("RenewalRemark"));
             
+            // Workers
             const selWorkers = []; 
             document.querySelectorAll('#renewal-worker-select input:checked').forEach(c => selWorkers.push(c.value)); 
             fd.append('renewalWorkers', JSON.stringify(selWorkers));
 
+            // Odd Hour
             if(!document.getElementById("odd-hour-agreement").classList.contains("hidden")) {
                  if(currentUser.Role === 'Requester' && !document.getElementById("OddHourSafetyCheck").checked) return alert("Agree to Odd Hour Safety");
                  fd.append('oddHourReq', 'Y');
             }
 
+            // Photo
             if(currentUser.Role === 'Requester') {
                 const fileInput = document.getElementById("ren-cam-sub");
                 const isPhotoMandatory = (currentRenewalCount > 0 && permitRequirePhoto);
@@ -914,7 +915,6 @@
             const json = await res.json();
             if(json.success) { alert("Done"); showDashboard(); } else alert(json.error);
         }
-
         function showAddUser() { document.getElementById("view-add-user").classList.remove('hidden'); }
         async function submitNewUser() {
             const body = {
@@ -926,21 +926,9 @@
             const res = await apiCall('/add-user', 'POST', body);
             if(res.success) { alert("User Added"); document.getElementById("view-add-user").classList.add('hidden'); }
         }
+        function showDashboard() { document.getElementById("view-form").classList.add('hidden'); document.getElementById("view-map").classList.add('hidden'); document.getElementById("view-dashboard").classList.remove('hidden'); loadDashboard(); }
+        async function loadStats() { const res=await apiCall('/stats','POST'); if(chartS)chartS.destroy(); chartS=new Chart(document.getElementById('chartStatus'),{type:'doughnut',data:{labels:Object.keys(res.statusCounts),datasets:[{data:Object.values(res.statusCounts)}]}}); }
 
-        function showDashboard() {
-             document.getElementById("view-form").classList.add('hidden');
-             document.getElementById("view-map").classList.add('hidden');
-             document.getElementById("view-dashboard").classList.remove('hidden');
-             loadDashboard();
-        }
-
-        async function loadStats() {
-             const res=await apiCall('/stats','POST');
-             if(chartS)chartS.destroy();
-             chartS=new Chart(document.getElementById('chartStatus'),{type:'doughnut',data:{labels:Object.keys(res.statusCounts),datasets:[{data:Object.values(res.statusCounts)}]}});
-             if(chartT)chartT.destroy();
-             chartT=new Chart(document.getElementById('chartType'),{type:'bar',data:{labels:Object.keys(res.typeCounts),datasets:[{label:'Types',data:Object.values(res.typeCounts)}]}});
-        }
     </script>
 </body>
 </html>

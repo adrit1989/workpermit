@@ -35,7 +35,7 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc: [
           "'self'",
-          // THE MAGIC: Allow only scripts with this specific random ID
+          // Javascript stays STRICT (Only run scripts with our random ID)
           (req, res) => `'nonce-${res.locals.nonce}'`,
           "https://cdn.tailwindcss.com",
           "https://cdn.jsdelivr.net",
@@ -45,7 +45,7 @@ app.use(
           "'self'",
           (req, res) => `'nonce-${res.locals.nonce}'`,
           "https://fonts.googleapis.com",
-          "'unsafe-inline'" // Required for Tailwind CSS CDN to function correctly
+          "'unsafe-inline'" // <--- CRITICAL FIX: Allows Tailwind CDN to inject styles
         ],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         imgSrc: ["'self'", "data:", "blob:", "https://maps.gstatic.com", "https://maps.googleapis.com"],
@@ -66,7 +66,6 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, cb) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return cb(null, true);
     if (allowedOrigins.indexOf(origin) === -1) {
       return cb(new Error('CORS Policy Blocked this Origin'), false);
@@ -78,9 +77,7 @@ app.use(cors({
 }));
 
 app.use(bodyParser.json({ limit: '50mb' }));
-
 // --- 4. STATIC FILES ---
-// Only serve the specific 'public' folder, never root
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
 // --- CONFIGURATION ---
@@ -117,7 +114,7 @@ if (AZURE_CONN_STR) {
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-// --- 6. AUTH MIDDLEWARE (With Revocation) ---
+// --- 6. AUTH MIDDLEWARE ---
 async function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; 
@@ -191,6 +188,7 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
         const startX = 30, startY = 30;
         doc.lineWidth(1);
         doc.rect(startX, startY, 535, 95).stroke();
+        
         doc.rect(startX, startY, 80, 95).stroke(); 
         
         // LOGO FIX
@@ -243,12 +241,7 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
     doc.text(`(iv) Description: ${d.Desc || '-'}`, 30, doc.y, { width: 535 }); doc.y += 20;
     doc.text(`(v) Site Contact: ${d.RequesterName} / ${d.EmergencyContact || 'NA'}`, 30, doc.y); doc.y += 15;
     
-    // ... Additional PDF fields ...
     doc.rect(25, startY - 5, 545, doc.y - startY + 5).stroke(); doc.y += 10;
-    
-    // Full Checklist rendering logic would be here, assuming it's included or you can add it back if needed
-    // For now, closing the doc to ensure PDF generation works
-    // (In your previous full code, the checklists were here - ensure they are present if you need them)
 }
 
 // --- API ROUTES ---
@@ -269,6 +262,7 @@ app.post('/api/login', loginLimiter, async (req, res) => {
     } catch (e) { res.status(500).json({ error: "Internal Server Error" }); }
 });
 
+// Public route for users to load in dropdown
 app.get('/api/users', async (req, res) => {
     try {
         const pool = await getConnection();
@@ -435,8 +429,7 @@ app.post('/api/save-permit', authenticateToken, upload.any(), async (req, res) =
             });
         }
         
-        // RENAMED TO FIX CRASH
-        const permitPayload = { ...req.body, SelectedWorkers: workers, PermitID: pid, CreatedDate: getNowIST(), GSR_Accepted: 'Y' };
+        const permitData = { ...req.body, SelectedWorkers: workers, PermitID: pid, CreatedDate: getNowIST(), GSR_Accepted: 'Y' };
         
         const q = pool.request()
             .input('p', sql.NVarChar, pid)
@@ -448,7 +441,7 @@ app.post('/api/save-permit', authenticateToken, upload.any(), async (req, res) =
             .input('vf', sql.DateTime, vf).input('vt', sql.DateTime, vt)
             .input('lat', sql.NVarChar, req.body.Latitude || null) 
             .input('lng', sql.NVarChar, req.body.Longitude || null) 
-            .input('j', sql.NVarChar(sql.MAX), JSON.stringify(permitPayload)) 
+            .input('j', sql.NVarChar(sql.MAX), JSON.stringify(permitData)) 
             .input('ren', sql.NVarChar(sql.MAX), JSON.stringify(renewalsArr));
 
         const chk = await pool.request().input('p', pid).query("SELECT Status FROM Permits WHERE PermitID=@p");
@@ -519,10 +512,10 @@ app.post('/api/update-status', authenticateToken, async (req, res) => {
 
 app.post('/api/renewal', authenticateToken, upload.any(), async (req, res) => {
     try {
-        // RENAMED TO FIX CRASH
         const { PermitID, action, rejectionReason, renewalWorkers, oddHourReq, ...renFields } = req.body;
         const userRole = req.user.role; 
         const userName = req.user.name;
+
         const pool = await getConnection();
         const cur = await pool.request().input('p', PermitID).query("SELECT RenewalsJSON, Status, ValidFrom, ValidTo FROM Permits WHERE PermitID=@p");
         if (cur.recordset[0].Status === 'Closed') return res.status(400).json({ error: "Permit is CLOSED." });

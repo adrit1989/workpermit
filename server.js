@@ -1390,7 +1390,93 @@ app.post('/api/stats', authenticateAccess, async (req, res) => {
     res.status(500).json({ error:"Internal Server Error" });
   }
 });
+/* =====================================================
+   RENEWAL LOGIC ROUTE (Missing)
+===================================================== */
+app.post('/api/renewal', authenticateAccess, upload.single('RenewalImage'), async (req, res) => {
+    try {
+        const { PermitID, action, rejectionReason } = req.body;
+        const pool = await getConnection();
+        
+        // 1. Fetch Current Permit
+        const cur = await pool.request().input('p', PermitID).query("SELECT Status, RenewalsJSON, FullDataJSON FROM Permits WHERE PermitID=@p");
+        if (!cur.recordset.length) return res.status(404).json({ error: "Permit not found" });
 
+        let renewals = JSON.parse(cur.recordset[0].RenewalsJSON || "[]");
+        const user = req.user.name;
+        const now = getNowIST();
+
+        // --- CASE A: APPROVE / REJECT EXISTING RENEWAL ---
+        if (action === 'approve' || action === 'reject') {
+            if (renewals.length === 0) return res.status(400).json({ error: "No renewal found" });
+            
+            let last = renewals[renewals.length - 1];
+            
+            if (action === 'approve') {
+                if (req.user.role === 'Reviewer') {
+                    last.status = 'pending_approval';
+                    last.rev_name = user;
+                    last.rev_at = now;
+                } else if (req.user.role === 'Approver') {
+                    last.status = 'approved';
+                    last.app_name = user;
+                    last.app_at = now;
+                }
+            } else {
+                last.status = 'rejected';
+                last.rej_reason = rejectionReason;
+                last.rej_by = user;
+            }
+
+            await pool.request()
+                .input('p', PermitID)
+                .input('ren', JSON.stringify(renewals))
+                .query("UPDATE Permits SET RenewalsJSON=@ren WHERE PermitID=@p");
+
+            return res.json({ success: true });
+        }
+
+        // --- CASE B: INITIATE NEW RENEWAL (Requester) ---
+        if (action === 'initiate') {
+            let photoUrl = null;
+            if (req.file) {
+                const blobName = `${PermitID}-REN-${Date.now()}.jpg`;
+                photoUrl = await uploadToAzure(req.file.buffer, blobName);
+            }
+
+            const newRen = {
+                status: 'pending_review',
+                valid_from: req.body.RenewalValidFrom,
+                valid_to: req.body.RenewalValidTo, // Mapping frontend field name
+                hc: req.body.hc,
+                toxic: req.body.toxic,
+                oxygen: req.body.oxygen,
+                precautions: req.body.precautions,
+                oddHourReq: req.body.oddHourReq || 'N',
+                worker_list: JSON.parse(req.body.renewalWorkers || "[]"),
+                req_name: user,
+                req_at: now,
+                photoUrl: photoUrl
+            };
+
+            renewals.push(newRen);
+
+            await pool.request()
+                .input('p', PermitID)
+                .input('ren', JSON.stringify(renewals))
+                .query("UPDATE Permits SET RenewalsJSON=@ren WHERE PermitID=@p");
+
+            log(`New Renewal Requested for ${PermitID} by ${user}`);
+            return res.json({ success: true });
+        }
+
+        res.status(400).json({ error: "Invalid Action" });
+
+    } catch (err) {
+        log("Renewal Error: " + err.message, 'ERROR');
+        res.status(500).json({ error: err.message });
+    }
+});
 app.get('/api/download-excel', authenticateAccess, async (req, res) => {
   try {
     const pool = await getConnection();

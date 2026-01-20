@@ -11,7 +11,7 @@ const ExcelJS = require('exceljs');
 const { BlobServiceClient } = require('@azure/storage-blob');
 const { getConnection, sql } = require('./db');
 
-// SECURITY
+// SECURITY PACKAGES
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs'); 
 const helmet = require('helmet');
@@ -22,6 +22,10 @@ const crypto = require('crypto');
 const app = express();
 app.set('trust proxy', 1); 
 app.use(cookieParser());
+
+/* =====================================================
+   SECURITY CONFIGURATION (CSP & CORS)
+===================================================== */
 
 /* --- NONCE CSP --- */
 app.use((req, res, next) => {
@@ -35,8 +39,8 @@ app.use(
       useDefaults: true,
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, "https://cdn.jsdelivr.net", "https://maps.googleapis.com"],
-        styleSrc: ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, "https://fonts.googleapis.com"],
+        scriptSrc: ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, "https://cdn.jsdelivr.net", "https://maps.googleapis.com", "https://cdn.tailwindcss.com"],
+        styleSrc: ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, "https://fonts.googleapis.com", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "blob:", "https://maps.gstatic.com", "https://maps.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         connectSrc: ["'self'", "https://maps.googleapis.com", "https://cdn.jsdelivr.net"],
@@ -73,7 +77,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const REFRESH_SECRET = process.env.REFRESH_SECRET || (process.env.JWT_SECRET + "_refresh");
 const AZURE_CONN_STR = process.env.AZURE_STORAGE_CONNECTION_STRING;
 
-// RATE LIMIT
+// RATE LIMITER (Safe IP Logic)
 const safeKeyGenerator = (req) => {
     return req.ip ? req.ip.replace(/:\d+$/, '') : req.ip;
 };
@@ -94,14 +98,7 @@ const loginLimiter = rateLimit({
 /* --- MULTER SETUP --- */
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowed = ["image/jpeg", "image/png"];
-    if (!allowed.includes(file.mimetype)) {
-      return cb(new Error("INVALID_FILE_TYPE"), false);
-    }
-    cb(null, true);
-  }
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
 /* --- AZURE BLOBS --- */
@@ -114,72 +111,6 @@ if (AZURE_CONN_STR) {
   } catch (err) {
     console.error("Blob Error:", err.message);
   }
-}
-
-/* =====================================================
-   TOKEN & AUTH FUNCTIONS
-===================================================== */
-
-function createAccessToken(user) {
-  return jwt.sign({
-    name: user.Name,
-    email: user.Email,
-    role: user.Role,
-    lastPwd: user.lastPwd
-  }, JWT_SECRET, { expiresIn: "15m" });
-}
-
-function createRefreshToken(user) {
-  return jwt.sign({ email: user.Email }, REFRESH_SECRET, { expiresIn: "30d" });
-}
-
-async function saveRefreshToken(email, token) {
-  const pool = await getConnection();
-  await pool.request()
-    .input('e', email)
-    .input('t', token)
-    .input('exp', new Date(Date.now() + 30 * 24 * 3600 * 1000))
-    .query("INSERT INTO UserRefreshTokens (Email, RefreshToken, ExpiresAt) VALUES (@e, @t, @exp)");
-}
-
-async function deleteRefreshToken(token) {
-  const pool = await getConnection();
-  await pool.request().input('t', token).query("DELETE FROM UserRefreshTokens WHERE RefreshToken=@t");
-}
-
-async function isRefreshValid(token) {
-  const pool = await getConnection();
-  const r = await pool.request().input('t', token).query("SELECT * FROM UserRefreshTokens WHERE RefreshToken=@t");
-  if (r.recordset.length === 0) return false;
-  return new Date(r.recordset[0].ExpiresAt) > new Date();
-}
-
-/* --- AUTH MIDDLEWARE --- */
-async function authenticateAccess(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(" ")[1];
-  if (!token) return res.status(401).json({ error: "No token" });
-
-  jwt.verify(token, JWT_SECRET, async (err, user) => {
-    if (err) return res.status(403).json({ error: "Invalid Token" });
-
-    const pool = await getConnection();
-    const r = await pool.request()
-      .input('e', sql.NVarChar, user.email)
-      .query('SELECT LastPasswordChange FROM Users WHERE Email=@e');
-
-    if (r.recordset.length === 0) return res.status(401).json({ error: "Unknown user" });
-
-    const dbLast = r.recordset[0].LastPasswordChange ?
-      Math.floor(new Date(r.recordset[0].LastPasswordChange).getTime() / 1000) : 0;
-
-    if (dbLast > (user.lastPwd || 0)) {
-      return res.status(401).json({ error: "Session expired" });
-    }
-
-    req.user = user;
-    next();
-  });
 }
 
 /* =====================================================
@@ -211,37 +142,33 @@ function getOrdinal(n) {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-/* =====================================================
-   HELPER FUNCTIONS (SECURE UPLOAD)
-===================================================== */
-
-// ... (keep getNowIST, formatDate, getOrdinal exactly where they are) ...
-
+// --- SECURE UPLOAD HELPER (FILE-TYPE) ---
 async function uploadToAzure(buffer, blobName, isSystemPdf = false) {
   if (!containerClient) return null;
   try {
-    // 1. Dynamic Import
+    // 1. Dynamic Import (ESM fix for CommonJS environment)
     const { fileTypeFromBuffer } = await import('file-type');
     
-    // 2. Inspect the Buffer's Magic Numbers
+    // 2. Inspect Buffer Magic Numbers
     const type = await fileTypeFromBuffer(buffer);
 
     // 3. Define Allowed Types
-    // DEFAULT: Only Images (For User Uploads)
+    // Default: Images only (User Uploads)
     let allowedTypes = ['image/jpeg', 'image/png'];
 
-    // EXCEPTION: Allow PDF only if the Server explicitly requested it (for archiving)
+    // Exception: Allow PDF ONLY if System explicitly requests it (Archiving)
     if (isSystemPdf === 'application/pdf' || isSystemPdf === true) {
         allowedTypes.push('application/pdf');
     }
 
     // 4. Security Check
+    // If type is undefined (unknown binary) or not in allowed list -> Block
     if (!type || !allowedTypes.includes(type.mime)) {
         console.error(`[SECURITY ALERT] Blocked upload for ${blobName}. Detected: ${type ? type.mime : 'Unknown'}. Allowed: ${allowedTypes.join(', ')}`);
         return null;
     }
 
-    // 5. Upload using the VERIFIED Mime Type
+    // 5. Upload with Verified Mime
     const blockBlobClient = containerClient.getBlockBlobClient(blobName);
     await blockBlobClient.uploadData(buffer, {
       blobHTTPHeaders: { blobContentType: type.mime }
@@ -256,7 +183,74 @@ async function uploadToAzure(buffer, blobName, isSystemPdf = false) {
 }
 
 /* =====================================================
-   PDF GENERATOR
+   TOKEN & AUTH FUNCTIONS
+===================================================== */
+
+function createAccessToken(user) {
+  return jwt.sign({
+    name: user.Name,
+    email: user.Email,
+    role: user.Role,
+    region: user.Region,
+    lastPwd: user.lastPwd
+  }, JWT_SECRET, { expiresIn: "15m" });
+}
+
+function createRefreshToken(user) {
+  return jwt.sign({ email: user.Email }, REFRESH_SECRET, { expiresIn: "30d" });
+}
+
+async function saveRefreshToken(email, token) {
+  const pool = await getConnection();
+  await pool.request()
+    .input('e', email)
+    .input('t', token)
+    .input('exp', new Date(Date.now() + 30 * 24 * 3600 * 1000))
+    .query("INSERT INTO UserRefreshTokens (Email, RefreshToken, ExpiresAt) VALUES (@e, @t, @exp)");
+}
+
+async function deleteRefreshToken(token) {
+  const pool = await getConnection();
+  await pool.request().input('t', token).query("DELETE FROM UserRefreshTokens WHERE RefreshToken=@t");
+}
+
+async function isRefreshValid(token) {
+  const pool = await getConnection();
+  const r = await pool.request().input('t', token).query("SELECT * FROM UserRefreshTokens WHERE RefreshToken=@t");
+  if (r.recordset.length === 0) return false;
+  return new Date(r.recordset[0].ExpiresAt) > new Date();
+}
+
+// --- AUTH MIDDLEWARE ---
+async function authenticateAccess(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "No token" });
+
+  jwt.verify(token, JWT_SECRET, async (err, user) => {
+    if (err) return res.status(403).json({ error: "Invalid Token" });
+
+    const pool = await getConnection();
+    const r = await pool.request()
+      .input('e', sql.NVarChar, user.email)
+      .query('SELECT LastPasswordChange FROM Users WHERE Email=@e');
+
+    if (r.recordset.length === 0) return res.status(401).json({ error: "Unknown user" });
+
+    const dbLast = r.recordset[0].LastPasswordChange ?
+      Math.floor(new Date(r.recordset[0].LastPasswordChange).getTime() / 1000) : 0;
+
+    if (dbLast > (user.lastPwd || 0)) {
+      return res.status(401).json({ error: "Session expired" });
+    }
+
+    req.user = user;
+    next();
+  });
+}
+
+/* =====================================================
+   FULL PDF GENERATOR LOGIC
 ===================================================== */
 
 async function drawPermitPDF(doc, p, d, renewalsList) {
@@ -633,126 +627,218 @@ async function drawPermitPDF(doc, p, d, renewalsList) {
 }
 
 /* =====================================================
-   AUTH ROUTES
+   HIERARCHY & ADMIN ROUTES
 ===================================================== */
 
+// 1. Get Dropdown Hierarchy for Login Page
+app.post('/api/get-hierarchy', async (req, res) => {
+    try {
+        const { region, unit } = req.body;
+        const pool = await getConnection();
+        let query = "", param = "";
+
+        if (!region) {
+            query = "SELECT DISTINCT Region FROM Users WHERE Region IS NOT NULL";
+        } else if (region && !unit) {
+            query = "SELECT DISTINCT Unit FROM Users WHERE Region = @p";
+            param = region;
+        } else {
+            query = "SELECT DISTINCT Location FROM Users WHERE Region = @p AND Unit = @u";
+        }
+
+        const reqSql = pool.request();
+        if(region) reqSql.input('p', sql.NVarChar, region);
+        if(unit) reqSql.input('u', sql.NVarChar, unit);
+        
+        const r = await reqSql.query(query);
+        const key = !region ? 'Region' : (!unit ? 'Unit' : 'Location');
+        res.json(r.recordset.map(x => x[key]));
+    } catch (e) { res.status(500).json({error: e.message}); }
+});
+
+// 2. Filter Users based on Hierarchy
+app.post('/api/get-users-by-loc', async (req, res) => {
+    try {
+        const { region, unit, location, role } = req.body;
+        const pool = await getConnection();
+        const r = await pool.request()
+            .input('r', region).input('u', unit).input('l', location).input('role', role)
+            .query("SELECT Name, Email FROM Users WHERE Region=@r AND Unit=@u AND Location=@l AND Role=@role");
+        res.json(r.recordset);
+    } catch(e) { res.status(500).json({error:e.message}); }
+});
+
+// 3. Login with Force Password Change Check
 app.post('/api/login', loginLimiter, async (req, res) => {
   try {
     const pool = await getConnection();
     const r = await pool.request()
-      .input('e', sql.NVarChar, req.body.name)
+      .input('e', sql.NVarChar, req.body.email) 
       .query('SELECT * FROM Users WHERE Email=@e');
 
-    if (!r.recordset.length) return res.json({ success: false });
+    if (!r.recordset.length) return res.json({ success: false, msg: "User not found" });
 
     const user = r.recordset[0];
     const valid = await bcrypt.compare(req.body.password, user.Password);
-    if (!valid || user.Role !== req.body.role) return res.json({ success: false });
+    if (!valid) return res.json({ success: false, msg: "Invalid credentials" });
 
-    const lastPwdTime = user.LastPasswordChange ?
-      Math.floor(new Date(user.LastPasswordChange).getTime() / 1000) : 0;
+    // REQ I: Mandatory Password Change
+    if (user.ForcePwdChange === 'Y') {
+        return res.json({ success: false, forceChange: true, email: user.Email });
+    }
 
-    user.lastPwd = lastPwdTime;
-
+    // Token Logic
     const accessToken = createAccessToken(user);
     const refreshToken = createRefreshToken(user);
-
     await saveRefreshToken(user.Email, refreshToken);
 
     res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "strict",
-      path: "/api/refresh"
-    });
-
-    return res.json({
-      success: true,
-      token: accessToken,
-      user: { Name: user.Name, Email: user.Email, Role: user.Role }
-    });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Internal Login Error" });
-  }
-});
-
-app.post('/api/refresh', async (req, res) => {
-  try {
-    const refreshToken = req.cookies.refreshToken;
-    if (!refreshToken) return res.status(401).json({ error: "No refresh token" });
-
-    if (!(await isRefreshValid(refreshToken))) {
-      return res.status(403).json({ error: "Refresh token invalid" });
-    }
-
-    jwt.verify(refreshToken, REFRESH_SECRET, async (err, decoded) => {
-      if (err) return res.status(403).json({ error: "Invalid refresh" });
-
-      const pool = await getConnection();
-      const r = await pool.request()
-        .input('e', sql.NVarChar, decoded.email)
-        .query('SELECT * FROM Users WHERE Email=@e');
-
-      if (!r.recordset.length) return res.status(403).json({ error: "Unknown user" });
-
-      const user = r.recordset[0];
-      const lastPwdTime = user.LastPasswordChange ?
-        Math.floor(new Date(user.LastPasswordChange).getTime() / 1000) : 0;
-      user.lastPwd = lastPwdTime;
-
-      const newAccess = createAccessToken(user);
-      const newRefresh = createRefreshToken(user);
-
-      await deleteRefreshToken(refreshToken);
-      await saveRefreshToken(user.Email, newRefresh);
-
-      res.cookie("refreshToken", newRefresh, {
         httpOnly: true,
         secure: true,
         sameSite: "strict",
         path: "/api/refresh"
-      });
-
-      return res.json({ success: true, token: newAccess });
+    });
+    
+    res.json({ 
+        success: true, token: accessToken, 
+        user: { Name: user.Name, Email: user.Email, Role: user.Role, Region: user.Region, Unit: user.Unit, Location: user.Location } 
     });
 
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Refresh Error" });
-  }
+  } catch (err) { res.status(500).json({ error: "Login Error" }); }
 });
 
-app.post('/api/logout', async (req, res) => {
-  try {
-    const refreshToken = req.cookies.refreshToken;
-    if (refreshToken) await deleteRefreshToken(refreshToken);
-    res.clearCookie("refreshToken", { path: "/api/refresh" });
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: "Logout Error" });
-  }
+// 4. Force Password Change (First Login)
+app.post('/api/force-password-change', async (req, res) => {
+    try {
+        const { email, newPassword } = req.body;
+        const pool = await getConnection();
+        const hashed = await bcrypt.hash(newPassword, 10);
+        await pool.request().input('e', email).input('p', hashed)
+            .query("UPDATE Users SET Password=@p, ForcePwdChange='N', LastPasswordChange=GETDATE() WHERE Email=@e");
+        res.json({ success: true });
+    } catch(e) { res.status(500).json({ error: "Update failed" }); }
+});
+
+// 5. Reset Password (Admin/Approver)
+app.post('/api/admin/reset-password', authenticateAccess, async (req, res) => {
+    try {
+        const { targetEmail, newTempPass } = req.body;
+        const pool = await getConnection();
+        
+        // Security Check
+        const target = await pool.request().input('e', targetEmail).query("SELECT CreatedBy, Region FROM Users WHERE Email=@e");
+        if(!target.recordset.length) return res.status(404).json({error: "User not found"});
+        
+        const tUser = target.recordset[0];
+
+        // REQ G & H: Permission Logic
+        let allow = false;
+        if (req.user.role === 'MasterAdmin') allow = true;
+        else if (req.user.role === 'Approver' && tUser.CreatedBy === req.user.email) allow = true;
+
+        if (!allow) return res.status(403).json({ error: "Unauthorized to reset this user" });
+
+        const hashed = await bcrypt.hash(newTempPass, 10);
+        await pool.request().input('e', targetEmail).input('p', hashed)
+            .query("UPDATE Users SET Password=@p, ForcePwdChange='Y' WHERE Email=@e"); // REQ I: Force change next time
+
+        res.json({ success: true });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// 6. Bulk Upload Users (Master Admin Only)
+app.post('/api/admin/bulk-upload', authenticateAccess, upload.single('excelFile'), async (req, res) => {
+    if(req.user.role !== 'MasterAdmin') return res.status(403).json({error: "Master Admin only"});
+    
+    try {
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(req.file.buffer);
+        const worksheet = workbook.getWorksheet(1);
+        const pool = await getConnection();
+        
+        const promises = [];
+        
+        worksheet.eachRow((row, rowNumber) => {
+            if(rowNumber === 1) return; // Skip Header
+            // Columns: A=Name, B=Email, C=Role, D=Password, E=Region, F=Unit, G=Location
+            const name = row.getCell(1).value;
+            const email = row.getCell(2).value;
+            const role = row.getCell(3).value;
+            const pass = row.getCell(4).value.toString(); // Temp Pass
+            const region = row.getCell(5).value;
+            const unit = row.getCell(6).value;
+            const loc = row.getCell(7).value;
+
+            promises.push((async () => {
+                const hashed = await bcrypt.hash(pass, 10);
+                await pool.request()
+                    .input('n', name).input('e', email).input('r', role).input('p', hashed)
+                    .input('reg', region).input('u', unit).input('l', loc).input('cb', req.user.email)
+                    .query(`
+                        IF NOT EXISTS (SELECT * FROM Users WHERE Email=@e)
+                        INSERT INTO Users (Name, Email, Role, Password, Region, Unit, Location, CreatedBy, ForcePwdChange)
+                        VALUES (@n, @e, @r, @p, @reg, @u, @l, @cb, 'Y')
+                    `);
+            })());
+        });
+
+        await Promise.all(promises);
+        res.json({ success: true, count: promises.length });
+
+    } catch(e) { res.status(500).json({error: "Bulk Upload Failed: " + e.message}); }
+});
+
+// 7. Add User (Single)
+app.post('/api/add-user', authenticateAccess, async (req, res) => {
+    if(req.user.role !== 'Approver' && req.user.role !== 'MasterAdmin') return res.sendStatus(403);
+    try {
+        const pool = await getConnection();
+        const check = await pool.request().input('e', req.body.email).query("SELECT * FROM Users WHERE Email=@e");
+        if(check.recordset.length) return res.status(400).json({error: "User Exists"});
+
+        const hashed = await bcrypt.hash(req.body.password, 10);
+        
+        // Approver can only add to their location
+        const reg = req.user.role === 'MasterAdmin' ? req.body.region : req.user.region;
+        const unit = req.user.role === 'MasterAdmin' ? req.body.unit : req.user.unit; // Assuming stored in token/user obj
+        const loc = req.user.role === 'MasterAdmin' ? req.body.location : req.user.location;
+
+        await pool.request()
+            .input('n', req.body.name).input('e', req.body.email).input('r', req.body.role).input('p', hashed)
+            .input('reg', reg).input('u', unit).input('l', loc).input('cb', req.user.email)
+            .query("INSERT INTO Users (Name,Email,Role,Password,Region,Unit,Location,CreatedBy,ForcePwdChange) VALUES (@n,@e,@r,@p,@reg,@u,@l,@cb,'Y')");
+        
+        res.json({success: true});
+    } catch(e) { res.status(500).json({error: "Error Adding User"}); }
+});
+
+// 8. Delete User (Approver/Admin)
+app.post('/api/delete-user', authenticateAccess, async (req, res) => {
+    try {
+        const targetEmail = req.body.email;
+        const pool = await getConnection();
+        
+        // Security Check
+        const target = await pool.request().input('e', targetEmail).query("SELECT CreatedBy FROM Users WHERE Email=@e");
+        if(!target.recordset.length) return res.status(404).json({error: "User not found"});
+        
+        const tUser = target.recordset[0];
+        let allow = false;
+        
+        if (req.user.role === 'MasterAdmin') allow = true;
+        else if (req.user.role === 'Approver' && tUser.CreatedBy === req.user.email) allow = true;
+
+        if (!allow) return res.status(403).json({ error: "Unauthorized deletion" });
+
+        await pool.request().input('e', targetEmail).query("DELETE FROM Users WHERE Email=@e");
+        res.json({ success: true });
+
+    } catch(e) { res.status(500).json({ error: "Delete failed" }); }
 });
 
 /* =====================================================
-   CORE API ROUTES
+   CORE PERMIT ROUTES
 ===================================================== */
-
-app.get('/api/users', async (req, res) => {
-  try {
-    const pool = await getConnection();
-    const r = await pool.request().query("SELECT Name, Email, Role FROM Users");
-    const fmt = u => ({ name: u.Name, email: u.Email, role: u.Role });
-    res.json({
-      Requesters: r.recordset.filter(u => u.Role === 'Requester').map(fmt),
-      Reviewers: r.recordset.filter(u => u.Role === 'Reviewer').map(fmt),
-      Approvers: r.recordset.filter(u => u.Role === 'Approver').map(fmt)
-    });
-  } catch (err) {
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
 
 app.post('/api/save-worker', authenticateAccess, async (req, res) => {
   try {
@@ -900,11 +986,12 @@ app.post('/api/dashboard', authenticateAccess, async (req, res) => {
       }
     });
     
-    // --- UPDATED: STRICT ASSIGNMENT FILTERING FOR ALL ROLES ---
+    // Strict Assignment
     const f = p.filter(x => {
         if (role === 'Requester') return x.RequesterEmail === email;
         if (role === 'Reviewer') return x.ReviewerEmail === email;
         if (role === 'Approver') return x.ApproverEmail === email;
+        if (role === 'MasterAdmin') return true; // Admin sees all
         return false;
     });
     
@@ -919,12 +1006,8 @@ app.post('/api/dashboard', authenticateAccess, async (req, res) => {
   }
 });
 
-/* =====================================================
-   SAVE PERMIT (RECTIFIED ID LOGIC & LOGGING)
-===================================================== */
 app.post('/api/save-permit', authenticateAccess, upload.any(), async (req, res) => {
   try {
-    console.log("--- SAVE PERMIT START ---"); 
     const requesterEmail = req.user.email;
     let vf, vt;
     try {
@@ -940,25 +1023,20 @@ app.post('/api/save-permit', authenticateAccess, upload.any(), async (req, res) 
     const pool = await getConnection();
     let pid = req.body.PermitID;
 
-    // --- FIX: MATHEMATICAL ID GENERATION ---
+    // Mathematical ID
     if (!pid || pid === 'undefined' || pid === 'null' || pid === '') {
       const idRes = await pool.request().query("SELECT MAX(CAST(SUBSTRING(PermitID, 4, 10) AS INT)) as MaxVal FROM Permits WHERE PermitID LIKE 'WP-%'");
-      
       let nextNum = 1000;
       if (idRes.recordset[0].MaxVal) {
         nextNum = idRes.recordset[0].MaxVal + 1;
       }
       pid = `WP-${nextNum}`;
-      console.log("Generated New ID:", pid);
     }
 
-    // Check if ID exists to decide INSERT vs UPDATE
     const chk = await pool.request().input('p', sql.NVarChar, pid)
       .query("SELECT Status FROM Permits WHERE PermitID=@p");
     
-    // Validate Status (Prevent editing Closed permits)
     if (chk.recordset.length && chk.recordset[0].Status.includes('Closed')) {
-      console.error("Attempt to edit closed permit:", pid);
       return res.status(400).json({ error: "Permit CLOSED" });
     }
 
@@ -971,6 +1049,7 @@ app.post('/api/save-permit', authenticateAccess, upload.any(), async (req, res) 
       const renImg = req.files ? req.files.find(x => x.fieldname === 'InitRenImage') : null;
       if (renImg) {
         const blobName = `${pid}-1stRenewal.jpg`;
+        // Use verified safe upload
         photoUrl = await uploadToAzure(renImg.buffer, blobName);
       }
       renewalsArr.push({
@@ -996,7 +1075,7 @@ app.post('/api/save-permit', authenticateAccess, upload.any(), async (req, res) 
 
     const q = pool.request()
       .input('p', sql.NVarChar, pid)
-      .input('s', sql.NVarChar, 'Pending Review') // Always reset status on save/edit
+      .input('s', sql.NVarChar, 'Pending Review')
       .input('w', sql.NVarChar, req.body.WorkType)
       .input('re', sql.NVarChar, requesterEmail)
       .input('rv', sql.NVarChar, req.body.ReviewerEmail)
@@ -1009,20 +1088,16 @@ app.post('/api/save-permit', authenticateAccess, upload.any(), async (req, res) 
       .input('ren', sql.NVarChar(sql.MAX), renewalsJsonStr);
 
     if (chk.recordset.length) {
-      console.log("Executing UPDATE for:", pid);
       await q.query("UPDATE Permits SET FullDataJSON=@j, WorkType=@w, ValidFrom=@vf, ValidTo=@vt, Latitude=@lat, Longitude=@lng, Status=@s, ReviewerEmail=@rv, ApproverEmail=@ap, RenewalsJSON=@ren WHERE PermitID=@p");
     } else {
-      console.log("Executing INSERT for:", pid);
       await q.query("INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, FullDataJSON, RenewalsJSON) VALUES (@p,@s,@w,@re,@rv,@ap,@vf,@vt,@lat,@lng,@j,@ren)");
     }
 
-    console.log("--- SAVE SUCCESS ---");
     res.json({ success: true, permitId: pid });
 
   } catch (err) {
-    console.error("!!! SQL SAVE ERROR !!!");
-    console.error("Message:", err.message);
-    res.status(500).json({ error: "Database Save Failed: " + err.message });
+    console.error("Save Error:", err.message);
+    res.status(500).json({ error: "Database Save Failed" });
   }
 });
 
@@ -1106,12 +1181,12 @@ app.post('/api/update-status', authenticateAccess, async (req, res) => {
         }
       });
       const blobName = `closed-permits/${PermitID}_FINAL.pdf`;
-      finalPdfUrl = await uploadToAzure(pdfBuffer, blobName, "application/pdf");
+      // Allow PDF upload for System Archives
+      finalPdfUrl = await uploadToAzure(pdfBuffer, blobName, true);
     }
 
     const q = pool.request().input('p', PermitID).input('s', st).input('r', JSON.stringify(renewals));
     if (finalPdfUrl) {
-      // REFERENCE LOGIC: Set JSONs to NULL on close to save space
       await q.input('url', finalPdfUrl).query("UPDATE Permits SET Status=@s, FullDataJSON=NULL, RenewalsJSON=NULL, FinalPdfUrl=@url WHERE PermitID=@p");
     } else {
       await q.input('j', finalJson).query("UPDATE Permits SET Status=@s, FullDataJSON=@j, RenewalsJSON=@r WHERE PermitID=@p");
@@ -1324,12 +1399,12 @@ app.get('/api/download-pdf/:id', authenticateAccess, async (req, res) => {
 
     const p = result.recordset[0];
 
-    // --- UPDATED: STRICT ACCESS CHECK FOR PDF DOWNLOAD ---
+    // Strict Authorization
     if (req.user.role === 'Requester' && p.RequesterEmail !== req.user.email) return res.status(403).send("Unauthorized");
     if (req.user.role === 'Reviewer' && p.ReviewerEmail !== req.user.email) return res.status(403).send("Unauthorized");
     if (req.user.role === 'Approver' && p.ApproverEmail !== req.user.email) return res.status(403).send("Unauthorized");
 
-    // REFERENCE LOGIC: Check Blob Storage for closed permits
+    // Serve from Blob if closed
     if ((p.Status==='Closed' || p.Status.includes('Closure')) && p.FinalPdfUrl) {
       if (!containerClient) return res.status(500).send("Storage Error");
       try {
@@ -1381,7 +1456,7 @@ app.get('/api/view-photo/:filename', authenticateAccess, async (req, res) => {
     if (!r.recordset.length) return res.status(404).send("Permit Not Found");
     const p = r.recordset[0];
 
-    // --- UPDATED: STRICT ACCESS CHECK FOR PHOTO VIEW ---
+    // Strict Authorization
     if (req.user.role === 'Requester' && p.RequesterEmail !== req.user.email) return res.status(403).send("Unauthorized");
     if (req.user.role === 'Reviewer' && p.ReviewerEmail !== req.user.email) return res.status(403).send("Unauthorized");
     if (req.user.role === 'Approver' && p.ApproverEmail !== req.user.email) return res.status(403).send("Unauthorized");

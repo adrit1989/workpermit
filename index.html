@@ -10,94 +10,30 @@
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyADwuqMDCwNSaZKBnWURDCYdqlMxfiWBnU" async></script>
 
     <style nonce="NONCE_PLACEHOLDER">
-        /* --- GLOBAL & LAYOUT STYLES --- */
-        body { 
-            background-color: #f3f4f6; 
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-            overflow: hidden; 
-            margin: 0; padding: 0;
-        }
-
-        /* UTILITIES */
+        body { background-color: #f3f4f6; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; overflow: hidden; margin: 0; padding: 0; }
         .hidden { display: none !important; }
-        .glass { 
-            background: white; padding: 1.5rem; border-radius: 12px; 
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 1.5rem; 
-            border: 1px solid #e5e7eb; 
-        }
-        
-        /* INPUTS */
-        input, select, textarea { 
-            width: 100%; border: 1px solid #d1d5db !important; padding: 10px 12px; 
-            border-radius: 8px; font-size: 0.9rem; background: #fff; margin-bottom: 0.5rem; 
-        }
-        input:focus, select:focus, textarea:focus { 
-            border-color: #ea580c !important; outline: none; box-shadow: 0 0 0 2px #fdba74; 
-        }
-        input:disabled, select:disabled, textarea:disabled { 
-            background-color: #f9fafb; color: #6b7280; border-color: #e5e7eb !important; 
-        }
-
-        /* LOADER */
-        .loader-overlay { 
-            position: fixed; inset: 0; background: rgba(255,255,255,0.95); z-index: 10000; 
-            display: none; justify-content: center; align-items: center; flex-direction: column; 
-        }
-        .spinner { 
-            border: 5px solid #f3f3f3; border-top: 5px solid #ea580c; border-radius: 50%; 
-            width: 60px; height: 60px; animation: spin 0.8s linear infinite; 
-        }
+        .glass { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 1.5rem; border: 1px solid #e5e7eb; }
+        input, select, textarea { width: 100%; border: 1px solid #d1d5db !important; padding: 10px 12px; border-radius: 8px; font-size: 0.9rem; background: #fff; margin-bottom: 0.5rem; }
+        input:focus, select:focus, textarea:focus { border-color: #ea580c !important; outline: none; box-shadow: 0 0 0 2px #fdba74; }
+        input:disabled, select:disabled, textarea:disabled { background-color: #f9fafb; color: #6b7280; border-color: #e5e7eb !important; cursor: not-allowed; }
+        .loader-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.95); z-index: 10000; display: none; justify-content: center; align-items: center; flex-direction: column; }
+        .spinner { border: 5px solid #f3f3f3; border-top: 5px solid #ea580c; border-radius: 50%; width: 60px; height: 60px; animation: spin 0.8s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-        /* SANDWICH LAYOUT */
         #main-wrapper { display: flex; height: 100vh; width: 100vw; }
-        
-        .sidebar-left { 
-            width: 260px; background: #1e293b; color: white; display: flex; 
-            flex-direction: column; flex-shrink: 0; transition: 0.3s; 
-            box-shadow: 2px 0 10px rgba(0,0,0,0.1); z-index: 40;
-        }
-        
-        .sidebar-right { 
-            width: 320px; background: white; border-left: 1px solid #e5e7eb; 
-            overflow-y: auto; flex-shrink: 0; padding: 1.5rem; 
-            display: flex; flex-direction: column; gap: 20px; z-index: 30;
-        } 
-
-        .content-area { 
-            flex-grow: 1; overflow-y: auto; padding: 2rem; 
-            background: #f8fafc; position: relative; scroll-behavior: smooth;
-        }
-
-        /* GRID & TABLES */
+        .sidebar-left { width: 260px; background: #1e293b; color: white; display: flex; flex-direction: column; flex-shrink: 0; transition: 0.3s; box-shadow: 2px 0 10px rgba(0,0,0,0.1); z-index: 40; }
+        .sidebar-right { width: 320px; background: white; border-left: 1px solid #e5e7eb; overflow-y: auto; flex-shrink: 0; padding: 1.5rem; display: flex; flex-direction: column; gap: 20px; z-index: 30; } 
+        .content-area { flex-grow: 1; overflow-y: auto; padding: 2rem; background: #f8fafc; position: relative; scroll-behavior: smooth; }
         .checklist-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
-        
-        /* Mobile & Responsive */
         @media(max-width: 1280px) { .checklist-grid { grid-template-columns: repeat(2, 1fr); } }
-        @media(max-width: 1024px) { 
-            .sidebar-right { display: none; } 
-            .checklist-grid { grid-template-columns: 1fr; }
-        }
-        @media(max-width: 768px) { 
-            .sidebar-left { position: absolute; left: -260px; height: 100%; }
-            .sidebar-left.open { left: 0; }
-            .checklist-grid { grid-template-columns: 1fr; }
-            .mobile-table th { display: none; }
-            .mobile-table td { display: block; width: 100%; border: none; padding: 4px 8px; }
-            .mobile-table tr { display: block; margin-bottom: 1rem; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-        }
-
-        /* TABLE STYLES */
+        @media(max-width: 1024px) { .sidebar-right { display: none; } .checklist-grid { grid-template-columns: 1fr; } }
+        @media(max-width: 768px) { .sidebar-left { position: absolute; left: -260px; height: 100%; } .sidebar-left.open { left: 0; } .checklist-grid { grid-template-columns: 1fr; } .mobile-table th { display: none; } .mobile-table td { display: block; width: 100%; border: none; padding: 4px 8px; } .mobile-table tr { display: block; margin-bottom: 1rem; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); } }
         .data-table { width: 100%; border-collapse: collapse; }
         .data-table th { background: #f1f5f9; color: #475569; font-weight: 700; padding: 0.75rem; text-align: left; font-size: 0.8rem; border-bottom: 2px solid #e2e8f0; }
         .data-table td { padding: 0.75rem; border-bottom: 1px solid #e2e8f0; font-size: 0.85rem; vertical-align: middle; }
         .data-table tr:hover { background: #f8fafc; cursor: pointer; }
-
-        .marked-deleted { text-decoration: line-through; opacity: 0.6; background-color: #fee2e2; }
         .nav-item { padding: 1rem 1.25rem; cursor: pointer; display: flex; align-items: center; gap: 0.75rem; color: #94a3b8; transition: all 0.2s; border-left: 4px solid transparent; font-weight: 500; }
         .nav-item:hover { background: #334155; color: white; }
         .nav-item.active { background: #0f172a; color: white; border-left-color: #ea580c; }
-        
         .btn-pdf { background-color: #eff6ff; color: #2563eb; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; border: 1px solid #bfdbfe; transition: 0.2s; }
         .btn-pdf:hover { background-color: #2563eb; color: white; }
     </style>
@@ -604,6 +540,7 @@
             document.getElementById('login-loc').addEventListener('change', loadUsers);
             document.getElementById('login-role').addEventListener('change', loadUsers);
             
+            // REQ C: 1st Renewal Toggle
             document.getElementById('chk-init-renewal').addEventListener('change', (e) => {
                 document.getElementById('div-init-renewal').classList.toggle('hidden', !e.target.checked);
             });
@@ -705,6 +642,7 @@
                 let itemsHtml = CL_DATA[sec].map((item, i) => {
                     let extraFields = `<input class="w-full text-xs border-b mt-1" placeholder="Remarks" name="${sec}_${i}_Rem">`;
                     if (sec === 'A' && i === 11) {
+                        // REQ C: Added specific IDs for auto-sync
                          extraFields = `<div class="grid grid-cols-3 gap-2 mt-2">
                              <input name="GP_Q12_HC" id="GP_Q12_HC" placeholder="HC % LEL" onkeyup="syncGasToRenewal()">
                              <input name="GP_Q12_ToxicGas" id="GP_Q12_ToxicGas" placeholder="Toxic PPM" onkeyup="syncGasToRenewal()">
@@ -742,6 +680,7 @@
             });
         }
         
+        // REQ C: Auto-sync logic
         window.syncGasToRenewal = function() {
             if(document.getElementById('chk-init-renewal').checked) {
                 safeSet('InitRenHC', getVal('GP_Q12_HC'));
@@ -800,6 +739,7 @@
             const res = await apiCall('/dashboard', 'POST', {role: currentUser.Role, email: currentUser.Email});
             const container = document.getElementById('dashboard-content'); container.innerHTML = '';
             
+            // REQ G: Ensure all statuses are caught
             const pending = res.filter(p => p.Status.includes('Pending') || p.Status === 'Submitted');
             const active = res.filter(p => p.Status === 'Active' || p.Status.includes('Renewal'));
             const closed = res.filter(p => p.Status.includes('Closed') || p.Status === 'Rejected');
@@ -873,14 +813,17 @@
             currentPermitId = null;
             document.querySelectorAll('#pf input, #pf select, #pf textarea').forEach(e => e.disabled = false);
             
+            // REQ A: Requester Editable
             safeSet("RequesterName", currentUser.Name);
             safeSet("Vendor", currentUser.Name);
             document.getElementById("Vendor").readOnly = true;
-            document.getElementById("RequesterName").readOnly = false; 
+            document.getElementById("RequesterName").readOnly = false; // Changed to false
 
+            // REQ B: Auto-fill Region/Unit/Location
             const locString = `${currentUser.Region}/${currentUser.Unit}/${currentUser.Location}`;
             safeSet("LocationUnit", locString);
 
+            // REQ C: Ensure 1st Renewal logic is reset
             document.getElementById("init-renewal-wrapper").classList.remove('hidden');
             document.getElementById("div-init-renewal").classList.add('hidden');
 
@@ -906,8 +849,26 @@
             if(currentUser.Role === 'Requester') document.getElementById('ppe-section-wrapper').classList.add('hidden');
             else document.getElementById('ppe-section-wrapper').classList.remove('hidden');
             
+            const isPendingAction = (currentUser.Role === 'Reviewer' || currentUser.Role === 'Approver') && 
+                                    (p.Status.includes('Pending') || p.Status === 'Active');
+
             document.querySelectorAll('#pf input, #pf textarea, #pf select').forEach(el => {
-                if(el.type === 'checkbox') el.checked = (p[el.name] === 'Y'); else if(el.type !== 'file') el.value = p[el.name] || ''; el.disabled = true;
+                let shouldDisable = true;
+                
+                // REQ A: Allow Reviewer/Approver to edit Hazards
+                if(isPendingAction && (el.name.startsWith('H_') || el.id === 'H_Others_Detail')) {
+                    shouldDisable = false;
+                }
+                
+                // REQ C: Allow Approver to toggle Image Requirement
+                if(currentUser.Role === 'Approver' && el.id === 'RequireRenewalPhotos') {
+                    shouldDisable = false;
+                }
+
+                if(el.type === 'checkbox') el.checked = (p[el.name] === 'Y'); 
+                else if(el.type !== 'file') el.value = p[el.name] || ''; 
+                
+                el.disabled = shouldDisable;
             });
 
             document.getElementById('validity-box').classList.remove('hidden');
@@ -947,6 +908,7 @@
 
             if(currentUser.Role === 'Requester' && p.Status === 'New') showNewPermit();
             
+            // REQ B: Reviewer only Forwards
             if(currentUser.Role === 'Reviewer' && p.Status === 'Pending Review') {
                 document.getElementById('fs-reviewer-section').classList.remove('hidden'); document.getElementById('iocl-reviewer-wrapper').classList.remove('hidden');
                 document.getElementById('Reviewer_Remarks').disabled = false; document.getElementById('AdditionalPrecautions').disabled = false;
@@ -956,9 +918,13 @@
                 const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-2 rounded shadow font-bold"; b2.innerText = "Review & Forward"; b2.onclick = () => upd('review');
                 actionsDiv.append(b1, b2);
             }
+            // REQ B: Approver Approves
             if(currentUser.Role === 'Approver' && p.Status === 'Pending Approval') {
                 document.getElementById('fs-approver-section').classList.remove('hidden'); document.getElementById('iocl-approver-wrapper').classList.remove('hidden');
-                document.getElementById('Approver_Remarks').disabled = false; document.getElementById('RequireRenewalPhotos').disabled = false;
+                document.getElementById('Approver_Remarks').disabled = false; 
+                // REQ C: Enable Image Req for Approver
+                document.getElementById('RequireRenewalPhotos').disabled = false;
+                
                 const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-2 rounded shadow font-bold"; b1.innerText = "Reject"; b1.onclick = () => upd('reject');
                 const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-2 rounded shadow font-bold"; b2.innerText = "Final Approve"; b2.onclick = () => upd('approve');
                 actionsDiv.append(b1, b2);
@@ -1058,6 +1024,7 @@
             }
 
             const fileInput = document.getElementById("ren-cam-sub");
+            // REQ D: Mandatory Image Check
             const isPhotoMandatory = !document.getElementById('renewal-photo-wrapper').classList.contains('hidden');
             
             if(isPhotoMandatory && fileInput.files.length === 0) {
@@ -1164,6 +1131,7 @@
                 Site_Restored_Check: document.getElementById("Site_Restored_Check").checked ? 'Y' : 'N'
             };
             
+            // Ensure checked hazard boxes are sent
             if(currentUser.Role === 'Reviewer' && act === 'review') {
                  document.querySelectorAll('input[type=checkbox]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
                  document.querySelectorAll('input[type=radio]:checked').forEach(r => body[r.name] = r.value);

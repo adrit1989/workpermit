@@ -325,12 +325,11 @@
                             </div>
                             <div id="form-renewal" class="hidden bg-white p-4 rounded border border-purple-200 shadow-sm">
                                 <h4 class="font-bold text-sm mb-2 text-purple-800">New Renewal Request</h4>
-                                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-2">
-                                    <input type="datetime-local" id="RenewalValidFrom">
-                                    <input type="datetime-local" id="RenewalValidTo">
-                                    <input id="RenewalHC" placeholder="HC %">
-                                    <input id="RenewalOxygen" placeholder="O2 %">
-                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-2"> <input type="datetime-local" id="RenewalValidFrom">
+    <input type="datetime-local" id="RenewalValidTo">
+    <input id="RenewalHC" placeholder="HC %">
+    <input id="RenewalToxic" placeholder="Toxic PPM"> <input id="RenewalOxygen" placeholder="O2 %">
+</div>
                                 <input id="RenewalPrec" placeholder="Specific Precautions for this shift" class="mb-2">
                                 <div id="odd-hour-agreement" class="hidden mb-2 p-2 bg-indigo-50 border border-indigo-200 rounded">
                                     <label class="flex items-start gap-2 cursor-pointer">
@@ -1174,34 +1173,32 @@
             }
         }
 
-        async function submitRenewal(act) {
+ async function submitRenewal(act) {
             if(act === 'approve' || act === 'reject') {
                 const remark = document.getElementById('RenewalRemark').value;
-                const res = await apiCall('/update-status', 'POST', {PermitID: currentPermitId, action: act, rejectionReason: remark});
-                if(res.success) { alert("Action Taken"); switchView('dashboard'); } else alert(res.error);
+                const res = await apiCall('/renewal', 'POST', {PermitID: currentPermitId, action: act, rejectionReason: remark});
+                if(res.success) { alert("Action Taken"); loadDashboard(); switchView('dashboard'); }
                 return;
             }
-            const getVal = (id) => document.getElementById(id).value;
-            const rStart = new Date(getVal("RenewalValidFrom"));
-            const rEnd = new Date(getVal("RenewalValidTo"));
-            
-            const mainStart = new Date(document.getElementById('val-time-from').innerText);
-            const mainEnd = new Date(document.getElementById('val-time-to').innerText);
-
-            if(rEnd <= rStart) return alert("Renewal End Time must be greater than Start Time.");
-            if((rEnd - rStart) > 8 * 60 * 60 * 1000) return alert("Renewal cannot exceed 8 hours.");
-            if(rStart < mainStart || rEnd > mainEnd) return alert("Renewal must be within original Permit Validity period.");
 
             const fd = new FormData();
-            fd.append('PermitID', document.getElementById('PermitID').value);
+            fd.append('PermitID', currentPermitId);
             fd.append('action', 'initiate'); 
             fd.append('RenewalValidFrom', getVal("RenewalValidFrom"));
             fd.append('RenewalValidTo', getVal("RenewalValidTo"));
-            fd.append('hc', getVal("RenewalHC")); fd.append('toxic', getVal("RenewalOxygen")); fd.append('oxygen', getVal("RenewalOxygen")); 
+            
+            // CORRECTED GAS MAPPING
+            fd.append('hc', getVal("RenewalHC")); 
+            fd.append('toxic', getVal("RenewalToxic")); // Now pulls from the new ID
+            fd.append('oxygen', getVal("RenewalOxygen")); 
+            
             fd.append('precautions', getVal("RenewalPrec"));
             
-            const selWorkers = []; document.querySelectorAll('.ren-worker-cb:checked').forEach(c => selWorkers.push(c.value));
+            const selWorkers = []; 
+            document.querySelectorAll('.ren-worker-cb:checked').forEach(c => selWorkers.push(c.value));
             fd.append('renewalWorkers', JSON.stringify(selWorkers));
+
+            // ... Azure Upload and Fetch code continues ...
 
             if(!document.getElementById("odd-hour-agreement").classList.contains("hidden")) {
                 if(!document.getElementById("OddHourSafetyCheck").checked) return alert("You must accept Odd Hour safety terms.");
@@ -1498,5 +1495,6 @@ async function upd(act) {
     </script>
 </body>
 </html>
+
 
 

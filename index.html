@@ -10,6 +10,7 @@
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyADwuqMDCwNSaZKBnWURDCYdqlMxfiWBnU" async></script>
 
     <style nonce="NONCE_PLACEHOLDER">
+        /* --- GLOBAL & LAYOUT STYLES --- */
         body { background-color: #f3f4f6; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; overflow: hidden; margin: 0; padding: 0; }
         .hidden { display: none !important; }
         .glass { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 1.5rem; border: 1px solid #e5e7eb; }
@@ -135,7 +136,7 @@
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="text-2xl font-bold text-gray-800">Dashboard</h2>
                         <div class="flex gap-3">
-                            <button onclick="downloadSecureExcel()" class="bg-green-100 text-green-800 px-4 py-2 rounded shadow font-bold text-sm border border-green-200 hover:bg-green-200">📥 Export Excel</button>
+                            <button id="btn-export-excel" onclick="downloadSecureExcel()" class="hidden bg-green-100 text-green-800 px-4 py-2 rounded shadow font-bold text-sm border border-green-200 hover:bg-green-200">📥 Export Excel</button>
                             <button id="dash-btn-new" onclick="switchView('new-permit')" class="hidden bg-orange-600 text-white px-4 py-2 rounded shadow font-bold">+ New Permit</button>
                         </div>
                     </div>
@@ -236,6 +237,19 @@
 
                         <div id="fs-reviewer-section" class="glass hidden border-l-4 border-yellow-500">
                             <h3 class="font-bold text-yellow-700 border-b pb-2 mb-4">4. Reviewer</h3>
+                            
+                            <div id="rev-renewal-decision" class="mb-4 hidden p-3 bg-yellow-50 border border-yellow-200 rounded">
+                                <h4 class="font-bold text-sm text-yellow-800 mb-2">1st Renewal Action (Requested by User)</h4>
+                                <div class="flex gap-4">
+                                    <label class="flex items-center gap-2 cursor-pointer font-bold text-green-700">
+                                        <input type="radio" name="RevRenAction" value="recommend" class="w-4 h-4 accent-green-600"> Recommend Renewal
+                                    </label>
+                                    <label class="flex items-center gap-2 cursor-pointer font-bold text-red-700">
+                                        <input type="radio" name="RevRenAction" value="reject" class="w-4 h-4 accent-red-600"> Reject Renewal
+                                    </label>
+                                </div>
+                            </div>
+
                             <div class="mb-4 hidden" id="iocl-reviewer-wrapper">
                                 <label class="font-bold text-sm text-gray-700">Authorized IOCL Supervisors</label>
                                 <div id="iocl-sup-container-rev" class="space-y-2 mt-2"></div>
@@ -247,6 +261,19 @@
 
                         <div id="fs-approver-section" class="glass hidden border-l-4 border-green-500">
                             <h3 class="font-bold text-green-700 border-b pb-2 mb-4">5. Approval</h3>
+                            
+                            <div id="app-renewal-decision" class="mb-4 hidden p-3 bg-green-50 border border-green-200 rounded">
+                                <h4 class="font-bold text-sm text-green-800 mb-2">1st Renewal Action (Recommended by Reviewer)</h4>
+                                <div class="flex gap-4">
+                                    <label class="flex items-center gap-2 cursor-pointer font-bold text-green-700">
+                                        <input type="radio" name="AppRenAction" value="approve" class="w-4 h-4 accent-green-600"> Approve Renewal
+                                    </label>
+                                    <label class="flex items-center gap-2 cursor-pointer font-bold text-red-700">
+                                        <input type="radio" name="AppRenAction" value="reject" class="w-4 h-4 accent-red-600"> Reject Renewal
+                                    </label>
+                                </div>
+                            </div>
+
                             <div class="mb-4 hidden" id="iocl-approver-wrapper">
                                 <label class="font-bold text-sm text-gray-700">Authorized IOCL Supervisors</label>
                                 <div id="iocl-sup-container-app" class="space-y-2 mt-2"></div>
@@ -279,15 +306,22 @@
                                 </div>
                             </div>
 
-                            <div id="first-renewal-decision" class="hidden mb-4 p-4 border-2 border-purple-500 bg-purple-50 rounded-lg animate-pulse">
-                                <h4 class="font-bold text-purple-900 mb-2">⚡ 1st Renewal Request Action</h4>
-                                <div class="flex gap-4">
-                                    <label class="flex items-center gap-2 cursor-pointer font-bold text-green-700"><input type="radio" name="FirstRenewalAction" value="accept" class="w-5 h-5 accent-green-600"> Recommend / Approve Renewal</label>
-                                    <label class="flex items-center gap-2 cursor-pointer font-bold text-red-700"><input type="radio" name="FirstRenewalAction" value="reject" class="w-5 h-5 accent-red-600"> Reject Renewal Only</label>
-                                </div>
-                            </div>
                             <div class="overflow-x-auto mb-4 bg-white rounded shadow-sm border">
-                                <table class="mobile-table w-full text-xs text-left data-table" id="table-renewals"><thead class="bg-purple-100"><tr><th>Period</th><th>Gas/Prec</th><th>Workers</th><th>Photo</th><th>Requester</th><th>Status</th></tr></thead><tbody id="renewal-history-body"></tbody></table>
+                                <table class="mobile-table w-full text-xs text-left data-table" id="table-renewals">
+                                    <thead class="bg-purple-100">
+                                        <tr>
+                                            <th>Validity</th>
+                                            <th>Gas (HC/Tox/O2)</th>
+                                            <th>Workers</th>
+                                            <th>Precautions</th>
+                                            <th>Requester</th>
+                                            <th>Reviewer</th>
+                                            <th>Approver</th>
+                                            <th>Photo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="renewal-history-body"></tbody>
+                                </table>
                             </div>
                             <div id="form-renewal" class="hidden bg-white p-4 rounded border border-purple-200 shadow-sm">
                                 <h4 class="font-bold text-sm mb-2 text-purple-800">New Renewal Request</h4>
@@ -378,9 +412,9 @@
                 <div id="view-workers" class="hidden">
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="text-2xl font-bold text-gray-800">Worker Management</h2>
-                        <button onclick="openWorkerModal()" class="bg-blue-600 text-white px-4 py-2 rounded shadow font-bold">+ Add Worker</button>
+                        <button id="btn-add-worker-main" onclick="openWorkerModal()" class="hidden bg-blue-600 text-white px-4 py-2 rounded shadow font-bold">+ Add Worker</button>
                     </div>
-                    <div class="glass overflow-x-auto p-0"><table class="w-full text-sm text-left data-table" id="table-workers"><thead class="bg-gray-100"><tr><th>Name</th><th>ID</th><th>Role</th><th>Status</th><th>Approval Info</th><th>Action</th></tr></thead><tbody class="divide-y"></tbody></table></div>
+                    <div class="glass overflow-x-auto p-0"><table class="w-full text-sm text-left data-table" id="table-workers"><thead class="bg-gray-100"><tr><th>Name</th><th>Age/Gender</th><th>Contact</th><th>ID Proof</th><th>Audit Trail</th><th>Added By</th><th>Action</th></tr></thead><tbody class="divide-y"></tbody></table></div>
                 </div>
 
                 <div id="view-users" class="hidden">
@@ -423,7 +457,8 @@
             <div class="sidebar-right">
                 <div class="mb-6" id="charts-container">
                     <h3 class="text-xs font-bold text-gray-400 uppercase mb-2 tracking-wider">Live Stats</h3>
-                    <div class="h-40"><canvas id="chartStatus"></canvas></div>
+                    <div class="h-40 mb-4"><canvas id="chartStatus"></canvas></div>
+                    <div class="h-40"><canvas id="chartType"></canvas></div>
                 </div>
                 <div id="validity-box" class="hidden mb-6 p-4 bg-green-50 border border-green-200 rounded-lg shadow-sm text-center">
                     <div class="text-xs font-bold text-green-800 uppercase mb-1">Permit Validity</div>
@@ -477,7 +512,7 @@
     <script nonce="NONCE_PLACEHOLDER">
         const API = "/api";
         let authToken = null, currentUser = null;
-        let mapInstance = null, chartS = null;
+        let mapInstance = null, chartS = null, chartT = null;
         let currentPermitId = null, currentPermitWorkers = [], currentRenewalCount = 0, permitRequirePhoto = false, currentPermitIOCLData = [];
         
         const CL_DATA = { 
@@ -540,7 +575,6 @@
             document.getElementById('login-loc').addEventListener('change', loadUsers);
             document.getElementById('login-role').addEventListener('change', loadUsers);
             
-            // REQ C: 1st Renewal Toggle
             document.getElementById('chk-init-renewal').addEventListener('change', (e) => {
                 document.getElementById('div-init-renewal').classList.toggle('hidden', !e.target.checked);
             });
@@ -587,7 +621,13 @@
             document.getElementById('app-container').classList.remove('hidden');
             document.getElementById('user-display').innerHTML = `<div class="font-bold text-white text-lg">${currentUser.Name}</div><div class="text-orange-400 font-bold uppercase text-xs">${currentUser.Role}</div><div class="text-xs mt-1 text-gray-500 font-mono">${currentUser.Location}</div>`;
             
-            if(currentUser.Role === 'Requester') document.getElementById('nav-new-permit').classList.remove('hidden');
+            if(currentUser.Role === 'Requester') {
+                document.getElementById('nav-new-permit').classList.remove('hidden');
+            } else {
+                // REQ H: Excel for App/Rev Only
+                document.getElementById('btn-export-excel').classList.remove('hidden');
+            }
+
             if(currentUser.Role === 'MasterAdmin') document.getElementById('nav-admin').classList.remove('hidden');
             if(currentUser.Role === 'Approver' || currentUser.Role === 'MasterAdmin') document.getElementById('nav-users').classList.remove('hidden');
             if(currentUser.Role !== 'Requester') document.getElementById('nav-map').classList.remove('hidden');
@@ -642,7 +682,6 @@
                 let itemsHtml = CL_DATA[sec].map((item, i) => {
                     let extraFields = `<input class="w-full text-xs border-b mt-1" placeholder="Remarks" name="${sec}_${i}_Rem">`;
                     if (sec === 'A' && i === 11) {
-                        // REQ C: Added specific IDs for auto-sync
                          extraFields = `<div class="grid grid-cols-3 gap-2 mt-2">
                              <input name="GP_Q12_HC" id="GP_Q12_HC" placeholder="HC % LEL" onkeyup="syncGasToRenewal()">
                              <input name="GP_Q12_ToxicGas" id="GP_Q12_ToxicGas" placeholder="Toxic PPM" onkeyup="syncGasToRenewal()">
@@ -680,7 +719,6 @@
             });
         }
         
-        // REQ C: Auto-sync logic
         window.syncGasToRenewal = function() {
             if(document.getElementById('chk-init-renewal').checked) {
                 safeSet('InitRenHC', getVal('GP_Q12_HC'));
@@ -739,7 +777,6 @@
             const res = await apiCall('/dashboard', 'POST', {role: currentUser.Role, email: currentUser.Email});
             const container = document.getElementById('dashboard-content'); container.innerHTML = '';
             
-            // REQ G: Ensure all statuses are caught
             const pending = res.filter(p => p.Status.includes('Pending') || p.Status === 'Submitted');
             const active = res.filter(p => p.Status === 'Active' || p.Status.includes('Renewal'));
             const closed = res.filter(p => p.Status.includes('Closed') || p.Status === 'Rejected');
@@ -757,7 +794,13 @@
                             if(title !== 'Action Required') {
                                  action = `<button class="btn-pdf" onclick="event.stopPropagation(); downloadSecurePDF('${p.PermitID}')">📄 PDF</button>`;
                             }
-                            return `<tr onclick="openPermit('${p.PermitID}')" class="group hover:bg-${color}-50 transition"><td class="font-bold text-blue-600 group-hover:underline">${p.PermitID}</td><td class="font-medium">${p.WorkType}</td><td class="text-gray-500">${p.LocationUnit}</td><td><span class="px-2 py-0.5 rounded bg-${color}-50 text-${color}-700 font-bold border border-${color}-200 text-[10px] uppercase">${p.Status}</span></td><td class="font-mono text-gray-500">${p.ValidFrom.split('T')[0]}</td><td>${action}</td></tr>`;
+                            // REQ B: Pending Status Red Color
+                            let statusClass = "text-[10px] uppercase font-bold px-2 py-0.5 rounded border ";
+                            if(p.Status.includes('Pending')) statusClass += "bg-red-50 text-red-600 border-red-200";
+                            else if(p.Status==='Active') statusClass += "bg-green-50 text-green-700 border-green-200";
+                            else statusClass += "bg-gray-50 text-gray-600 border-gray-200";
+
+                            return `<tr onclick="openPermit('${p.PermitID}')" class="group hover:bg-${color}-50 transition"><td class="font-bold text-blue-600 group-hover:underline">${p.PermitID}</td><td class="font-medium">${p.WorkType}</td><td class="text-gray-500">${p.LocationUnit}</td><td><span class="${statusClass}">${p.Status}</span></td><td class="font-mono text-gray-500">${p.ValidFrom.split('T')[0]}</td><td>${action}</td></tr>`;
                         }).join('')}</tbody></table></div>
                     </div>`;
             };
@@ -813,17 +856,14 @@
             currentPermitId = null;
             document.querySelectorAll('#pf input, #pf select, #pf textarea').forEach(e => e.disabled = false);
             
-            // REQ A: Requester Editable
             safeSet("RequesterName", currentUser.Name);
             safeSet("Vendor", currentUser.Name);
             document.getElementById("Vendor").readOnly = true;
-            document.getElementById("RequesterName").readOnly = false; // Changed to false
+            document.getElementById("RequesterName").readOnly = false; 
 
-            // REQ B: Auto-fill Region/Unit/Location
             const locString = `${currentUser.Region}/${currentUser.Unit}/${currentUser.Location}`;
             safeSet("LocationUnit", locString);
 
-            // REQ C: Ensure 1st Renewal logic is reset
             document.getElementById("init-renewal-wrapper").classList.remove('hidden');
             document.getElementById("div-init-renewal").classList.add('hidden');
 
@@ -854,20 +894,13 @@
 
             document.querySelectorAll('#pf input, #pf textarea, #pf select').forEach(el => {
                 let shouldDisable = true;
-                
-                // REQ A: Allow Reviewer/Approver to edit Hazards
-                if(isPendingAction && (el.name.startsWith('H_') || el.id === 'H_Others_Detail')) {
-                    shouldDisable = false;
-                }
-                
-                // REQ C: Allow Approver to toggle Image Requirement
-                if(currentUser.Role === 'Approver' && el.id === 'RequireRenewalPhotos') {
-                    shouldDisable = false;
-                }
+                if(isPendingAction && (el.name.startsWith('H_') || el.id === 'H_Others_Detail')) shouldDisable = false;
+                if(currentUser.Role === 'Approver' && el.id === 'RequireRenewalPhotos') shouldDisable = false;
+                // REQ A: Ensure Renewal Radios are enabled during pending flow
+                if(el.name === 'RevRenAction' || el.name === 'AppRenAction') shouldDisable = false;
 
                 if(el.type === 'checkbox') el.checked = (p[el.name] === 'Y'); 
                 else if(el.type !== 'file') el.value = p[el.name] || ''; 
-                
                 el.disabled = shouldDisable;
             });
 
@@ -886,9 +919,20 @@
             
             if (rens.length > 0 || canRenew) {
                 document.getElementById('renewals-section').classList.remove('hidden');
+                
+                // REQ C: New Renewal Table Logic
                 document.getElementById('renewal-history-body').innerHTML = rens.map(r => {
                     const photoHtml = r.photoUrl ? `<button type="button" class="text-blue-600 font-bold underline text-xs" onclick="viewSecurePhoto('${r.photoUrl}')">View Photo</button>` : 'N/A';
-                    return `<tr class="border-b border-gray-100 hover:bg-purple-50"><td class="p-2 font-mono text-[10px]">${r.valid_from}<br>${r.valid_to}</td><td class="p-2">HC:${r.hc}% Tox:${r.toxic}</td><td class="p-2">${r.worker_list?.length || 0}</td><td class="p-2 text-center">${photoHtml}</td><td class="p-2">${r.req_name}</td><td class="p-2 font-bold text-purple-700">${r.status}</td></tr>`;
+                    return `<tr class="border-b border-gray-100 hover:bg-purple-50">
+                        <td class="p-2 font-mono text-[10px]">${r.valid_from}<br>${r.valid_to}</td>
+                        <td class="p-2">HC:${r.hc}% Tox:${r.toxic} O2:${r.oxygen}</td>
+                        <td class="p-2">${r.worker_list ? r.worker_list.join(', ') : 'All'}</td>
+                        <td class="p-2 text-[10px]">${r.precautions || '-'}</td>
+                        <td class="p-2">${r.req_name}</td>
+                        <td class="p-2 text-[10px]">${r.rev_name || '-'}<br>${r.rev_at || ''}</td>
+                        <td class="p-2 text-[10px]">${r.app_name || '-'}<br>${r.app_at || ''}</td>
+                        <td class="p-2 text-center">${photoHtml}</td>
+                    </tr>`;
                 }).join('');
                 
                 if (canRenew) {
@@ -904,11 +948,23 @@
             } else document.getElementById('renewals-section').classList.add('hidden');
 
             const actionsDiv = document.getElementById("actions-bar"); actionsDiv.innerHTML = "";
+            
+            // REQ A: 1st Renewal Logic
+            if(p.Status === 'Pending Review' && currentUser.Role === 'Reviewer') {
+                if(rens.length === 1 && rens[0].status === 'pending_review') {
+                    document.getElementById('rev-renewal-decision').classList.remove('hidden');
+                }
+            }
+            if(p.Status === 'Pending Approval' && currentUser.Role === 'Approver') {
+                if(rens.length === 1 && rens[0].status === 'pending_approval') { // Only if Reviewer Recommended
+                    document.getElementById('app-renewal-decision').classList.remove('hidden');
+                }
+            }
+
             const lastRen = rens.length > 0 ? rens[rens.length-1] : null;
 
             if(currentUser.Role === 'Requester' && p.Status === 'New') showNewPermit();
             
-            // REQ B: Reviewer only Forwards
             if(currentUser.Role === 'Reviewer' && p.Status === 'Pending Review') {
                 document.getElementById('fs-reviewer-section').classList.remove('hidden'); document.getElementById('iocl-reviewer-wrapper').classList.remove('hidden');
                 document.getElementById('Reviewer_Remarks').disabled = false; document.getElementById('AdditionalPrecautions').disabled = false;
@@ -918,11 +974,9 @@
                 const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-2 rounded shadow font-bold"; b2.innerText = "Review & Forward"; b2.onclick = () => upd('review');
                 actionsDiv.append(b1, b2);
             }
-            // REQ B: Approver Approves
             if(currentUser.Role === 'Approver' && p.Status === 'Pending Approval') {
                 document.getElementById('fs-approver-section').classList.remove('hidden'); document.getElementById('iocl-approver-wrapper').classList.remove('hidden');
                 document.getElementById('Approver_Remarks').disabled = false; 
-                // REQ C: Enable Image Req for Approver
                 document.getElementById('RequireRenewalPhotos').disabled = false;
                 
                 const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-2 rounded shadow font-bold"; b1.innerText = "Reject"; b1.onclick = () => upd('reject');
@@ -931,21 +985,23 @@
             }
             
             if(lastRen && lastRen.status.includes('pending')) {
-                // Show Pending Info Box
                 if(currentUser.Role !== 'Requester') {
                     document.getElementById('pending-renewal-display').classList.remove('hidden');
                     if(lastRen.oddHourReq === 'Y') document.getElementById('odd-hour-approval-controls').classList.remove('hidden');
                 }
 
                 if((currentUser.Role === 'Reviewer' && p.Status.includes('Review')) || (currentUser.Role === 'Approver' && p.Status.includes('Approval'))) {
-                    document.getElementById('action-renewal').classList.remove('hidden');
-                    document.getElementById('btn-approve-renewal').onclick = () => submitRenewal('approve');
-                    document.getElementById('btn-reject-renewal').onclick = () => submitRenewal('reject');
-                    
-                    if(lastRen.oddHourReq === 'Y' && currentUser.Role === 'Approver') {
-                        document.getElementById('btn-approve-renewal').disabled = true; // Wait for checkbox
-                        window.toggleRenewalApproveBtn = function() {
-                            document.getElementById('btn-approve-renewal').disabled = !document.getElementById('odd-hour-allow-check').checked;
+                    // Only show standard renewal actions if NOT the 1st renewal flow (which uses the radios)
+                    if(rens.length > 1) { 
+                        document.getElementById('action-renewal').classList.remove('hidden');
+                        document.getElementById('btn-approve-renewal').onclick = () => submitRenewal('approve');
+                        document.getElementById('btn-reject-renewal').onclick = () => submitRenewal('reject');
+                        
+                        if(lastRen.oddHourReq === 'Y' && currentUser.Role === 'Approver') {
+                            document.getElementById('btn-approve-renewal').disabled = true; 
+                            window.toggleRenewalApproveBtn = function() {
+                                document.getElementById('btn-approve-renewal').disabled = !document.getElementById('odd-hour-allow-check').checked;
+                            }
                         }
                     }
                 }
@@ -1017,14 +1073,12 @@
             const selWorkers = []; document.querySelectorAll('.ren-worker-cb:checked').forEach(c => selWorkers.push(c.value));
             fd.append('renewalWorkers', JSON.stringify(selWorkers));
 
-            // Check Odd Hour Safety
             if(!document.getElementById("odd-hour-agreement").classList.contains("hidden")) {
                 if(!document.getElementById("OddHourSafetyCheck").checked) return alert("You must accept Odd Hour safety terms.");
                 fd.append('oddHourReq', 'Y');
             }
 
             const fileInput = document.getElementById("ren-cam-sub");
-            // REQ D: Mandatory Image Check
             const isPhotoMandatory = !document.getElementById('renewal-photo-wrapper').classList.contains('hidden');
             
             if(isPhotoMandatory && fileInput.files.length === 0) {
@@ -1077,6 +1131,10 @@
         async function loadWorkers(context) { 
             const res = await apiCall('/get-workers', 'POST', {role:currentUser.Role, email:currentUser.Email, context:context}); 
             
+            // REQ F: Hide button for non-requesters
+            if(currentUser.Role === 'Requester') document.getElementById('btn-add-worker-main').classList.remove('hidden');
+            else document.getElementById('btn-add-worker-main').classList.add('hidden');
+
             if(context === 'permit_dropdown') { 
                 const con = document.getElementById('worker-select-area');
                 con.innerHTML = res.map(w => `
@@ -1092,6 +1150,7 @@
                 t.innerHTML = "";
                 res.forEach(w => {
                     const audit = w.ApprovedBy ? `<div class="text-[10px] text-gray-500">By ${w.ApprovedBy}<br>${w.ApprovedAt}</div>` : '-';
+                    // REQ E: Updated Table Columns
                     let actions = '';
                     if(currentUser.Role === 'Requester') {
                         actions = `<button class="text-red-600 font-bold hover:underline text-xs" onclick="workerAction('${w.WorkerID}', 'delete')">Delete</button>`;
@@ -1103,10 +1162,11 @@
                     t.innerHTML += `
                         <tr class="hover:bg-gray-50 border-b border-gray-100">
                             <td class="p-3 font-bold">${escapeHtml(w.Name)}</td>
+                            <td class="p-3 text-xs">${escapeHtml(w.Age)} / ${escapeHtml(w.Gender)}</td>
+                            <td class="p-3 text-xs font-mono">${escapeHtml(w.Contact)}</td>
                             <td class="p-3 font-mono text-xs">${escapeHtml(w.IDType)}: ${escapeHtml(w.ID)}</td>
-                            <td class="p-3 text-xs">${escapeHtml(w.Role || 'Worker')}</td>
-                            <td class="p-3"><span class="px-2 py-1 rounded text-xs font-bold ${w.Status.includes('Approved')?'bg-green-100 text-green-700':'bg-orange-100 text-orange-700'}">${w.Status}</span></td>
                             <td class="p-3">${audit}</td>
+                            <td class="p-3 text-xs">${escapeHtml(w.RequestorName)}</td>
                             <td class="p-3">${actions}</td>
                         </tr>`;
                 });
@@ -1131,10 +1191,26 @@
                 Site_Restored_Check: document.getElementById("Site_Restored_Check").checked ? 'Y' : 'N'
             };
             
-            // Ensure checked hazard boxes are sent
             if(currentUser.Role === 'Reviewer' && act === 'review') {
+                 // Check 1st Renewal Recommendation
+                 if(!document.getElementById('rev-renewal-decision').classList.contains('hidden')) {
+                     const dec = document.querySelector('input[name="RevRenAction"]:checked');
+                     if(!dec) { alert("Please recommend or reject the 1st Renewal."); return; }
+                     if(dec.value === 'reject') body.action = 'reject'; // Override action to reject whole permit if renewal rejected? Or just the renewal?
+                     // Assuming Requirement A implies separate buttons logic handled in backend, here we send the choice
+                     body.FirstRenewalAction = dec.value;
+                 }
                  document.querySelectorAll('input[type=checkbox]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
                  document.querySelectorAll('input[type=radio]:checked').forEach(r => body[r.name] = r.value);
+            }
+
+            if(currentUser.Role === 'Approver' && act === 'approve') {
+                 // Check 1st Renewal Approval
+                 if(!document.getElementById('app-renewal-decision').classList.contains('hidden')) {
+                     const dec = document.querySelector('input[name="AppRenAction"]:checked');
+                     if(!dec) { alert("Please approve or reject the 1st Renewal."); return; }
+                     body.FirstRenewalAction = dec.value;
+                 }
             }
 
             const res = await apiCall('/update-status', 'POST', body);
@@ -1246,13 +1322,25 @@
         }
         function logout() { location.reload(); }
         
+        // REQ G: Round Bar & Bar Chart
         async function loadStats(data) {
             if(!data) return;
             document.getElementById('charts-container').classList.remove('hidden');
-            const ctx = document.getElementById('chartStatus').getContext('2d');
+            const counts = {}; const types = {};
+            data.forEach(d => {
+                counts[d.Status] = (counts[d.Status]||0)+1;
+                types[d.WorkType] = (types[d.WorkType]||0)+1;
+            });
+
+            // Doughnut (Round Bar)
             if(chartS) chartS.destroy();
-            const counts = {}; data.forEach(d => counts[d.Status] = (counts[d.Status]||0)+1);
-            chartS = new Chart(ctx, { type: 'doughnut', data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: ['#f87171', '#4ade80', '#94a3b8'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } } });
+            const ctxS = document.getElementById('chartStatus').getContext('2d');
+            chartS = new Chart(ctxS, { type: 'doughnut', data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: ['#f87171', '#4ade80', '#94a3b8', '#fbbf24'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } } });
+
+            // Bar Chart
+            if(chartT) chartT.destroy();
+            const ctxT = document.getElementById('chartType').getContext('2d');
+            chartT = new Chart(ctxT, { type: 'bar', data: { labels: Object.keys(types), datasets: [{ label: 'Work Types', data: Object.values(types), backgroundColor: '#60a5fa' }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } } });
         }
 
         initLogin();

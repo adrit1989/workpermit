@@ -1214,6 +1214,7 @@ app.post('/api/update-status', authenticateAccess, async (req, res) => {
     const { PermitID, action, ...extras } = req.body;
     const role = req.user.role;
     const user = req.user.name;
+    const now = getNowIST();
 
     const pool = await getConnection();
     const cur = await pool.request().input('p', PermitID).query("SELECT * FROM Permits WHERE PermitID=@p");
@@ -1222,28 +1223,20 @@ app.post('/api/update-status', authenticateAccess, async (req, res) => {
     let st = cur.recordset[0].Status;
     let d = JSON.parse(cur.recordset[0].FullDataJSON || "{}");
     let renewals = JSON.parse(cur.recordset[0].RenewalsJSON || "[]");
-    const now = getNowIST();
 
     Object.assign(d, extras);
 
-    if (renewals.length === 1) {
-      const r1 = renewals[0];
-      if (['pending_review','pending_approval'].includes(r1.status)) {
-        if (action === 'reject') {
-          r1.status = 'rejected'; r1.rej_by = user; r1.rej_reason = "Rejected with main permit";
-        } else if (role === 'Reviewer' && action === 'review') {
-          r1.status = 'pending_approval'; r1.rev_name = user; r1.rev_at = now;
-        } else if (role === 'Approver' && action === 'approve') {
-          r1.status = 'approved'; r1.app_name = user; r1.app_at = now;
-        }
-      }
+    // === UPDATE STATUS LOGIC ===
+    if (action === 'reject') st = 'Rejected';
+    else if (action === 'initiate_closure') {
+      st = 'Closure Pending Review';
+      d.Closure_Requestor_Date = now;
+      d.Closure_Receiver_Sig = `${user} on ${now}`;
     }
-
-    if (action === 'reject_closure') st = 'Active';
-    else if (action === 'approve_closure' && role === 'Reviewer') {
-      st = 'Closure Pending Approval';
-      d.Closure_Reviewer_Sig = `${user} on ${now}`;
-      d.Closure_Reviewer_Date = now;
+    else if (action === 'reject_closure') st = 'Active';
+    else if (role === 'Reviewer' && action === 'review') {
+      st = 'Pending Approval';
+      d.Reviewer_Sig = `${user} on ${now}`;
     }
     else if (action === 'approve' && role === 'Approver') {
       if (st.includes('Closure Pending Approval')) {
@@ -1256,152 +1249,93 @@ app.post('/api/update-status', authenticateAccess, async (req, res) => {
         d.Approver_Sig = `${user} on ${now}`;
       }
     }
-    else if (action === 'initiate_closure') {
-      st = 'Closure Pending Review';
-      d.Closure_Requestor_Date = now;
-      d.Closure_Receiver_Sig = `${user} on ${now}`;
+    else if (action === 'approve_closure' && role === 'Reviewer') {
+      st = 'Closure Pending Approval';
+      d.Closure_Reviewer_Sig = `${user} on ${now}`;
+      d.Closure_Reviewer_Date = now;
     }
-    else if (action === 'reject') st = 'Rejected';
-    else if (role === 'Reviewer' && action === 'review') {
-      st = 'Pending Approval';
-      d.Reviewer_Sig = `${user} on ${now}`;
+
+    // === HANDLE SINGLE RENEWAL AUTO PROCESS ===
+    if (renewals.length === 1) {
+      const r1 = renewals[0];
+      if (['pending_review','pending_approval'].includes(r1.status)) {
+        if (action === 'reject') {
+          r1.status = 'rejected'; 
+          r1.rej_by = user; 
+          r1.rej_reason = "Rejected with main permit";
+        } else if (role === 'Reviewer' && action === 'review') {
+          r1.status = 'pending_approval'; 
+          r1.rev_name = user; 
+          r1.rev_at = now;
+        } else if (role === 'Approver' && action === 'approve') {
+          r1.status = 'approved'; 
+          r1.app_name = user; 
+          r1.app_at = now;
+        }
+      }
     }
 
     let finalPdfUrl = null;
-    let finalJson = JSON.stringify(d);
 
     if (st === 'Closed') {
-      const pdfRecord = { ...cur.recordset[0], Status:'Closed', PermitID, ValidFrom:cur.recordset[0].ValidFrom, ValidTo:cur.recordset[0].ValidTo };
-      const pdfBuffer = await new Promise(async (resolve, reject)=>{
+      const pdfRecord = { 
+        ...cur.recordset[0], 
+        Status:'Closed', 
+        PermitID,
+        ValidFrom:cur.recordset[0].ValidFrom,
+        ValidTo:cur.recordset[0].ValidTo
+      };
+
+      const pdfBuffer = await new Promise((resolve, reject)=>{
         const doc = new PDFDocument({ margin:30, size:'A4', bufferPages:true });
-        const buffers=[];
-        
-        doc.on('data', buffers.push.bind(buffers));
-        doc.on('end', ()=> resolve(Buffer.concat(buffers)));
+        const chunks=[];
+        doc.on('data', chunks.push.bind(chunks));
+        doc.on('end', ()=> resolve(Buffer.concat(chunks)));
         doc.on('error', reject);
 
-        try {
-          await drawPermitPDF(doc, pdfRecord, d, renewals);
-          doc.end();
-        } catch(e) { 
-            if(!doc.closed) doc.end(); 
-            reject(e); 
-        }
+        drawPermitPDF(doc, pdfRecord, d, renewals)
+          .then(()=>doc.end())
+          .catch(err=>{ doc.end(); reject(err); });
       });
+
       const blobName = `closed-permits/${PermitID}_FINAL.pdf`;
-      // Allow PDF upload for System Archives
-      finalPdfUrl = await uploadToAzure(pdfBuffer, blobName, true);
+      finalPdfUrl = await uploadToAzure(pdfBuffer, blobName, "application/pdf");
+
+      if (!finalPdfUrl) {
+        return res.status(500).json({
+          error: "PDF generated but upload failed. JSON preserved for retry.",
+          code: "UPLOAD_FAILED"
+        });
+      }
     }
 
-    const q = pool.request().input('p', PermitID).input('s', st).input('r', JSON.stringify(renewals));
+    // === DB WRITE BACK ===
+    const reqDB = pool.request().input('p', PermitID).input('s', st);
+
     if (finalPdfUrl) {
-      await q.input('url', finalPdfUrl).query("UPDATE Permits SET Status=@s, FullDataJSON=NULL, RenewalsJSON=NULL, FinalPdfUrl=@url WHERE PermitID=@p");
-    } else {
-      await q.input('j', finalJson).query("UPDATE Permits SET Status=@s, FullDataJSON=@j, RenewalsJSON=@r WHERE PermitID=@p");
+      await reqDB
+        .input('url', finalPdfUrl)
+        .query(`
+          UPDATE Permits 
+          SET Status=@s, FinalPdfUrl=@url, FullDataJSON=NULL, RenewalsJSON=NULL
+          WHERE PermitID=@p
+        `);
+      return res.json({ success:true, archived:true, pdfUrl:finalPdfUrl });
     }
 
-    log(`Status Update: ${PermitID} -> ${action} by ${user}`);
-    res.json({ success:true, archived:!!finalPdfUrl });
-
-  } catch (err) {
-    console.error("Status Update Error:", err);
-    res.status(500).json({ error:"Internal Server Error" });
-  }
-});
-
-app.post('/api/renewal', authenticateAccess, upload.any(), async (req, res) => {
-  try {
-    const { PermitID, action, rejectionReason, renewalWorkers, oddHourReq, ...data } = req.body;
-    const role = req.user.role;
-    const user = req.user.name;
-
-    const pool = await getConnection();
-    const cur = await pool.request().input('p', PermitID).query("SELECT RenewalsJSON, Status, ValidFrom, ValidTo FROM Permits WHERE PermitID=@p");
-    if (cur.recordset[0].Status === 'Closed') return res.status(400).json({ error:"Permit CLOSED" });
-
-    let r = JSON.parse(cur.recordset[0].RenewalsJSON || "[]");
-    const now = getNowIST();
-
-    if (role === 'Requester') {
-      const rs = new Date(data.RenewalValidFrom);
-      const re = new Date(data.RenewalValidTo);
-      if (re <= rs) return res.status(400).json({ error:"End > Start required" });
-
-      const pStart = new Date(cur.recordset[0].ValidFrom);
-      const pEnd = new Date(cur.recordset[0].ValidTo);
-      if (rs < pStart || re > pEnd) {
-        return res.status(400).json({ error:"Renewal must be within main permit" });
-      }
-
-      const diffMs = re - rs;
-      if (diffMs > 8*60*60*1000) {
-        return res.status(400).json({ error:"Max 8 hours" });
-      }
-
-      if (r.length > 0) {
-        const last = r[r.length-1];
-        if (last.status !== 'rejected') {
-          const lastEnd = new Date(last.valid_till);
-          if (rs < lastEnd) {
-            return res.status(400).json({ error:"Overlap not allowed" });
-          }
-        }
-      }
-
-      const file = req.files ? req.files.find(f => f.fieldname === 'RenewalImage') : null;
-      let photoUrl=null;
-      if (file) {
-        const blobName = `${PermitID}-${getOrdinal(r.length+1)}Renewal.jpg`;
-        photoUrl = await uploadToAzure(file.buffer, blobName);
-      }
-
-      r.push({
-        status:'pending_review',
-        valid_from:data.RenewalValidFrom,
-        valid_till:data.RenewalValidTo,
-        hc:data.hc,
-        toxic:data.toxic,
-        oxygen:data.oxygen,
-        precautions:data.precautions,
-        req_name:user,
-        req_at:now,
-        worker_list: JSON.parse(renewalWorkers || "[]"),
-        photoUrl,
-        odd_hour_req:(oddHourReq === 'Y')
-      });
-    } else {
-      const last=r[r.length-1];
-      if (action==='reject') {
-        last.status='rejected';
-        last.rej_by=user;
-        last.rej_reason=rejectionReason;
-      } else {
-        if (role==='Reviewer') {
-          last.status='pending_approval';
-          last.rev_name=user;
-          last.rev_at=now;
-        } else if (role==='Approver') {
-          last.status='approved';
-          last.app_name=user;
-          last.app_at=now;
-        }
-      }
-    }
-
-    const last=r[r.length-1];
-    let newStatus;
-    if (last.status==='approved' || last.status==='rejected') newStatus='Active';
-    else newStatus = last.status==='pending_review' ? 'Renewal Pending Review' : 'Renewal Pending Approval';
-
-    await pool.request()
-      .input('p',PermitID)
-      .input('r',JSON.stringify(r))
-      .input('s',newStatus)
-      .query("UPDATE Permits SET RenewalsJSON=@r, Status=@s WHERE PermitID=@p");
+    await reqDB
+      .input('j', JSON.stringify(d))
+      .input('r', JSON.stringify(renewals))
+      .query(`
+        UPDATE Permits 
+        SET Status=@s, FullDataJSON=@j, RenewalsJSON=@r
+        WHERE PermitID=@p
+      `);
 
     res.json({ success:true });
 
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error:"Internal Server Error" });
   }
 });

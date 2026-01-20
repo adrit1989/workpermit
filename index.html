@@ -936,6 +936,27 @@
                 }).join('');
                 
                 if (canRenew) {
+                    // Check if there is a renewal currently stuck in "pending" status
+                    if (!lastRen || !lastRen.status.includes('pending')) {
+                        document.getElementById('form-renewal').classList.remove('hidden');
+                        
+                        // ENABLE the inputs so the Requester can type
+                        document.querySelectorAll('#form-renewal input').forEach(el => {
+                            el.disabled = false;
+                        });
+
+                        const renSel = document.getElementById('renewal-worker-select');
+                        renSel.innerHTML = currentPermitWorkers.map(w => `<label class="flex items-center gap-1 text-xs bg-white p-1 rounded border"><input type="checkbox" value="${escapeHtml(w.Name)}" checked class="ren-worker-cb accent-purple-600"> ${escapeHtml(w.Name)}</label>`).join('');
+                        
+                        if (permitRequirePhoto) {
+                            document.getElementById('renewal-photo-wrapper').classList.remove('hidden'); 
+                            document.getElementById('ren-cam-sub').required = true;
+                            document.getElementById('ren-cam-sub').disabled = false; // Ensure file input is enabled
+                        } else {
+                            document.getElementById('renewal-photo-wrapper').classList.add('hidden'); 
+                            document.getElementById('ren-cam-sub').required = false;
+                        }
+                    } else {
                     document.getElementById('form-renewal').classList.remove('hidden');
                     const renSel = document.getElementById('renewal-worker-select');
                     renSel.innerHTML = currentPermitWorkers.map(w => `<label class="flex items-center gap-1 text-xs bg-white p-1 rounded border"><input type="checkbox" value="${escapeHtml(w.Name)}" checked class="ren-worker-cb accent-purple-600"> ${escapeHtml(w.Name)}</label>`).join('');
@@ -1347,3 +1368,4 @@
     </script>
 </body>
 </html>
+

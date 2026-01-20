@@ -979,22 +979,71 @@
 
            
             if(currentUser.Role === 'Requester' && p.Status === 'New') showNewPermit();
-            // Handle Closure logic for Requester (Unhide and Enable Closure Section)
+          // --- CLOSURE HANDSHAKE LOGIC ---
+
+            // A. Requester: Initiate Closure
             if(currentUser.Role === 'Requester' && (p.Status === 'Active' || p.Status.includes('Renewal'))) {
-                // Ensure the closure UI section is visible
                 document.getElementById('closure-section').classList.remove('hidden');
                 document.getElementById('div-closure-req').classList.remove('hidden');
-                
-                // Unlock the inputs so the requester can provide confirmation and remarks
                 document.getElementById('Closure_Requestor_Remarks').disabled = false;
                 document.getElementById('Site_Restored_Check').disabled = false;
 
-                // Create and show the "Job Complete" button at the bottom action bar
                 const bClose = document.createElement("button");
                 bClose.className = "bg-red-600 text-white px-6 py-2 rounded shadow font-bold hover:bg-red-700 transition";
                 bClose.innerText = "Job Complete / Submit for Closure";
-                bClose.onclick = () => upd('initiate_closure'); // Calls the update status API
-                document.getElementById("actions-bar").appendChild(bClose);
+                bClose.onclick = () => upd('initiate_closure'); 
+                actionsDiv.appendChild(bClose);
+            }
+            
+            // B. Reviewer: Verify or Reject Closure
+            if(currentUser.Role === 'Reviewer' && p.Status === 'Closure Pending Review') {
+                document.getElementById('closure-section').classList.remove('hidden');
+                document.getElementById('div-closure-req').classList.remove('hidden'); // Show Req remarks
+                document.getElementById('div-closure-rev').classList.remove('hidden');
+                document.getElementById('Closure_Reviewer_Remarks').disabled = false;
+                
+                // Show Requester's history
+                setText("ts-clos-req", p.Closure_Requestor_Date || '');
+                safeSet("Closure_Requestor_Remarks", p.Closure_Requestor_Remarks || "");
+
+                const bRej = document.createElement("button");
+                bRej.className = "bg-orange-100 text-orange-700 px-4 py-2 rounded shadow font-bold border border-orange-200 mr-2";
+                bRej.innerText = "Reject Closure (Back to Active)";
+                bRej.onclick = () => upd('reject_closure'); 
+
+                const bVerify = document.createElement("button");
+                bVerify.className = "bg-green-600 text-white px-4 py-2 rounded shadow font-bold";
+                bVerify.innerText = "Verify & Forward";
+                bVerify.onclick = () => upd('approve_closure');
+
+                actionsDiv.append(bRej, bVerify);
+            }
+
+            // C. Approver: Final Close or Reject Closure
+            if(currentUser.Role === 'Approver' && p.Status === 'Closure Pending Approval') {
+                document.getElementById('closure-section').classList.remove('hidden');
+                document.getElementById('div-closure-req').classList.remove('hidden'); // History
+                document.getElementById('div-closure-rev').classList.remove('hidden'); // History
+                document.getElementById('div-closure-app').classList.remove('hidden');
+                document.getElementById('Closure_Approver_Remarks').disabled = false;
+                
+                // Show History to Approver
+                setText("ts-clos-req", p.Closure_Requestor_Date || '');
+                setText("ts-clos-rev", p.Closure_Reviewer_Date || '');
+                safeSet("Closure_Requestor_Remarks", p.Closure_Requestor_Remarks || "");
+                safeSet("Closure_Reviewer_Remarks", p.Closure_Reviewer_Remarks || "");
+
+                const bRej = document.createElement("button");
+                bRej.className = "bg-orange-100 text-orange-700 px-4 py-2 rounded shadow font-bold border border-orange-200 mr-2";
+                bRej.innerText = "Reject Closure (Back to Active)";
+                bRej.onclick = () => upd('reject_closure');
+
+                const bFinal = document.createElement("button");
+                bFinal.className = "bg-black text-white px-4 py-2 rounded shadow font-bold";
+                bFinal.innerText = "Final Permit Close";
+                bFinal.onclick = () => upd('approve'); 
+                
+                actionsDiv.append(bRej, bFinal);
             }
             
             if(currentUser.Role === 'Reviewer' && p.Status === 'Pending Review') {
@@ -1207,7 +1256,8 @@
         
         async function workerAction(id, act) { await apiCall('/save-worker', 'POST', {WorkerID:id, Action:act, Role:currentUser.Role, ApproverName: currentUser.Name}); loadWorkers('mgmt'); }
 
-        async function upd(act) {
+async function upd(act) {
+            // REQ: Safety check for Requester
             if(act === 'initiate_closure') {
                 const siteCheck = document.getElementById("Site_Restored_Check").checked;
                 if(!siteCheck) {
@@ -1215,45 +1265,58 @@
                     return;
                 }
             }
+
+            // Logic to fetch supervisor data from the correct container
             let ioclData = getIOCLData('iocl-sup-container-rev'); 
             if(currentUser.Role === 'Approver') ioclData = getIOCLData('iocl-sup-container-app');
 
             const body = { 
-                PermitID: currentPermitId, action: act, role: currentUser.Role, user: currentUser.Name,
+                PermitID: currentPermitId, 
+                action: act, 
+                role: currentUser.Role, 
+                user: currentUser.Name,
                 IOCLSupervisors: ioclData,
-                comment: (currentUser.Role==='Reviewer' ? getVal("Reviewer_Remarks") : getVal("Approver_Remarks")),
+                comment: (currentUser.Role === 'Reviewer' ? getVal("Reviewer_Remarks") : getVal("Approver_Remarks")),
                 AdditionalPrecautions: getVal("AdditionalPrecautions"),
                 RequireRenewalPhotos: document.getElementById('RequireRenewalPhotos').checked ? 'Y' : 'N',
                 PdfBgColor: getVal('PdfBgColor'),
-                Closure_Reviewer_Remarks: getVal('Closure_Reviewer_Remarks'),
-                Closure_Approver_Remarks: getVal('Closure_Approver_Remarks'),
+                // REQ B: Capture specific closure remarks for the audit trail
+                Closure_Requestor_Remarks: getVal("Closure_Requestor_Remarks"), 
+                Closure_Reviewer_Remarks: getVal("Closure_Reviewer_Remarks"), 
+                Closure_Approver_Remarks: getVal("Closure_Approver_Remarks"),
                 Site_Restored_Check: document.getElementById("Site_Restored_Check").checked ? 'Y' : 'N'
             };
             
+            // Re-capture Hazards & PPE if Reviewer is forwarding
             if(currentUser.Role === 'Reviewer' && act === 'review') {
-                 // Check 1st Renewal Recommendation
-                 if(!document.getElementById('rev-renewal-decision').classList.contains('hidden')) {
-                     const dec = document.querySelector('input[name="RevRenAction"]:checked');
-                     if(!dec) { alert("Please recommend or reject the 1st Renewal."); return; }
-                     if(dec.value === 'reject') body.action = 'reject'; // Override action to reject whole permit if renewal rejected? Or just the renewal?
-                     // Assuming Requirement A implies separate buttons logic handled in backend, here we send the choice
-                     body.FirstRenewalAction = dec.value;
-                 }
-                 document.querySelectorAll('input[type=checkbox]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
-                 document.querySelectorAll('input[type=radio]:checked').forEach(r => body[r.name] = r.value);
+                 document.querySelectorAll('input[type=checkbox]').forEach(c => {
+                     if(c.name && (c.name.startsWith('H_') || c.name.startsWith('P_'))) {
+                         body[c.name] = c.checked ? 'Y' : 'N';
+                     }
+                 });
+                 document.querySelectorAll('input[type=radio]:checked').forEach(r => {
+                     if(r.name && !r.name.includes('Master')) body[r.name] = r.value;
+                 });
+                 
+                 // Handle 1st Renewal choice
+                 const dec = document.querySelector('input[name="RevRenAction"]:checked');
+                 if(dec) body.FirstRenewalAction = dec.value;
             }
 
+            // Handle 1st Renewal choice for Approver
             if(currentUser.Role === 'Approver' && act === 'approve') {
-                 // Check 1st Renewal Approval
-                 if(!document.getElementById('app-renewal-decision').classList.contains('hidden')) {
-                     const dec = document.querySelector('input[name="AppRenAction"]:checked');
-                     if(!dec) { alert("Please approve or reject the 1st Renewal."); return; }
-                     body.FirstRenewalAction = dec.value;
-                 }
+                 const dec = document.querySelector('input[name="AppRenAction"]:checked');
+                 if(dec) body.FirstRenewalAction = dec.value;
             }
 
+            // API execution
             const res = await apiCall('/update-status', 'POST', body);
-            if(res.success) { alert("Status Updated"); switchView('dashboard'); } else alert(res.error);
+            if(res.success) { 
+                alert("Status Updated Successfully");
+                switchView('dashboard'); 
+            } else { 
+                alert(res.error || "Update failed"); 
+            }
         }
 
         function addIOCLRow(containerId, data=null) {
@@ -1386,6 +1449,7 @@
     </script>
 </body>
 </html>
+
 
 
 

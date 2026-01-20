@@ -1313,6 +1313,7 @@ app.post('/api/update-status', authenticateAccess, async (req, res) => {
     const reqDB = pool.request().input('p', PermitID).input('s', st);
 
     if (finalPdfUrl) {
+       console.log(`CLOSURE APPROVED OK for ${PermitID}`);
       await reqDB
         .input('url', finalPdfUrl)
         .query(`

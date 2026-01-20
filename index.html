@@ -6,330 +6,194 @@
     <title>ERPL Mainline Permit System</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyADwuqMDCwNSaZKBnWURDCYdqlMxfiWBnU" async></script>
 
     <style nonce="NONCE_PLACEHOLDER">
-        /* --- GLOBAL LAYOUT RESET --- */
+        /* --- GLOBAL & LAYOUT STYLES --- */
         body { 
             background-color: #f3f4f6; 
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-            overflow: hidden; /* Prevent body scroll, handle in containers */
-            margin: 0;
-            padding: 0;
+            overflow: hidden; /* Prevent body scroll, use container scroll */
+            margin: 0; padding: 0;
         }
 
-        /* --- REQ A: GLOBAL LOADER OVERLAY --- */
+        /* REQ A: Global Loader Overlay */
         .loader-overlay { 
-            position: fixed; 
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(255,255,255,0.92); 
-            z-index: 10000; /* Highest z-index */
-            display: none; /* Hidden by default */
-            justify-content: center; 
-            align-items: center; 
-            flex-direction: column; 
-            backdrop-filter: blur(2px);
+            position: fixed; inset: 0; background: rgba(255,255,255,0.95); z-index: 10000; 
+            display: none; justify-content: center; align-items: center; flex-direction: column; 
         }
-        
         .spinner { 
-            border: 5px solid #e5e7eb; /* Light grey */
-            border-top: 5px solid #ea580c; /* Orange-600 */
-            border-radius: 50%; 
-            width: 60px; 
-            height: 60px; 
-            animation: spin 0.8s linear infinite; 
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border: 5px solid #f3f3f3; border-top: 5px solid #ea580c; border-radius: 50%; 
+            width: 60px; height: 60px; animation: spin 0.8s linear infinite; 
         }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        @keyframes spin { 
-            0% { transform: rotate(0deg); } 
-            100% { transform: rotate(360deg); } 
-        }
-
-        /* --- REQ D: SANDWICH LAYOUT STRUCTURE --- */
-        #main-wrapper { 
-            display: flex; 
-            height: 100vh; 
-            width: 100vw; 
-            overflow: hidden;
-        }
+        /* REQ D: SANDWICH LAYOUT STRUCTURE */
+        #main-wrapper { display: flex; height: 100vh; width: 100vw; }
         
-        /* LEFT SIDEBAR (Navigation) */
+        /* Left Sidebar (Navigation) */
         .sidebar-left { 
-            width: 280px; 
-            background: #0f172a; /* Slate-900 */
-            color: #e2e8f0; 
-            display: flex; 
-            flex-direction: column; 
-            flex-shrink: 0; 
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-            box-shadow: 4px 0 15px rgba(0,0,0,0.1);
-            z-index: 50;
+            width: 260px; background: #1e293b; color: white; display: flex; 
+            flex-direction: column; flex-shrink: 0; transition: 0.3s; 
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1); z-index: 40;
         }
         
-        /* RIGHT SIDEBAR (Info/Stats/Validity) */
+        /* Right Sidebar (Info/Stats/Validity) */
         .sidebar-right { 
-            width: 320px; 
-            background: #ffffff; 
-            border-left: 1px solid #e5e7eb; 
-            overflow-y: auto; 
-            flex-shrink: 0; 
-            padding: 1.5rem; 
-            display: flex; 
-            flex-direction: column; 
-            gap: 20px; 
-            z-index: 40;
-            box-shadow: -4px 0 15px rgba(0,0,0,0.05);
+            width: 320px; background: white; border-left: 1px solid #e5e7eb; 
+            overflow-y: auto; flex-shrink: 0; padding: 1.5rem; 
+            display: flex; flex-direction: column; gap: 20px; z-index: 30;
         } 
 
-        /* CENTER CONTENT (The "Meat" of the Sandwich) */
+        /* Center Content (Scrollable) */
         .content-area { 
-            flex-grow: 1; 
-            overflow-y: auto; 
-            padding: 2rem; 
-            background: #f8fafc; /* Slate-50 */
-            position: relative; 
-            scroll-behavior: smooth;
+            flex-grow: 1; overflow-y: auto; padding: 2rem; 
+            background: #f8fafc; position: relative; scroll-behavior: smooth;
         }
 
-        /* --- REQ C: 3 COLUMN CHECKLIST GRID --- */
+        /* REQ C: 3 Column Checklist Grid */
         .checklist-grid { 
-            display: grid; 
-            grid-template-columns: repeat(3, 1fr); /* 3 Columns Fixed */
-            gap: 1rem; 
-            width: 100%;
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; 
         }
 
-        /* --- RESPONSIVE BREAKPOINTS --- */
-        /* Large Tablets / Small Laptops */
-        @media(max-width: 1280px) { 
-            .checklist-grid { grid-template-columns: repeat(2, 1fr); } 
-            .sidebar-right { width: 280px; }
-        }
-
-        /* Tablets (Portrait) */
+        /* Responsive */
+        @media(max-width: 1280px) { .checklist-grid { grid-template-columns: repeat(2, 1fr); } }
         @media(max-width: 1024px) { 
-            .sidebar-right { display: none; } /* Hide right sidebar to save space */
-            .checklist-grid { grid-template-columns: 1fr; } /* Stack checklists */
+            .sidebar-right { display: none; } 
+            .checklist-grid { grid-template-columns: 1fr; }
         }
-
-        /* Mobile Phones */
         @media(max-width: 768px) { 
-            .sidebar-left { 
-                position: absolute; 
-                left: -280px; /* Hide off-screen */
-                height: 100%; 
-                top: 0;
-            }
-            .sidebar-left.open { 
-                left: 0; /* Slide in */
-            }
-            .content-area { padding: 1rem; }
+            .sidebar-left { position: absolute; left: -260px; height: 100%; }
+            .sidebar-left.open { left: 0; }
             .checklist-grid { grid-template-columns: 1fr; }
         }
 
-        /* --- UI COMPONENTS & FORM ELEMENTS --- */
+        /* --- UI COMPONENTS (Restored from Original) --- */
         .glass { 
-            background: white; 
-            border-radius: 0.75rem; 
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); 
-            border: 1px solid #e2e8f0; 
-            padding: 1.5rem; 
-            margin-bottom: 1.5rem; 
-            transition: transform 0.2s ease-in-out;
+            background: white; padding: 1.5rem; border-radius: 12px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 1.5rem; 
+            border: 1px solid #e5e7eb; 
         }
         
-        /* Input Styling */
         input, select, textarea { 
-            width: 100%; 
-            border: 1px solid #cbd5e1; 
-            padding: 0.75rem; 
-            border-radius: 0.5rem; 
-            font-size: 0.95rem; 
-            margin-bottom: 0.75rem; 
-            background-color: #fff; 
-            transition: all 0.2s;
-            color: #1e293b;
+            width: 100%; border: 1px solid #d1d5db !important; padding: 10px 12px; 
+            border-radius: 8px; font-size: 0.95rem; background: #fff; margin-bottom: 0.5rem; 
         }
-        
         input:focus, select:focus, textarea:focus { 
-            outline: none; 
-            border-color: #f97316; /* Orange-500 */
-            box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15); 
+            border-color: #ea580c !important; outline: none; box-shadow: 0 0 0 2px #fdba74; 
         }
-        
         input:disabled, select:disabled, textarea:disabled { 
-            background-color: #f1f5f9; /* Slate-100 */
-            color: #64748b; 
-            cursor: not-allowed; 
-            border-color: #e2e8f0;
+            background-color: #f9fafb; color: #6b7280; border-color: #e5e7eb !important; cursor: not-allowed;
         }
+        
+        .hidden { display: none !important; }
 
-        /* Navigation Items */
+        /* Nav Items */
         .nav-item { 
-            padding: 1rem 1.5rem; 
-            cursor: pointer; 
-            display: flex; 
-            align-items: center; 
-            gap: 1rem; 
-            color: #94a3b8; /* Slate-400 */
-            transition: all 0.2s; 
-            border-left: 4px solid transparent; 
-            font-weight: 500;
-            font-size: 0.95rem;
+            padding: 1rem 1.25rem; cursor: pointer; display: flex; align-items: center; 
+            gap: 0.75rem; color: #94a3b8; transition: all 0.2s; 
+            border-left: 4px solid transparent; font-weight: 500;
         }
-        
-        .nav-item:hover { 
-            background: #1e293b; /* Slate-800 */
-            color: #f8fafc; 
-        }
-        
-        .nav-item.active { 
-            background: #334155; /* Slate-700 */
-            color: #ffffff; 
-            border-left-color: #f97316; /* Orange-500 */
-        }
-        
-        /* Data Tables */
-        .data-table { 
-            width: 100%; 
-            border-collapse: collapse; 
-            font-size: 0.9rem;
-        }
-        
+        .nav-item:hover { background: #334155; color: white; }
+        .nav-item.active { background: #0f172a; color: white; border-left-color: #f97316; }
+
+        /* Tables */
+        .data-table { width: 100%; border-collapse: collapse; }
         .data-table th { 
-            background: #f8fafc; 
-            color: #475569; 
-            font-weight: 700; 
-            padding: 1rem; 
-            text-align: left; 
-            font-size: 0.75rem; 
-            text-transform: uppercase; 
-            letter-spacing: 0.05em; 
+            background: #f1f5f9; color: #475569; font-weight: 700; padding: 0.75rem; 
+            text-align: left; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; 
             border-bottom: 2px solid #e2e8f0; 
         }
+        .data-table td { padding: 0.75rem; border-bottom: 1px solid #e2e8f0; font-size: 0.9rem; vertical-align: middle; }
+        .data-table tr:hover { background: #f8fafc; cursor: pointer; }
         
-        .data-table td { 
-            padding: 1rem; 
-            border-bottom: 1px solid #e2e8f0; 
-            vertical-align: middle; 
-            color: #334155;
-        }
-        
-        .data-table tr:hover { 
-            background: #f1f5f9; 
-            cursor: pointer; 
-        }
-        
-        /* Utility Classes for Deleted/Edited Logic */
-        .marked-deleted { 
-            text-decoration: line-through; 
-            opacity: 0.5; 
-            background-color: #fef2f2; 
+        /* Mobile Table Support */
+        @media (max-width: 768px) {
+            .mobile-table th { display: none; }
+            .mobile-table td { display: block; width: 100%; border: none; padding: 4px 8px; }
+            .mobile-table tr { display: block; margin-bottom: 1rem; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
         }
 
-        /* Modal Transitions */
-        .animate-scale-up {
-            animation: scaleUp 0.3s ease-out forwards;
-        }
-        @keyframes scaleUp {
-            from { transform: scale(0.95); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
-        }
+        .marked-deleted { text-decoration: line-through; opacity: 0.6; background-color: #fee2e2; }
+        .audit-text { font-size: 0.65rem; color: #6b7280; line-height: 1.1; display: block; margin-top: 2px; }
+        .audit-del { color: #dc2626; font-weight: bold; display: block; margin-top: 2px; }
     </style>
 </head>
 <body>
 
     <div id="loader" class="loader-overlay">
         <div class="spinner"></div>
-        <div class="mt-6 font-bold text-orange-600 animate-pulse text-xl tracking-wide">Processing Request...</div>
-        <div class="text-xs text-gray-400 mt-2">Please wait while we communicate with the server</div>
+        <div class="mt-6 font-bold text-orange-600 animate-pulse text-xl">Processing Request...</div>
     </div>
 
-    <div id="view-login" class="fixed inset-0 bg-gradient-to-br from-orange-50 to-orange-100 z-50 flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md shadow-2xl rounded-xl border-t-8 border-orange-600 p-8 transform transition-all animate-scale-up">
-            <div class="text-center mb-8">
+    <div id="view-login" class="fixed inset-0 bg-orange-50 z-50 flex items-center justify-center p-4">
+        <div class="glass w-full max-w-md shadow-2xl border-t-4 border-orange-600 p-8">
+            <div class="text-center mb-6">
                 <div class="flex justify-center items-center gap-4 mb-4">
-                    <img src="/public/logo.png" class="h-16 object-contain" alt="IOCL Logo">
-                    <img src="/public/rhino.png" class="h-16 object-contain" alt="Rhino Logo">
+                    <img src="/public/logo.png" class="h-20 object-contain">
+                    <img src="/public/rhino.png" class="h-20 object-contain">
                 </div>
-                <h1 class="text-3xl font-extrabold text-gray-800 tracking-tight">IndianOil</h1>
-                <p class="text-sm text-gray-500 font-bold uppercase tracking-widest mt-1">Mainline Permit System</p>
+                <h1 class="text-3xl font-extrabold text-orange-600">IndianOil</h1>
+                <p class="text-gray-500 font-semibold mt-2">Mainline Permit System (ERPL)</p>
             </div>
             
-            <form id="login-form" class="space-y-5">
-                <div class="p-5 bg-gray-50 rounded-lg border border-gray-200 space-y-4 relative">
-                    <div class="absolute -top-3 left-3 bg-gray-50 px-2 text-xs font-bold text-gray-400 uppercase">Location Details</div>
+            <form id="login-form" class="space-y-4">
+                <div class="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
                     <div>
-                        <label class="text-xs font-bold text-gray-500 uppercase block mb-1">1. Pipeline Region</label>
-                        <select id="login-region" class="bg-white border-gray-300 focus:ring-2 focus:ring-orange-500">
-                            <option value="">Loading Regions...</option>
-                        </select>
+                        <label class="text-xs font-bold text-gray-500 uppercase block mb-1">1. Region</label>
+                        <select id="login-region" class="w-full"><option value="">Loading Regions...</option></select>
                     </div>
                     <div>
-                        <label class="text-xs font-bold text-gray-500 uppercase block mb-1">2. Unit / Section</label>
-                        <select id="login-unit" class="bg-white border-gray-300 focus:ring-2 focus:ring-orange-500" disabled>
-                            <option value="">Select Region First</option>
-                        </select>
+                        <label class="text-xs font-bold text-gray-500 uppercase block mb-1">2. Unit</label>
+                        <select id="login-unit" class="w-full" disabled><option value="">Select Region First</option></select>
                     </div>
                     <div>
-                        <label class="text-xs font-bold text-gray-500 uppercase block mb-1">3. Pipeline Location</label>
-                        <select id="login-loc" class="bg-white border-gray-300 focus:ring-2 focus:ring-orange-500" disabled>
-                            <option value="">Select Unit First</option>
-                        </select>
+                        <label class="text-xs font-bold text-gray-500 uppercase block mb-1">3. Location</label>
+                        <select id="login-loc" class="w-full" disabled><option value="">Select Unit First</option></select>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="text-xs font-bold text-gray-500 uppercase block mb-1">4. Role</label>
-                        <select id="login-role" class="bg-white border-gray-300 focus:ring-2 focus:ring-orange-500">
-                            <option>Requester</option>
-                            <option>Reviewer</option>
-                            <option>Approver</option>
-                            <option>MasterAdmin</option>
+                        <select id="login-role" class="w-full">
+                            <option value="Requester">Requester</option>
+                            <option value="Reviewer">Reviewer</option>
+                            <option value="Approver">Approver</option>
+                            <option value="MasterAdmin">MasterAdmin</option>
                         </select>
                     </div>
                     <div>
                         <label class="text-xs font-bold text-gray-500 uppercase block mb-1">5. User</label>
-                        <select id="login-user" class="bg-white border-gray-300 focus:ring-2 focus:ring-orange-500" disabled>
-                            <option value="">Select Location & Role</option>
-                        </select>
+                        <select id="login-user" class="w-full" disabled><option value="">Select Location & Role</option></select>
                     </div>
                 </div>
 
                 <div>
                     <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Password</label>
-                    <input type="password" id="login-pass" class="bg-white border-gray-300 focus:ring-2 focus:ring-orange-500" placeholder="••••••">
+                    <input type="password" id="login-pass" class="w-full" placeholder="••••••">
                 </div>
 
-                <button type="submit" class="w-full bg-orange-600 text-white py-4 rounded-lg font-bold text-lg hover:bg-orange-700 shadow-lg transition transform hover:-translate-y-0.5 active:translate-y-0">
-                    Secure Login 🔒
+                <button type="submit" class="w-full bg-orange-600 text-white py-3.5 rounded-lg font-bold text-lg shadow-lg hover:bg-orange-700 transition">
+                    Secure Login
                 </button>
-                <p class="text-center text-xs text-gray-400 mt-4">Authorized Personnel Only. All actions are logged.</p>
             </form>
         </div>
     </div>
 
     <div id="view-pwd-change" class="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center hidden backdrop-blur-sm">
-        <div class="bg-white w-full max-w-sm p-8 rounded-xl border-l-8 border-red-600 shadow-2xl animate-scale-up">
-            <h3 class="font-bold text-2xl mb-2 text-red-600 flex items-center gap-2">
-                <span class="text-3xl">⚠</span> Action Required
-            </h3>
-            <p class="text-gray-600 mb-6 leading-relaxed text-sm">
-                Security Policy: You are using a temporary or default password. You must change it now to proceed.
-            </p>
+        <div class="glass w-full max-w-sm border-l-8 border-red-600 shadow-2xl">
+            <h3 class="font-bold text-2xl mb-2 text-red-600">⚠ Action Required</h3>
+            <p class="text-gray-600 mb-6 text-sm">Security Policy: You must change your password on first login or after a reset.</p>
             
             <label class="text-xs font-bold text-gray-500 uppercase block mb-1">New Password</label>
-            <input type="password" id="new-pwd-1" placeholder="Enter new secure password" class="mb-4">
+            <input type="password" id="new-pwd-1" placeholder="Enter new password" class="mb-4">
             
             <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Confirm Password</label>
             <input type="password" id="new-pwd-2" placeholder="Re-enter password" class="mb-6">
             
-            <button id="btn-force-pwd" class="w-full bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700 shadow-md transition">
+            <button id="btn-force-pwd" class="w-full bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700 shadow-md">
                 Update Password & Login
             </button>
         </div>
@@ -339,7 +203,7 @@
         <div id="main-wrapper">
             
             <div class="sidebar-left" id="sidebar">
-                <div class="p-6 font-bold text-xl text-orange-500 border-b border-gray-700 flex items-center gap-3 bg-gray-900 shadow-sm">
+                <div class="p-6 font-bold text-xl text-orange-500 border-b border-gray-700 flex items-center gap-3 bg-gray-900">
                     <img src="/public/rhino.png" class="h-8 w-8 bg-white rounded-full p-1"> 
                     <span>ERPL Permit</span>
                 </div>
@@ -348,487 +212,387 @@
                     </div>
 
                 <nav class="flex-1 overflow-y-auto mt-4 space-y-1 px-3">
-                    <div class="nav-item active" onclick="switchView('dashboard')" id="nav-dashboard">
-                        <span class="text-lg">📊</span> Dashboard
-                    </div>
-                    <div class="nav-item hidden" onclick="switchView('new-permit')" id="nav-new-permit">
-                        <span class="text-lg">📝</span> Create Permit
-                    </div>
-                    <div class="nav-item" onclick="switchView('workers')" id="nav-workers">
-                        <span class="text-lg">👷</span> Worker Management
-                    </div>
-                    <div class="nav-item hidden" id="nav-users" onclick="switchView('users')">
-                        <span class="text-lg">👥</span> User Management
-                    </div>
-                    <div class="nav-item" onclick="switchView('map')" id="nav-map">
-                        <span class="text-lg">🗺️</span> Live Map View
-                    </div>
-                    <div class="nav-item hidden" id="nav-admin" onclick="switchView('admin')">
-                        <span class="text-lg">🔐</span> Master Admin Console
-                    </div>
+                    <div class="nav-item active" onclick="switchView('dashboard')" id="nav-dashboard"><span>📊</span> Dashboard</div>
+                    <div class="nav-item hidden" onclick="switchView('new-permit')" id="nav-new-permit"><span>📝</span> Create Permit</div>
+                    <div class="nav-item" onclick="switchView('workers')" id="nav-workers"><span>👷</span> Workers</div>
+                    <div class="nav-item hidden" id="nav-users" onclick="switchView('users')"><span>👥</span> User Mgmt</div>
+                    <div class="nav-item" onclick="switchView('map')" id="nav-map"><span>🗺️</span> Map View</div>
+                    <div class="nav-item hidden" id="nav-admin" onclick="switchView('admin')"><span>🔐</span> Admin Console</div>
                 </nav>
 
                 <div class="p-4 border-t border-gray-700 bg-gray-900">
-                    <div class="nav-item text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded justify-center transition" onclick="logout()">
-                        <span class="text-lg">🚪</span> Sign Out
-                    </div>
+                    <div class="nav-item text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded justify-center" onclick="logout()"><span>🚪</span> Sign Out</div>
                 </div>
             </div>
 
             <div class="content-area">
-                <button class="md:hidden mb-6 text-gray-600 bg-white p-3 rounded-lg shadow hover:bg-gray-50 flex items-center gap-2" onclick="document.getElementById('sidebar').classList.toggle('open')">
-                    <span class="text-xl">☰</span> Menu
-                </button>
+                <button class="md:hidden mb-4 text-gray-600 bg-white p-2 rounded shadow" onclick="document.getElementById('sidebar').classList.toggle('open')">☰ Menu</button>
                 
                 <div id="view-dashboard">
-                    <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                        <div>
-                            <h2 class="text-3xl font-extrabold text-gray-800 tracking-tight">Permit Dashboard</h2>
-                            <p class="text-sm text-gray-500 mt-1">Real-time overview of permit activities for your location</p>
-                        </div>
-                        <button id="dash-btn-new" onclick="switchView('new-permit')" class="hidden bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-lg shadow-lg font-bold hover:from-orange-600 hover:to-orange-700 hover:-translate-y-1 transition transform flex items-center gap-2">
-                            <span>+</span> Create New Permit
-                        </button>
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">Dashboard</h2>
+                        <button id="dash-btn-new" onclick="switchView('new-permit')" class="hidden bg-orange-600 text-white px-4 py-2 rounded shadow font-bold hover:bg-orange-700">+ New Permit</button>
                     </div>
                     
-                    <div id="dashboard-content" class="space-y-8">
-                        <div class="text-center text-gray-400 py-10">Loading Dashboard Data...</div>
+                    <div id="dashboard-content" class="space-y-6">
+                        <h3 class="font-bold text-gray-500 uppercase text-xs mb-2 tracking-wide">Action Required</h3>
+                        <div class="glass overflow-x-auto p-0"><table class="mobile-table w-full text-left text-sm data-table" id="table-pending"><thead class="bg-red-50 text-red-900 border-b border-red-200"><tr><th class="p-3 w-24">ID</th><th class="p-3 w-24">Type</th><th class="p-3">Location</th><th class="p-3 w-32">Status</th><th class="p-3 w-32">Pending With</th><th class="p-3 w-24">Action</th></tr></thead><tbody class="divide-y divide-gray-100"></tbody></table></div>
+                        
+                        <h3 class="font-bold text-gray-500 uppercase text-xs mb-2 tracking-wide">Active Permits</h3>
+                        <div class="glass overflow-x-auto p-0"><table class="mobile-table w-full text-left text-sm data-table" id="table-active"><thead class="bg-green-50 text-green-900 border-b border-green-200"><tr><th class="p-3 w-24">ID</th><th class="p-3 w-24">Type</th><th class="p-3">Location</th><th class="p-3 w-32">Status</th><th class="p-3 w-32">Pending With</th><th class="p-3 w-24">Action</th></tr></thead><tbody class="divide-y divide-gray-100"></tbody></table></div>
+                        
+                        <h3 class="font-bold text-gray-500 uppercase text-xs mb-2 tracking-wide">Closed / Other</h3>
+                        <div class="glass overflow-x-auto p-0"><table class="mobile-table w-full text-left text-sm data-table" id="table-other"><thead class="bg-gray-50 text-gray-700 border-b border-gray-200"><tr><th class="p-3 w-24">ID</th><th class="p-3 w-24">Type</th><th class="p-3">Location</th><th class="p-3 w-32">Status</th><th class="p-3 w-32">Pending With</th><th class="p-3 w-24">Action</th></tr></thead><tbody class="divide-y divide-gray-100"></tbody></table></div>
                     </div>
                 </div>
 
                 <div id="view-form" class="hidden">
-                    <div class="flex justify-between items-center mb-6 sticky top-0 bg-gray-50/95 backdrop-blur-sm z-30 py-4 border-b border-gray-200 px-1 shadow-sm">
-                        <button onclick="switchView('dashboard')" class="text-blue-600 font-bold flex items-center gap-2 hover:bg-blue-50 px-4 py-2 rounded-lg transition">
-                            <span>←</span> Back to Dashboard
-                        </button>
+                    <div class="flex justify-between items-center mb-4 sticky top-0 bg-gray-50/95 backdrop-blur z-20 py-2 border-b">
+                        <button onclick="switchView('dashboard')" class="text-blue-600 font-bold flex items-center gap-1 hover:underline">← Back</button>
                         <div class="text-right">
-                            <h2 class="text-xl font-bold text-gray-800" id="permit-title">New Permit Application</h2>
-                            <p class="text-xs text-gray-500 font-mono" id="permit-subtitle">Draft Mode</p>
+                            <h2 class="text-xl font-bold text-gray-800" id="permit-title">New Permit</h2>
+                            <div id="permit-header-display" class="text-xs text-blue-600 font-bold"></div>
                         </div>
                     </div>
 
-                    <form id="pf" class="max-w-7xl mx-auto space-y-6 pb-24">
+                    <div id="permit-worker-audit-display" class="glass border-l-4 border-orange-500 mb-4 hidden">
+                        <h3 class="font-bold border-b pb-2 mb-2 text-orange-800">Deployed Workers & Approval Status</h3>
+                        <div id="assigned-worker-audit" class="overflow-x-auto"></div>
+                    </div>
+
+                    <form id="pf" class="max-w-7xl mx-auto space-y-4 pb-20">
                         <input type="hidden" id="PermitID" name="PermitID">
                         <input type="hidden" id="Status" name="Status">
                         
                         <div class="glass border-t-4 border-orange-500">
-                            <h3 class="font-bold text-orange-600 border-b pb-3 mb-6 text-lg flex items-center gap-2">
-                                <span>1️⃣</span> Basic Details
-                            </h3>
-                            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-                                <div>
-                                    <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Work Type</label>
-                                    <select name="WorkType" id="WorkType"><option>Hot</option><option>Cold</option><option>Confined Space</option><option>Excavation</option></select>
-                                </div>
-                                <div>
-                                    <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Specific Work Activity</label>
-                                    <input name="WorkTypeOther" id="WorkTypeOther" placeholder="E.g., Welding on Line 2">
-                                </div>
+                            <h3 class="section-title text-orange-600 border-b pb-2 mb-4 font-bold">1. Basic Details</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div><label class="text-xs font-bold text-gray-500 uppercase">Work Type</label><select name="WorkType" id="WorkType"><option>Hot</option><option>Cold</option><option>Confined Space</option><option>Excavation</option></select></div>
+                                <div><label class="text-xs font-bold text-gray-500 uppercase">Specific Work</label><input name="WorkTypeOther" id="WorkTypeOther"></div>
                                 <div class="md:col-span-2">
-                                    <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Exact Location (GPS)</label>
+                                    <label class="text-xs font-bold text-gray-500 uppercase">Location (GPS)</label>
                                     <div class="flex gap-2">
-                                        <input name="ExactLocation" id="ExactLocation" class="flex-1" placeholder="Coordinates (Lat, Long)">
-                                        <button type="button" id="btn-get-geo" class="bg-blue-100 text-blue-700 px-4 rounded-lg font-bold hover:bg-blue-200 transition border border-blue-200 flex items-center gap-2">
-                                            <span>📍</span> Get GPS
-                                        </button>
+                                        <input name="ExactLocation" id="ExactLocation" class="flex-1" placeholder="Coords">
+                                        <button type="button" id="btn-get-geo" class="bg-blue-100 text-blue-700 px-3 rounded font-bold border border-blue-200">📍 Get GPS</button>
                                     </div>
                                     <input type="hidden" id="Latitude" name="Latitude"><input type="hidden" id="Longitude" name="Longitude">
                                 </div>
                                 
-                                <div><label class="text-xs font-bold text-gray-500 uppercase block mb-1">Location Description</label><input name="WorkLocationDetail" id="WorkLocationDetail"></div>
-                                <div><label class="text-xs font-bold text-gray-500 uppercase block mb-1">Section/Unit</label><input name="LocationUnit" id="LocationUnit" value="Pipeline"></div>
+                                <div><label class="text-xs font-bold text-gray-500 uppercase">Location Details</label><input name="WorkLocationDetail" id="WorkLocationDetail"></div>
+                                <div><label class="text-xs font-bold text-gray-500 uppercase">Section/Unit</label><input name="LocationUnit" id="LocationUnit" value="Pipeline"></div>
                                 
-                                <div><label class="text-xs font-bold text-gray-500 uppercase block mb-1">Valid From</label><input type="datetime-local" name="ValidFrom" id="ValidFrom"></div>
-                                <div><label class="text-xs font-bold text-gray-500 uppercase block mb-1">Valid To</label><input type="datetime-local" name="ValidTo" id="ValidTo"></div>
+                                <div><label class="text-xs font-bold text-gray-500 uppercase">Valid From</label><input type="datetime-local" name="ValidFrom" id="ValidFrom"></div>
+                                <div><label class="text-xs font-bold text-gray-500 uppercase">Valid To</label><input type="datetime-local" name="ValidTo" id="ValidTo"></div>
                                 
-                                <div><label class="text-xs font-bold text-gray-500 uppercase block mb-1">Vendor Name</label><input name="Vendor" id="Vendor" readonly class="bg-gray-100 cursor-not-allowed"></div>
-                                <div><label class="text-xs font-bold text-gray-500 uppercase block mb-1">Requester Name</label><input name="RequesterName" id="RequesterName" readonly class="bg-gray-100 cursor-not-allowed"></div>
+                                <div><label class="text-xs font-bold text-gray-500 uppercase">Vendor</label><input name="Vendor" id="Vendor" readonly class="bg-gray-100"></div>
+                                <div><label class="text-xs font-bold text-gray-500 uppercase">Requester</label><input name="RequesterName" id="RequesterName" readonly class="bg-gray-100"></div>
                                 
-                                <div class="md:col-span-2"><label class="text-xs font-bold text-gray-500 uppercase block mb-1">Issued To Dept</label><input name="IssuedToDept" id="IssuedToDept"></div>
-                                <div><label class="text-xs font-bold text-gray-500 uppercase block mb-1">Security Guard</label><input name="SecurityGuard" id="SecurityGuard"></div>
-                                <div><label class="text-xs font-bold text-gray-500 uppercase block mb-1">Emergency Contact</label><input name="EmergencyContact" id="EmergencyContact"></div>
+                                <div class="md:col-span-2"><label class="text-xs font-bold text-gray-500 uppercase">Issued To Dept</label><input name="IssuedToDept" id="IssuedToDept"></div>
+                                <div><label class="text-xs font-bold text-gray-500 uppercase">Security Guard</label><input name="SecurityGuard" id="SecurityGuard"></div>
+                                <div><label class="text-xs font-bold text-gray-500 uppercase">Emergency Contact</label><input name="EmergencyContact" id="EmergencyContact"></div>
+                                <div><label class="text-xs font-bold text-gray-500 uppercase">Fire Stn/Hosp</label><input name="FireStation" id="FireStation"></div>
                                 
-                                <div class="md:col-span-4">
-                                    <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Description of Work</label>
-                                    <textarea name="Desc" id="Desc" rows="3" placeholder="Detailed description of the job..."></textarea>
-                                </div>
+                                <div class="md:col-span-4"><label class="text-xs font-bold text-gray-500 uppercase">Description</label><textarea name="Desc" id="Desc" rows="2"></textarea></div>
                                 
-                                <div class="md:col-span-2 border-t pt-4 mt-2">
-                                    <label class="text-xs font-bold text-blue-600 uppercase block mb-1">Assign Reviewer</label>
-                                    <select name="ReviewerEmail" id="ReviewerEmail" class="border-blue-200 bg-blue-50"></select>
-                                </div>
-                                <div class="md:col-span-2 border-t pt-4 mt-2">
-                                    <label class="text-xs font-bold text-green-600 uppercase block mb-1">Assign Approver</label>
-                                    <select name="ApproverEmail" id="ApproverEmail" class="border-green-200 bg-green-50"></select>
-                                </div>
+                                <div class="md:col-span-2"><label class="text-xs font-bold text-gray-500 uppercase">Assign Reviewer</label><select name="ReviewerEmail" id="ReviewerEmail"></select></div>
+                                <div class="md:col-span-2"><label class="text-xs font-bold text-gray-500 uppercase">Assign Approver</label><select name="ApproverEmail" id="ApproverEmail"></select></div>
                             </div>
                         </div>
                         
-                        <div id="init-renewal-wrapper" class="glass border-l-8 border-purple-500 bg-purple-50 hidden">
-                            <label class="flex items-center gap-3 font-bold cursor-pointer text-purple-900 text-lg p-2 rounded hover:bg-purple-100 transition">
-                                <input type="checkbox" name="InitRen" value="Y" id="chk-init-renewal" class="w-6 h-6 accent-purple-600 rounded"> 
-                                <span>Request 1st Renewal with Permit Creation</span>
+                        <div id="init-renewal-wrapper" class="glass border-l-4 border-purple-500 bg-purple-50 hidden">
+                            <label class="flex items-center gap-2 font-bold cursor-pointer text-purple-800">
+                                <input type="checkbox" name="InitRen" value="Y" id="chk-init-renewal" class="w-5 h-5"> Request 1st Renewal with Permit
                             </label>
-                            <div id="div-init-renewal" class="hidden mt-4 pl-8 border-t border-purple-200 pt-4 animate-scale-up">
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                    <div><label class="text-xs font-bold text-gray-500 block mb-1">Renewal From</label><input type="datetime-local" name="InitRenFrom"></div>
-                                    <div><label class="text-xs font-bold text-gray-500 block mb-1">Renewal To</label><input type="datetime-local" name="InitRenTo"></div>
+                            <div id="div-init-renewal" class="hidden mt-3 p-3 bg-white rounded border border-purple-200">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2">
+                                    <input type="datetime-local" name="InitRenFrom" placeholder="From">
+                                    <input type="datetime-local" name="InitRenTo" placeholder="To">
                                 </div>
-                                <div class="grid grid-cols-3 gap-4 mb-4">
-                                    <div><label class="text-xs font-bold text-gray-500 block mb-1">HC %</label><input name="InitRenHC" placeholder="%"></div>
-                                    <div><label class="text-xs font-bold text-gray-500 block mb-1">Toxic PPM</label><input name="InitRenTox" placeholder="PPM"></div>
-                                    <div><label class="text-xs font-bold text-gray-500 block mb-1">Oxygen %</label><input name="InitRenO2" placeholder="%"></div>
+                                <div class="grid grid-cols-3 gap-2">
+                                    <input name="InitRenHC" placeholder="HC %">
+                                    <input name="InitRenTox" placeholder="Tox">
+                                    <input name="InitRenO2" placeholder="O2 %">
                                 </div>
-                                <div><label class="text-xs font-bold text-gray-500 block mb-1">Special Precautions</label><input name="InitRenPrec" placeholder="Special Precautions for Renewal"></div>
-                                </div>
+                                <input name="InitRenPrec" placeholder="Special Precautions for Renewal" class="w-full mt-2">
+                            </div>
                         </div>
 
-                        <div id="checklists-container" class="space-y-6">
+                        <div id="checklists-container" class="space-y-4">
                             </div>
-
+                        
                         <div class="glass border-t-4 border-blue-500">
-                            <h3 class="font-bold text-blue-600 border-b pb-3 mb-6 text-lg flex items-center gap-2">
-                                <span>3️⃣</span> Worker Deployment
-                            </h3>
-                            <div id="worker-select-area" class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4"></div>
-                            <div id="worker-display-table" class="hidden overflow-x-auto mt-2 rounded border">
-                                <table class="w-full text-xs text-left data-table">
-                                    <thead><tr class="bg-gray-100"><th>Name</th><th>ID Type/No</th><th>Contact</th></tr></thead>
+                            <h3 class="section-title text-blue-600 border-b pb-2 mb-4 font-bold">3. Workers</h3>
+                            <div id="worker-select-area" class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-2"></div>
+                            <div id="worker-display-table" class="hidden overflow-x-auto mt-2">
+                                <table class="mobile-table w-full text-xs text-left">
+                                    <thead class="bg-gray-100"><tr><th>Name</th><th>ID Type/No</th><th>Contact</th></tr></thead>
                                     <tbody id="worker-display-body"></tbody>
                                 </table>
                             </div>
                         </div>
 
                         <div class="glass border-t-4 border-red-500">
-                            <h3 class="font-bold text-red-600 border-b pb-3 mb-6 text-lg flex items-center gap-2">
-                                <span>4️⃣</span> Hazards & PPE
-                            </h3>
-                            <div class="mb-6">
-                                <h4 class="font-bold text-gray-700 mb-3 text-sm uppercase">Identified Hazards</h4>
-                                <div id="hazards-grid" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
-                                <div id="other-hazard-div" class="hidden mt-3">
-                                    <input id="H_Others_Detail" name="H_Others_Detail" placeholder="Specify other hazards..." class="border-red-300 bg-red-50 text-red-800">
-                                </div>
-                            </div>
-                            <div>
-                                <h4 class="font-bold text-gray-700 mb-3 text-sm uppercase">Required PPE</h4>
-                                <div id="ppe-grid" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
-                            </div>
+                            <h3 class="section-title text-red-600 border-b pb-2 mb-4 font-bold">4. Hazards & PPE</h3>
+                            <div id="hazards-grid" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4"></div>
+                            <div id="other-hazard-div" class="hidden mb-2"><input id="H_Others_Detail" name="H_Others_Detail" placeholder="Specify other hazards..." class="w-full"></div>
+                            <h4 class="font-bold text-gray-500 text-xs uppercase mb-2">PPE Required</h4>
+                            <div id="ppe-grid" class="grid grid-cols-2 md:grid-cols-4 gap-2"></div>
                         </div>
                         
-                        <div id="fs-reviewer-section" class="glass hidden border-l-8 border-yellow-500 bg-yellow-50/20">
-                            <h3 class="font-bold text-yellow-700 mb-4 text-lg border-b border-yellow-200 pb-2">Reviewer Action</h3>
-                            <div class="mb-6 hidden" id="iocl-reviewer-wrapper">
-                                <label class="font-bold text-xs text-gray-500 uppercase block mb-2">Authorized IOCL Supervisors</label>
-                                <div id="iocl-sup-container-rev" class="space-y-2 mb-2"></div>
-                                <button type="button" id="btn-add-rev-sup" class="text-xs bg-white border border-gray-300 px-3 py-1 rounded hover:bg-gray-50 font-bold shadow-sm">+ Add Supervisor</button>
+                        <div id="fs-reviewer-section" class="glass hidden border-l-4 border-yellow-500">
+                            <h3 class="section-title text-yellow-700 border-b pb-2 mb-4 font-bold">4. Reviewer</h3>
+                            <div class="mb-4 hidden" id="iocl-reviewer-wrapper">
+                                <label class="font-bold text-sm text-gray-700">Authorized IOCL Supervisors</label>
+                                <div id="iocl-sup-container-rev" class="space-y-2 mt-2"></div>
+                                <button type="button" id="btn-add-rev-sup" class="mt-2 text-xs bg-gray-200 px-2 py-1 rounded hover:bg-gray-300 font-bold">+ Add Supervisor</button>
                             </div>
-                            <label class="font-bold text-xs text-gray-500 uppercase block mb-1">Reviewer Remarks</label>
-                            <textarea name="Reviewer_Remarks" id="Reviewer_Remarks" placeholder="Enter remarks..." class="w-full mb-3"></textarea>
-                            <label class="font-bold text-xs text-gray-500 uppercase block mb-1">Additional Precautions</label>
-                            <textarea name="AdditionalPrecautions" id="AdditionalPrecautions" placeholder="Any additional safety measures..." class="w-full"></textarea>
+                            <textarea name="Reviewer_Remarks" id="Reviewer_Remarks" placeholder="Reviewer Remarks" class="w-full"></textarea>
+                            <textarea name="AdditionalPrecautions" id="AdditionalPrecautions" placeholder="Additional Precautions" class="w-full mt-2"></textarea>
                         </div>
 
-                        <div id="fs-approver-section" class="glass hidden border-l-8 border-green-500 bg-green-50/20">
-                            <h3 class="font-bold text-green-700 mb-4 text-lg border-b border-green-200 pb-2">Approver Action</h3>
-                            <div class="mb-6 hidden" id="iocl-approver-wrapper">
-                                <label class="font-bold text-xs text-gray-500 uppercase block mb-2">Authorized IOCL Supervisors</label>
-                                <div id="iocl-sup-container-app" class="space-y-2 mb-2"></div>
-                                <button type="button" id="btn-add-app-sup" class="text-xs bg-white border border-gray-300 px-3 py-1 rounded hover:bg-gray-50 font-bold shadow-sm">+ Add Supervisor</button>
+                        <div id="fs-approver-section" class="glass hidden border-l-4 border-green-500">
+                            <h3 class="section-title text-green-700 border-b pb-2 mb-4 font-bold">5. Approval</h3>
+                            <div class="mb-4 hidden" id="iocl-approver-wrapper">
+                                <label class="font-bold text-sm text-gray-700">Authorized IOCL Supervisors</label>
+                                <div id="iocl-sup-container-app" class="space-y-2 mt-2"></div>
+                                <button type="button" id="btn-add-app-sup" class="mt-2 text-xs bg-gray-200 px-2 py-1 rounded hover:bg-gray-300 font-bold">+ Add Supervisor</button>
                             </div>
-                            <label class="font-bold text-xs text-gray-500 uppercase block mb-1">Approver Remarks</label>
-                            <textarea name="Approver_Remarks" id="Approver_Remarks" placeholder="Enter final remarks..." class="w-full mb-4"></textarea>
+                            <textarea name="Approver_Remarks" id="Approver_Remarks" placeholder="Approver Remarks" class="w-full mb-2"></textarea>
                             
-                            <div class="p-4 bg-green-50 border border-green-200 rounded-lg">
-                                <label class="flex items-center gap-3 cursor-pointer">
-                                    <input type="checkbox" name="RequireRenewalPhotos" id="RequireRenewalPhotos" value="Y" class="w-5 h-5 accent-green-600 rounded">
-                                    <span class="font-bold text-green-800">Require Photo Evidence for ALL Renewals?</span>
-                                </label>
-                                <p class="text-xs text-green-600 mt-1 ml-8">If checked, requester must upload a photo for every renewal request, including the first one.</p>
-                            </div>
+                            <label class="flex items-center gap-2 mb-2 p-2 bg-green-50 border border-green-200 rounded cursor-pointer">
+                                <input type="checkbox" name="RequireRenewalPhotos" id="RequireRenewalPhotos" value="Y" class="w-5 h-5 accent-green-600">
+                                <span class="text-sm font-bold text-green-800">Require Photo Evidence for ALL Renewals?</span>
+                            </label>
                             
-                            <div id="pdf-color-select" class="mt-4 hidden p-2 bg-gray-100 rounded">
-                                <label class="text-xs font-bold uppercase text-gray-500 mr-2">PDF Background Color:</label>
-                                <select id="PdfBgColor" class="w-auto inline-block mb-0"><option>White</option><option>Red</option><option>Green</option><option>Yellow</option><option>Auto</option></select>
-                            </div>
+                            <div id="pdf-color-select" class="mt-2 hidden"><label>PDF Background:</label><select id="PdfBgColor"><option>White</option><option>Red</option><option>Green</option><option>Yellow</option><option>Auto</option></select></div>
                         </div>
 
-                        <div id="renewals-section" class="glass hidden border-l-8 border-purple-600 bg-purple-50/10">
-                            <h3 class="font-bold text-purple-700 border-b pb-3 mb-6 text-lg flex items-center gap-2">
-                                <span>📅</span> Renewal History & Requests
-                            </h3>
+                        <div id="iocl-sup-display-section" class="glass hidden">
+                            <h3 class="section-title border-b pb-2 mb-2 font-bold">Authorized Supervisors (IOCL)</h3>
+                            <table class="mobile-table w-full text-xs text-left" id="table-iocl-display">
+                                <thead><tr><th>Name</th><th>Designation</th><th>Contact</th><th>Audit Trail</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+
+                        <div id="renewals-section" class="glass hidden border-l-4 border-purple-500 bg-purple-50/20">
+                            <h3 class="section-title text-purple-700 border-b pb-2 mb-4 font-bold">📅 Renewal History</h3>
                             
-                            <div class="overflow-x-auto mb-6 bg-white rounded-lg shadow-sm border border-gray-200">
-                                <table class="w-full text-xs text-left data-table">
-                                    <thead><tr class="bg-purple-100 text-purple-900"><th>Period</th><th>Gas/Prec</th><th>Workers</th><th>Status</th><th>Photo</th></tr></thead>
+                            <div id="first-renewal-decision" class="hidden mb-4 p-4 border-2 border-purple-500 bg-purple-50 rounded-lg animate-pulse">
+                                <h4 class="font-bold text-purple-900 mb-2">⚡ 1st Renewal Request Action</h4>
+                                <div class="flex gap-4">
+                                    <label class="flex items-center gap-2 cursor-pointer font-bold text-green-700"><input type="radio" name="FirstRenewalAction" value="accept" class="w-5 h-5 accent-green-600"> Recommend / Approve Renewal</label>
+                                    <label class="flex items-center gap-2 cursor-pointer font-bold text-red-700"><input type="radio" name="FirstRenewalAction" value="reject" class="w-5 h-5 accent-red-600"> Reject Renewal Only</label>
+                                </div>
+                            </div>
+                            
+                            <div class="overflow-x-auto mb-4 bg-white rounded shadow-sm border">
+                                <table class="mobile-table w-full text-xs text-left data-table" id="table-renewals">
+                                    <thead class="bg-purple-100"><tr><th>Period</th><th>Gas/Prec</th><th>Workers</th><th>Photo</th><th>Requester</th><th>Status</th></tr></thead>
                                     <tbody id="renewal-history-body"></tbody>
                                 </table>
                             </div>
 
-                            <div id="form-renewal" class="hidden bg-white p-6 rounded-lg border border-purple-200 shadow-md">
-                                <h4 class="font-bold text-purple-800 text-lg mb-4 border-b pb-2">New Renewal Request</h4>
-                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                                    <div><label class="text-xs font-bold text-gray-500 block mb-1">From</label><input type="datetime-local" id="RenewalValidFrom"></div>
-                                    <div><label class="text-xs font-bold text-gray-500 block mb-1">To</label><input type="datetime-local" id="RenewalValidTo"></div>
-                                    <div><label class="text-xs font-bold text-gray-500 block mb-1">HC %</label><input id="RenewalHC"></div>
-                                    <div><label class="text-xs font-bold text-gray-500 block mb-1">Oxygen %</label><input id="RenewalOxygen"></div>
+                            <div id="form-renewal" class="hidden bg-white p-4 rounded border border-purple-200 shadow-sm">
+                                <h4 class="font-bold text-sm mb-2 text-purple-800">New Renewal Request</h4>
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-2">
+                                    <input type="datetime-local" id="RenewalValidFrom">
+                                    <input type="datetime-local" id="RenewalValidTo">
+                                    <input id="RenewalHC" placeholder="HC %">
+                                    <input id="RenewalOxygen" placeholder="O2 %">
                                 </div>
+                                <input id="RenewalPrec" placeholder="Specific Precautions for this shift" class="mb-2">
                                 
-                                <div id="odd-hour-agreement" class="hidden mb-4 p-4 bg-indigo-50 border-l-4 border-indigo-500 rounded shadow-sm">
-                                    <label class="flex items-start gap-3 cursor-pointer">
+                                <div id="odd-hour-agreement" class="hidden mb-2 p-2 bg-indigo-50 border border-indigo-200 rounded">
+                                    <label class="flex items-start gap-2 cursor-pointer">
                                         <input type="checkbox" id="OddHourSafetyCheck" class="mt-1 w-5 h-5 accent-indigo-600">
-                                        <div>
-                                            <span class="text-sm font-bold text-indigo-900">Odd Hour Work Declaration</span>
-                                            <p class="text-xs text-indigo-700 mt-1">I agree to ensure proper lighting, safety measures, and alertness of all workers during these hours.</p>
-                                        </div>
+                                        <span class="text-xs font-bold text-indigo-900">I agree to ensure proper lighting and safety for odd-hour work.</span>
                                     </label>
                                 </div>
 
-                                <div class="mb-4">
-                                    <label class="text-xs font-bold text-gray-500 block mb-1">Specific Precautions</label>
-                                    <input id="RenewalPrec" placeholder="Precautions for this shift...">
-                                </div>
-                                
-                                <div class="mb-4">
-                                    <label class="text-xs font-bold text-gray-500 mb-1 block">Select Workers for this Shift</label>
-                                    <div class="bg-gray-50 p-3 rounded border border-gray-200 max-h-40 overflow-y-auto grid grid-cols-2 gap-2" id="renewal-worker-select"></div>
+                                <div class="mb-2">
+                                    <label class="text-xs font-bold text-gray-500 block mb-1">Select Workers for this Shift</label>
+                                    <div class="bg-gray-50 p-2 rounded border max-h-32 overflow-y-auto grid grid-cols-2 gap-2" id="renewal-worker-select"></div>
                                 </div>
 
-                                <div id="renewal-photo-wrapper" class="hidden mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                                    <label class="block text-sm font-bold text-red-700 uppercase mb-2">📸 Mandatory Site Condition Photo</label>
-                                    <input type="file" id="ren-cam-sub" accept="image/*" capture="environment" class="w-full text-sm bg-white border border-red-300 p-2 rounded">
-                                    <p class="text-xs text-red-500 mt-1 font-bold" id="photo-mandate-msg">Proof of site condition is required by the Approver.</p>
+                                <div id="renewal-photo-wrapper" class="hidden mb-2 p-2 bg-red-50 border border-red-200 rounded">
+                                    <label class="block text-xs font-bold text-red-700 uppercase mb-1">📸 Mandatory Site Photo</label>
+                                    <input type="file" id="ren-cam-sub" accept="image/*" capture="environment" class="w-full text-sm bg-white border p-1 rounded">
+                                    <p class="text-[10px] text-red-500 mt-1" id="photo-mandate-msg">Upload required by Approver settings.</p>
                                 </div>
 
-                                <button type="button" onclick="submitRenewal('pending_review')" class="w-full bg-purple-600 text-white py-3 rounded-lg font-bold shadow hover:bg-purple-700 transition transform hover:-translate-y-0.5">Submit Renewal Request</button>
+                                <button type="button" onclick="submitRenewal('pending_review')" class="w-full bg-purple-600 text-white py-2 rounded font-bold shadow hover:bg-purple-700">Submit Request</button>
+                            </div>
+                            
+                            <div id="action-renewal" class="hidden p-4 bg-yellow-50 mt-2 rounded border border-yellow-200">
+                                <textarea id="RenewalRemark" placeholder="Rejection Reason / Remarks" class="w-full mb-2"></textarea>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button type="button" id="btn-approve-renewal" class="bg-green-600 text-white py-2 rounded font-bold shadow">Approve</button>
+                                    <button type="button" id="btn-reject-renewal" class="bg-red-600 text-white py-2 rounded font-bold shadow">Reject</button>
+                                </div>
                             </div>
                         </div>
 
-                        <div id="closure-section" class="glass hidden border-l-8 border-gray-600">
-                            <h3 class="font-bold text-gray-700 border-b pb-2 mb-4 text-lg">Work Completion & Closure</h3>
-                            <label class="flex items-center gap-3 mb-6 font-bold text-red-600 p-4 bg-red-50 rounded-lg border border-red-100 cursor-pointer hover:bg-red-100 transition shadow-sm">
-                                <input type="checkbox" id="Site_Restored_Check" name="Site_Restored_Check" class="w-6 h-6 accent-red-600 rounded"> 
-                                <span class="text-lg">I confirm Site is Restored, Materials Removed & Housekeeping Done.</span>
+                        <div id="closure-section" class="glass hidden border-l-4 border-gray-600">
+                            <h3 class="section-title font-bold text-gray-700 border-b pb-2 mb-4">Closure</h3>
+                            <label class="flex items-center gap-2 mb-4 font-bold text-red-600 p-3 bg-red-50 rounded border border-red-100 cursor-pointer">
+                                <input type="checkbox" id="Site_Restored_Check" name="Site_Restored_Check" class="w-5 h-5 accent-red-600"> 
+                                I confirm Site is Restored, Materials Removed & Housekeeping Done.
                             </label>
-                            
-                            <div id="div-closure-req" class="hidden space-y-3 mb-4">
-                                <label class="text-xs font-bold text-gray-500 uppercase">Requester Remarks</label>
-                                <textarea id="Closure_Requestor_Remarks" placeholder="Enter closure remarks..." class="w-full"></textarea>
+                            <div id="div-closure-req" class="hidden space-y-2">
+                                <label class="text-xs font-bold text-gray-500">Requester Remarks</label>
+                                <textarea id="Closure_Requestor_Remarks" placeholder="Remarks" class="w-full"></textarea>
                                 <span id="ts-clos-req" class="text-xs text-gray-400 block text-right font-mono"></span>
                             </div>
-                            <div id="div-closure-rev" class="hidden space-y-3 mb-4 border-t pt-4">
-                                <label class="text-xs font-bold text-gray-500 uppercase">Reviewer Remarks</label>
-                                <textarea id="Closure_Reviewer_Remarks" placeholder="Enter closure remarks..." class="w-full"></textarea>
+                            <div id="div-closure-rev" class="hidden mt-4 space-y-2 border-t pt-4">
+                                <label class="text-xs font-bold text-gray-500">Reviewer Remarks</label>
+                                <textarea id="Closure_Reviewer_Remarks" placeholder="Remarks" class="w-full"></textarea>
                                 <span id="ts-clos-rev" class="text-xs text-gray-400 block text-right font-mono"></span>
                             </div>
-                            <div id="div-closure-app" class="hidden space-y-3 border-t pt-4">
-                                <label class="text-xs font-bold text-gray-500 uppercase">Approver Remarks</label>
-                                <textarea id="Closure_Approver_Remarks" placeholder="Enter closure remarks..." class="w-full"></textarea>
+                            <div id="div-closure-app" class="hidden mt-4 space-y-2 border-t pt-4">
+                                <label class="text-xs font-bold text-gray-500">Approver Remarks</label>
+                                <textarea id="Closure_Approver_Remarks" placeholder="Remarks" class="w-full"></textarea>
                                 <span id="ts-clos-app" class="text-xs text-gray-400 block text-right font-mono"></span>
                             </div>
                         </div>
-
+                        
                         <div class="glass" id="section-e">
-                            <h3 class="font-bold text-gray-600 border-b pb-3 mb-4 uppercase text-sm tracking-wide">E. References</h3>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div><label class="text-xs font-bold text-gray-500 block mb-1">SOP/SWP No</label><input name="SopNo" id="SopNo"></div>
-                                <div><label class="text-xs font-bold text-gray-500 block mb-1">JSA No</label><input name="JsaNo" id="JsaNo"></div>
-                                <div><label class="text-xs font-bold text-gray-500 block mb-1">Work Order</label><input name="WorkOrder" id="WorkOrder"></div>
-                                <div><label class="text-xs font-bold text-gray-500 block mb-1">IOCL Equip</label><input name="IoclEquip" id="IoclEquip"></div>
-                                <div><label class="text-xs font-bold text-gray-500 block mb-1">Contractor Equip</label><input name="ContEquip" id="ContEquip"></div>
-                                <div><label class="text-xs font-bold text-gray-500 block mb-1">Tool Box Talk</label><input name="ToolBoxTalk" id="ToolBoxTalk"></div>
+                            <h3 class="section-title border-b pb-2 mb-4 font-bold text-gray-600">E. References</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <input name="SopNo" id="SopNo" placeholder="SOP/SWP/SMP No">
+                                <input name="JsaNo" id="JsaNo" placeholder="JSA No">
+                                <input name="IoclEquip" id="IoclEquip" placeholder="IOCL Equip">
+                                <input name="ContEquip" id="ContEquip" placeholder="Contractor Equip">
+                                <input name="WorkOrder" id="WorkOrder" placeholder="Work Order No">
+                                <input name="ToolBoxTalk" id="ToolBoxTalk" placeholder="Tool Box Talk Ref"> 
                             </div>
                         </div>
 
                         <div id="gsr-container" class="glass border-l-4 border-orange-600 bg-orange-50 hidden">
-                            <label class="flex items-start gap-4 p-2 cursor-pointer">
+                            <label class="flex items-start gap-3 p-2 cursor-pointer">
                                 <input type="checkbox" id="gsr-check" name="GSR_Check_Box" class="mt-1 w-6 h-6 text-orange-600 rounded focus:ring-orange-500 shrink-0">
-                                <span class="text-sm font-bold text-gray-800 text-justify leading-relaxed">
-                                    I have read, understood and accepted all terms, conditions and non-compliance penalty of IOCL Golden Safety Rules. I shall ensure all workers are complied to all these rules and in case of any violation, penalty will be imposed by IOCL and I shall accept such penalties without any further challenge.
-                                </span>
+                                <span class="text-sm font-bold text-gray-800 text-justify">I have read, understood and accepted all terms, conditions and non-compliance penalty of IOCL Golden Safety Rules. I shall ensure all workers are complied to all these rules and in case of any violation, penalty will be imposed by IOCL and I shall accept such penalties without any further challenge.</span>
                             </label>
                         </div>
+                        
+                        <div id="signature-history" class="glass hidden">
+                            <h3 class="section-title font-bold mb-2">History</h3>
+                            <div class="grid grid-cols-1 gap-2 text-xs">
+                                <div class="border p-3 rounded bg-gray-50 flex justify-between"><strong>Approval:</strong> <span id="sig-app" class="text-right"></span></div>
+                                <div class="border p-3 rounded bg-gray-50 flex justify-between"><strong>Renewal:</strong> <span id="sig-ren" class="text-right"></span></div>
+                                <div class="border p-3 rounded bg-gray-50 flex justify-between"><strong>Closure:</strong> <span id="sig-clos" class="text-right"></span></div>
+                            </div>
+                        </div>
 
-                        <div id="actions-bar" class="flex flex-col md:flex-row justify-end gap-3 bg-white p-6 shadow-[0_-10px_25px_-5px_rgba(0,0,0,0.1)] border-t sticky bottom-0 z-40 rounded-t-2xl">
+                        <div id="actions-bar" class="flex flex-col md:flex-row justify-end gap-3 bg-white p-4 shadow-[0_-5px_15px_rgba(0,0,0,0.1)] border-t sticky bottom-0 z-40 rounded-t-lg">
                             </div>
                     </form>
                 </div>
 
                 <div id="view-workers" class="hidden">
-                    <div class="flex justify-between items-center mb-8">
-                        <div>
-                            <h2 class="text-3xl font-bold text-gray-800">Worker Management</h2>
-                            <p class="text-sm text-gray-500">Manage your workforce and their approvals</p>
-                        </div>
-                        <button onclick="openWorkerModal()" class="bg-blue-600 text-white px-6 py-3 rounded-lg shadow-lg font-bold hover:bg-blue-700 transition flex items-center gap-2">
-                            <span>+</span> Add Worker
-                        </button>
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">Worker Management</h2>
+                        <button onclick="openWorkerModal()" class="bg-blue-600 text-white px-4 py-2 rounded shadow font-bold hover:bg-blue-700 transition">+ Add Worker</button>
                     </div>
-                    <div class="glass overflow-x-auto shadow-md rounded-lg p-0">
+                    <div class="glass overflow-x-auto p-0">
                         <table class="w-full text-sm text-left data-table" id="table-workers">
-                            <thead class="bg-gray-100"><tr><th>Name</th><th>ID Type/No</th><th>Role</th><th>Status</th><th>Approver</th><th>Action</th></tr></thead>
-                            <tbody class="divide-y divide-gray-200"></tbody>
+                            <thead class="bg-gray-100"><tr><th>Name</th><th>ID</th><th>Role</th><th>Status</th><th>Action</th></tr></thead>
+                            <tbody class="divide-y"></tbody>
                         </table>
                     </div>
                 </div>
 
                 <div id="view-users" class="hidden">
-                    <div class="flex justify-between items-center mb-8">
-                        <div>
-                            <h2 class="text-3xl font-bold text-gray-800">User Management</h2>
-                            <p class="text-sm text-gray-500">Manage portal access for your designated location</p>
-                        </div>
-                        <button onclick="document.getElementById('view-add-user').classList.remove('hidden')" class="bg-purple-600 text-white px-6 py-3 rounded-lg shadow-lg font-bold hover:bg-purple-700 transition flex items-center gap-2">
-                            <span>+</span> Add New User
-                        </button>
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">User Management</h2>
+                        <button onclick="document.getElementById('view-add-user').classList.remove('hidden')" class="bg-purple-600 text-white px-4 py-2 rounded shadow font-bold hover:bg-purple-700 transition">+ Add User</button>
                     </div>
-                    <div class="glass overflow-x-auto shadow-md rounded-lg p-0">
+                    <div class="glass overflow-x-auto p-0">
                         <table class="w-full text-sm text-left data-table" id="table-manage-users">
-                            <thead class="bg-gray-100 text-gray-700"><tr><th>Name</th><th>Email</th><th>Role</th><th>Location</th><th>Action</th></tr></thead>
-                            <tbody class="divide-y divide-gray-200"></tbody>
+                            <thead class="bg-gray-100"><tr><th>Name</th><th>Email</th><th>Role</th><th>Location</th><th>Action</th></tr></thead>
+                            <tbody class="divide-y"></tbody>
                         </table>
                     </div>
                 </div>
 
                 <div id="view-admin" class="hidden">
-                    <h2 class="text-3xl font-bold mb-8 text-gray-800 border-b pb-4">Master Admin Console</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        
-                        <div class="glass border-t-8 border-purple-600 relative overflow-hidden">
-                            <div class="absolute top-0 right-0 p-4 opacity-10 text-9xl">📂</div>
-                            <h3 class="font-bold text-xl mb-4 text-purple-800">Bulk User Upload</h3>
-                            <p class="text-sm text-gray-500 mb-6 bg-purple-50 p-3 rounded-lg border border-purple-100">
-                                Upload an Excel file (.xlsx) to create multiple users at once.
-                                <br><strong>Columns:</strong> Name, Email, Role, Password, Region, Unit, Location.
-                            </p>
-                            <input type="file" id="bulk-excel" accept=".xlsx" class="mb-4 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 transition">
-                            <button onclick="uploadBulkUsers()" class="w-full bg-purple-600 text-white py-3 rounded-lg font-bold hover:bg-purple-700 shadow-md transition transform hover:-translate-y-0.5">Upload & Map Users</button>
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">Master Admin Console</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="glass border-t-4 border-purple-600">
+                            <h3 class="font-bold text-lg mb-2 text-purple-800">📂 Bulk User Upload</h3>
+                            <p class="text-xs text-gray-500 mb-4 bg-purple-50 p-2 rounded">Upload Excel (.xlsx) with columns: Name, Email, Role, Password, Region, Unit, Location.</p>
+                            <input type="file" id="bulk-excel" accept=".xlsx" class="mb-4 w-full">
+                            <button onclick="uploadBulkUsers()" class="w-full bg-purple-600 text-white py-2 rounded font-bold hover:bg-purple-700 transition">Upload & Map</button>
                         </div>
-
-                        <div class="glass border-t-8 border-red-600 relative overflow-hidden">
-                            <div class="absolute top-0 right-0 p-4 opacity-10 text-9xl">🔑</div>
-                            <h3 class="font-bold text-xl mb-4 text-red-800">Global Password Reset</h3>
-                            <p class="text-sm text-gray-500 mb-6 bg-red-50 p-3 rounded-lg border border-red-100">
-                                Force reset a user's password. They will be required to change it immediately upon their next login.
-                            </p>
-                            <input id="reset-email" placeholder="User Email Address" class="mb-3">
-                            <input id="reset-temp-pass" placeholder="Set Temporary Password" class="mb-6">
-                            <button onclick="resetUserPassword()" class="w-full bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700 shadow-md transition transform hover:-translate-y-0.5">Reset Password</button>
+                        <div class="glass border-t-4 border-red-600">
+                            <h3 class="font-bold text-lg mb-2 text-red-800">🔑 Global Reset Password</h3>
+                            <input id="reset-email" placeholder="User Email" class="mb-2 w-full">
+                            <input id="reset-temp-pass" placeholder="Temp Password" class="mb-2 w-full">
+                            <button onclick="resetUserPassword()" class="w-full bg-red-600 text-white py-2 rounded font-bold hover:bg-red-700 transition">Reset Password</button>
                         </div>
                     </div>
                 </div>
 
                 <div id="view-map" class="hidden h-full">
-                    <h2 class="text-3xl font-bold mb-6 text-gray-800">Live Permit Map</h2>
-                    <div class="glass h-[700px] w-full p-0 overflow-hidden shadow-inner border-2 border-gray-200 rounded-xl relative">
+                    <h2 class="text-2xl font-bold mb-4">Live Permit Map</h2>
+                    <div class="glass h-[600px] w-full p-0 overflow-hidden shadow-inner border-2 border-gray-200 relative">
                         <div id="map" class="w-full h-full"></div>
-                        <div class="absolute bottom-4 left-4 bg-white/90 p-3 rounded shadow-lg backdrop-blur text-xs">
-                            <div class="font-bold mb-1">Status Legend</div>
-                            <div class="flex items-center gap-2 mb-1"><span class="w-3 h-3 rounded-full bg-red-500"></span> Action Req</div>
-                            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-green-500"></span> Active</div>
-                        </div>
                     </div>
                 </div>
-
             </div>
 
             <div class="sidebar-right">
-                <div class="mb-8">
-                    <h3 class="text-xs font-bold text-gray-400 uppercase mb-4 tracking-wider border-b pb-2">Live Stats</h3>
-                    <div class="h-48 relative">
-                        <canvas id="chartStatus"></canvas>
-                    </div>
+                <div class="mb-6">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase mb-2 tracking-wider">Live Stats</h3>
+                    <div class="h-40"><canvas id="chartStatus"></canvas></div>
                 </div>
-
-                <div id="validity-box" class="hidden mb-6 p-6 bg-gradient-to-b from-green-50 to-white border border-green-200 rounded-xl shadow-sm text-center">
-                    <div class="text-xs font-bold text-green-800 uppercase mb-3 tracking-wide">Current Permit Validity</div>
-                    <div id="val-time-from" class="text-base font-mono font-bold text-gray-800"></div>
-                    <div class="text-center text-gray-400 text-sm my-1">⬇</div>
-                    <div id="val-time-to" class="text-base font-mono font-bold text-gray-800"></div>
-                    <div id="val-status" class="mt-4 inline-block px-4 py-1 rounded-full bg-green-600 text-white text-xs font-bold shadow-sm uppercase tracking-wider">ACTIVE</div>
+                
+                <div id="validity-box" class="hidden mb-6 p-4 bg-green-50 border border-green-200 rounded-lg shadow-sm text-center">
+                    <div class="text-xs font-bold text-green-800 uppercase mb-1">Permit Validity</div>
+                    <div id="val-time-from" class="text-sm font-mono text-gray-700 font-bold"></div>
+                    <div class="text-center text-gray-400 text-xs my-1">⬇</div>
+                    <div id="val-time-to" class="text-sm font-mono text-gray-700 font-bold"></div>
+                    <div id="val-status" class="mt-2 inline-block px-3 py-1 rounded-full bg-green-200 text-green-800 text-xs font-bold">ACTIVE</div>
                 </div>
 
                 <div>
-                    <h3 class="text-xs font-bold text-gray-400 uppercase mb-2 tracking-wider border-b pb-2">Quick Info</h3>
-                    <div id="right-panel-info" class="text-sm text-gray-500 italic bg-gray-50 p-4 rounded-lg border border-gray-200 leading-relaxed">
-                        Select a permit from the dashboard table to view detailed status and actions here.
-                    </div>
+                    <h3 class="text-xs font-bold text-gray-400 uppercase mb-2 tracking-wider">Selection Info</h3>
+                    <div id="right-panel-info" class="text-sm text-gray-500 italic bg-gray-50 p-3 rounded border">Select permit to view details.</div>
                 </div>
             </div>
-
         </div>
     </div>
 
-    <div id="modal-worker" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
-        <div class="bg-white w-full max-w-lg rounded-xl shadow-2xl overflow-hidden animate-scale-up">
-            <div class="bg-blue-600 p-4 flex justify-between items-center">
-                <h3 class="font-bold text-lg text-white">Worker Profile</h3>
-                <button onclick="document.getElementById('modal-worker').classList.add('hidden')" class="text-white hover:text-gray-200 text-xl font-bold">✕</button>
-            </div>
-            <form id="worker-form-real" class="p-6 grid grid-cols-2 gap-4">
+    <div id="modal-worker" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="glass w-full max-w-lg relative animate-scale-up">
+            <button onclick="document.getElementById('modal-worker').classList.add('hidden')" class="absolute top-4 right-4 text-xl font-bold text-gray-400 hover:text-gray-600">✕</button>
+            <h3 class="font-bold text-lg mb-4">Worker Details</h3>
+            <form id="worker-form-real" class="grid grid-cols-2 gap-3">
                 <input id="w-id" type="hidden">
-                <div class="col-span-2">
-                    <label class="text-xs font-bold text-gray-500 uppercase">Full Name</label>
-                    <input id="w-name" placeholder="Name" required>
-                </div>
-                <div class="col-span-2">
-                    <label class="text-xs font-bold text-gray-500 uppercase">Father's Name</label>
-                    <input id="w-father" placeholder="Father Name" required>
-                </div>
-                <div class="col-span-2">
-                    <label class="text-xs font-bold text-gray-500 uppercase">Address</label>
-                    <input id="w-address" placeholder="Residential Address">
-                </div>
-                <div>
-                    <label class="text-xs font-bold text-gray-500 uppercase">Age</label>
-                    <input id="w-age" placeholder="Age" type="number" required>
-                </div>
-                <div>
-                    <label class="text-xs font-bold text-gray-500 uppercase">Gender</label>
-                    <select id="w-gender"><option>Male</option><option>Female</option></select>
-                </div>
-                <div>
-                    <label class="text-xs font-bold text-gray-500 uppercase">Contact</label>
-                    <input id="w-contact" placeholder="Mobile No">
-                </div>
-                <div>
-                    <label class="text-xs font-bold text-gray-500 uppercase">ID Type</label>
-                    <select id="w-id-type"><option value="Voter Card">Voter Card</option><option value="PAN Card">PAN Card</option><option value="Other">Other</option></select>
-                </div>
-                <input id="w-id-type-other" placeholder="Specify ID" class="hidden col-span-2 bg-yellow-50 border-yellow-200">
-                <div class="col-span-2">
-                    <label class="text-xs font-bold text-gray-500 uppercase">ID Number</label>
-                    <input id="w-idcard" placeholder="ID Number">
-                </div>
-                <button type="submit" class="col-span-2 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 shadow transition transform hover:-translate-y-0.5">Save Worker Details</button>
+                <input id="w-name" placeholder="Full Name" class="col-span-2" required>
+                <input id="w-father" placeholder="Father Name" class="col-span-2" required>
+                <input id="w-address" placeholder="Address" class="col-span-2">
+                <input id="w-age" placeholder="Age" type="number" required>
+                <select id="w-gender"><option>Male</option><option>Female</option></select>
+                <input id="w-contact" placeholder="Contact No">
+                <select id="w-id-type"><option value="Voter Card">Voter Card</option><option value="PAN Card">PAN Card</option><option value="Other">Other</option></select>
+                <input id="w-id-type-other" placeholder="Specify ID" class="hidden col-span-2 bg-yellow-50">
+                <input id="w-idcard" placeholder="ID Number" class="col-span-2">
+                <button type="submit" class="col-span-2 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 shadow">Save Worker</button>
             </form>
         </div>
     </div>
-    
+
     <div id="view-add-user" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
-        <div class="bg-white w-full max-w-sm rounded-xl shadow-2xl overflow-hidden animate-scale-up">
-            <div class="bg-purple-600 p-4 flex justify-between items-center">
-                <h3 class="font-bold text-lg text-white">Create New User</h3>
-                <button onclick="document.getElementById('view-add-user').classList.add('hidden')" class="text-white hover:text-gray-200 text-xl font-bold">✕</button>
-            </div>
-            <form id="adduser-form" class="p-6 space-y-4">
-                <div>
-                    <label class="text-xs font-bold text-gray-500 uppercase">Full Name</label>
-                    <input id="new-user-name" placeholder="Name" required>
-                </div>
-                <div>
-                    <label class="text-xs font-bold text-gray-500 uppercase">Email</label>
-                    <input id="new-user-email" placeholder="Email" required>
-                </div>
-                <div>
-                    <label class="text-xs font-bold text-gray-500 uppercase">Role</label>
-                    <select id="new-user-role"><option>Requester</option><option>Reviewer</option><option>Approver</option></select>
-                </div>
-                <div>
-                    <label class="text-xs font-bold text-gray-500 uppercase">Initial Password</label>
-                    <input id="new-user-pass" type="password" placeholder="Password" required>
-                </div>
-                <button type="submit" class="w-full bg-purple-600 text-white py-3 rounded-lg font-bold shadow hover:bg-purple-700 transition">Create User</button>
+        <div class="glass w-full max-w-sm relative animate-scale-up">
+            <button onclick="document.getElementById('view-add-user').classList.add('hidden')" class="absolute top-4 right-4 text-xl font-bold text-gray-400 hover:text-gray-600">✕</button>
+            <h3 class="font-bold mb-4 text-lg">Add New User</h3>
+            <form id="adduser-form" class="space-y-3">
+                <input id="new-user-name" placeholder="Full Name" required>
+                <input id="new-user-email" placeholder="Email Address" required>
+                <select id="new-user-role"><option>Requester</option><option>Reviewer</option><option>Approver</option></select>
+                <input id="new-user-pass" type="password" placeholder="Initial Password" required>
+                <button type="submit" class="w-full bg-purple-600 text-white py-3 rounded-lg font-bold shadow hover:bg-purple-700">Create User</button>
             </form>
         </div>
     </div>
@@ -840,7 +604,6 @@
         let currentPermitId = null, currentPermitWorkers = [], currentRenewalCount = 0, permitRequirePhoto = false, currentPermitIOCLData = [];
         let isRefreshing = false;
 
-        // --- CONSTANTS ---
         const CL_DATA = { 
             A: ["1. Equipment / Work Area inspected.", "2. Surrounding area checked.", "3. Manholes covered.", "4. Hazards considered.", "5. Equipment blinded.", "6. Drained.", "7. Steamed.", "8. Flushed.", "9. Fire Access.", "10. Iron Sulfide.", "11. Electrical Isolation.", "12. Gas Test.", "13. Firefighting.", "14. Cordoned.", "15. CCTV.", "16. Ventilation."], 
             B: ["1. Exit.", "2. Standby.", "3. Gas trap.", "4. Spark shield.", "5. Grounding.", "6. Standby (Confined).", "7. Communication.", "8. Rescue.", "9. Cooling.", "10. Inert Gas.", "11. ELCB.", "12. Cylinders.", "13. Spark arrestor.", "14. Welding loc.", "15. Height."], 
@@ -850,7 +613,7 @@
         const HAZARDS = ["Lack of Oxygen", "H2S", "Toxic Gases", "Combustible gases", "Pyrophoric Iron", "Corrosive Chemicals", "cave in formation", "Others"];
         const PPE = ["Helmet", "Safety Shoes", "Hand gloves", "Boiler suit", "Face Shield", "Apron", "Goggles", "Dust Respirator", "Fresh Air Mask", "Lifeline", "Safety Harness", "Airline", "Earmuff", "IFR"];
 
-        // --- REQ A: GLOBAL LOADER ---
+        // --- REQ A: Loader ---
         async function apiCall(ep, meth="GET", body=null, isPdfDownload=false) {
             if(!isPdfDownload) document.getElementById('loader').style.display = 'flex';
             try {
@@ -861,20 +624,11 @@
                 opts.credentials = 'include';
                 
                 const res = await fetch(API+ep, opts);
-                
-                // Auth Refresh Logic can go here (simplified for this snippet)
-                if(res.status === 401) { 
-                    alert("Session Expired"); location.reload(); return; 
-                }
-                
+                if(res.status === 401) { location.reload(); return; }
                 if(isPdfDownload) return res; 
                 return await res.json();
-            } catch(e) { 
-                console.error(e); 
-                return {error: "Network Error"}; 
-            } finally { 
-                if(!isPdfDownload) document.getElementById('loader').style.display = 'none'; 
-            }
+            } catch(e) { console.error(e); return {error: "Network Error"}; }
+            finally { if(!isPdfDownload) document.getElementById('loader').style.display = 'none'; }
         }
 
         // --- HELPER FUNCTIONS ---
@@ -884,59 +638,48 @@
         function setText(id, val) { const el = document.getElementById(id); if(el) el.innerText = val; }
         function getNow() { return new Date().toLocaleString("en-GB").replace(',',''); }
 
-        // --- REQ F: HIERARCHY LOGIN LOGIC ---
+        // --- REQ F: Login Hierarchy ---
         async function initLogin() {
-            // Load Regions
             const regions = await apiCall('/get-hierarchy', 'POST', {});
             const rSel = document.getElementById('login-region');
             rSel.innerHTML = `<option value="">Select Region</option>` + regions.map(r=>`<option>${r}</option>`).join('');
             
-            // Cascading Logic
             rSel.addEventListener('change', async (e) => {
-                const uSel = document.getElementById('login-unit'); 
-                uSel.disabled=true; uSel.innerHTML='<option>Loading...</option>';
+                const uSel = document.getElementById('login-unit'); uSel.disabled=true; uSel.innerHTML='<option>Loading...</option>';
                 const units = await apiCall('/get-hierarchy', 'POST', {region: e.target.value});
                 uSel.innerHTML = `<option value="">Select Unit</option>` + units.map(u=>`<option>${u}</option>`).join('');
                 uSel.disabled = false;
             });
-
             document.getElementById('login-unit').addEventListener('change', async (e) => {
-                const lSel = document.getElementById('login-loc'); 
-                lSel.disabled=true; lSel.innerHTML='<option>Loading...</option>';
+                const lSel = document.getElementById('login-loc'); lSel.disabled=true; lSel.innerHTML='<option>Loading...</option>';
                 const locs = await apiCall('/get-hierarchy', 'POST', {region: document.getElementById('login-region').value, unit: e.target.value});
                 lSel.innerHTML = `<option value="">Select Location</option>` + locs.map(l=>`<option>${l}</option>`).join('');
                 lSel.disabled = false;
             });
-
-            // User Loader
             const loadUsers = async () => {
                 const reg = document.getElementById('login-region').value;
                 const unit = document.getElementById('login-unit').value;
                 const loc = document.getElementById('login-loc').value;
                 const role = document.getElementById('login-role').value;
-                
                 if(reg && unit && loc && role) {
-                    const uSel = document.getElementById('login-user'); 
-                    uSel.innerHTML='<option>Loading...</option>';
+                    const uSel = document.getElementById('login-user'); uSel.innerHTML='<option>Loading...</option>';
                     const users = await apiCall('/get-users-by-loc', 'POST', {region:reg, unit:unit, location:loc, role:role});
                     uSel.innerHTML = users.map(u=>`<option value="${u.Email}">${u.Name}</option>`).join('');
                     uSel.disabled = false;
                 }
             }
-
             document.getElementById('login-loc').addEventListener('change', loadUsers);
             document.getElementById('login-role').addEventListener('change', loadUsers);
         }
 
-        // --- REQ B: STRICT FILE VALIDATION ---
+        // --- REQ B: File Validation ---
         function attachFileValidators() {
             document.querySelectorAll('input[type="file"]').forEach(input => {
                 input.addEventListener('change', function() {
                     const file = this.files[0];
                     if(file) {
-                        // REQ B: Reject non-images
                         if(!file.type.startsWith('image/')) {
-                            alert("SECURITY WARNING: Only Image files (JPG/PNG) are allowed. PDF/Docs are strictly prohibited for this field.");
+                            alert("WARNING: Only Image files (JPG/PNG) are allowed. File rejected.");
                             this.value = ''; 
                         }
                     }
@@ -944,45 +687,27 @@
             });
         }
 
-        // --- LOGIN HANDLER ---
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = document.getElementById('login-user').value;
             const pass = document.getElementById('login-pass').value;
             const res = await apiCall('/login', 'POST', {email, password: pass});
-            
             if(res.forceChange) {
-                // REQ I: Show Force Change Modal
                 document.getElementById('view-pwd-change').classList.remove('hidden');
                 document.getElementById('view-pwd-change').dataset.email = res.email;
             } else if(res.success) {
-                authToken = res.token; 
-                currentUser = res.user; 
-                enterApp();
-            } else { 
-                alert(res.msg || "Login Failed"); 
-            }
+                authToken = res.token; currentUser = res.user; enterApp();
+            } else { alert(res.msg); }
         });
 
-        // --- REQ I: FORCE PASSWORD CHANGE ---
         document.getElementById('btn-force-pwd').addEventListener('click', async () => {
-            const p1 = document.getElementById('new-pwd-1').value; 
-            const p2 = document.getElementById('new-pwd-2').value;
+            const p1 = document.getElementById('new-pwd-1').value; const p2 = document.getElementById('new-pwd-2').value;
             const email = document.getElementById('view-pwd-change').dataset.email;
-            
             if(p1 !== p2) return alert("Passwords do not match");
-            if(p1.length < 6) return alert("Password too short");
-            
             const res = await apiCall('/force-password-change', 'POST', {email, newPassword: p1});
-            if(res.success) { 
-                alert("Password updated successfully. Please login with new credentials."); 
-                location.reload(); 
-            } else {
-                alert("Update failed");
-            }
+            if(res.success) { alert("Updated. Please login."); location.reload(); }
         });
-
-        // --- ADD USER (Approver) ---
+        
         document.getElementById('adduser-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const body = {
@@ -992,192 +717,83 @@
                 password: document.getElementById("new-user-pass").value
             };
             const res = await apiCall('/add-user', 'POST', body);
-            if(res.success) { 
-                alert("User Added Successfully"); 
-                document.getElementById('view-add-user').classList.add('hidden'); 
-                loadManageUsers(); // Refresh list
-            } else {
-                alert(res.error || "Failed to add user");
-            }
+            if(res.success) { alert("User Added"); document.getElementById('view-add-user').classList.add('hidden'); loadManageUsers(); } else alert(res.error);
         });
 
-        // --- ENTER APP (UI INITIALIZATION) ---
         function enterApp() {
             document.getElementById('view-login').classList.add('hidden');
             document.getElementById('app-container').classList.remove('hidden');
+            document.getElementById('user-display').innerHTML = `<div class="font-bold text-white text-lg">${currentUser.Name}</div><div class="text-orange-400 font-bold uppercase text-xs">${currentUser.Role}</div><div class="text-xs mt-1 text-gray-500 font-mono">${currentUser.Location}</div>`;
             
-            // Populate Sidebar Info
-            document.getElementById('user-display').innerHTML = `
-                <div class="font-bold text-white text-lg">${currentUser.Name}</div>
-                <div class="text-orange-400 font-bold uppercase text-xs tracking-wider">${currentUser.Role}</div>
-                <div class="text-xs mt-2 text-gray-500 font-mono flex items-center gap-1">
-                    <span>📍</span> ${currentUser.Location}
-                </div>`;
-            
-            // Role Based Nav Visibility
             if(currentUser.Role === 'Requester') document.getElementById('nav-new-permit').classList.remove('hidden');
             if(currentUser.Role === 'MasterAdmin') document.getElementById('nav-admin').classList.remove('hidden');
             if(currentUser.Role === 'Approver' || currentUser.Role === 'MasterAdmin') document.getElementById('nav-users').classList.remove('hidden');
             
-            renderChecklists(); 
-            renderHazards(); 
-            switchView('dashboard');
+            renderChecklists(); renderHazards(); switchView('dashboard');
         }
 
-        // --- RENDER UI HELPERS ---
         function renderChecklists() {
-            const container = document.getElementById('checklists-container'); 
-            container.innerHTML = '';
+            const container = document.getElementById('checklists-container'); container.innerHTML = '';
             Object.keys(CL_DATA).forEach(sec => {
-                // REQ C: 3 Column Grid Layout
-                container.innerHTML += `
-                    <div class="glass border-t-4 border-gray-400">
-                        <h4 class="font-bold text-gray-700 border-b pb-2 mb-4 text-sm uppercase tracking-wide bg-gray-50 p-2 rounded">
-                            Section ${sec} Checks
-                        </h4>
-                        <div class="checklist-grid">
-                            ${CL_DATA[sec].map((item, i) => `
-                                <div class="p-3 border rounded-lg bg-white text-xs hover:shadow-md transition flex flex-col justify-between h-full">
-                                    <p class="mb-3 font-semibold text-gray-700 leading-snug">${item}</p>
-                                    <div class="flex gap-2 mt-auto bg-gray-50 p-1 rounded justify-center">
-                                        <label class="cursor-pointer flex items-center gap-1 px-2 py-1 hover:bg-green-100 rounded">
-                                            <input type="radio" name="${sec}_${i}" value="Y" checked class="accent-green-600"> Y
-                                        </label>
-                                        <label class="cursor-pointer flex items-center gap-1 px-2 py-1 hover:bg-red-100 rounded">
-                                            <input type="radio" name="${sec}_${i}" value="N" class="accent-red-600"> N
-                                        </label>
-                                        <label class="cursor-pointer flex items-center gap-1 px-2 py-1 hover:bg-gray-200 rounded">
-                                            <input type="radio" name="${sec}_${i}" value="NA" class="accent-gray-600"> NA
-                                        </label>
-                                    </div>
-                                </div>`).join('')}
-                        </div>
-                    </div>`;
+                container.innerHTML += `<div class="glass border-t-4 border-gray-400"><h4 class="font-bold text-gray-700 border-b pb-2 mb-4 bg-gray-50 p-2 rounded">Section ${sec} Checks</h4><div class="checklist-grid">${CL_DATA[sec].map((item, i) => `<div class="p-3 border rounded-lg bg-gray-50 text-xs hover:shadow-md transition"><p class="mb-2 font-semibold text-gray-700 min-h-[30px]">${item}</p><div class="flex gap-2 justify-center"><label class="cursor-pointer flex items-center gap-1"><input type="radio" name="${sec}_${i}" value="Y" checked class="accent-green-600"> Y</label><label class="cursor-pointer flex items-center gap-1"><input type="radio" name="${sec}_${i}" value="N" class="accent-red-600"> N</label><label class="cursor-pointer flex items-center gap-1"><input type="radio" name="${sec}_${i}" value="NA" class="accent-gray-600"> NA</label></div></div>`).join('')}</div></div>`;
             });
         }
-
         function renderHazards() {
-            document.getElementById('hazards-grid').innerHTML = HAZARDS.map(h => 
-                `<label class="flex items-center gap-2 p-3 border rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-orange-100 transition shadow-sm font-bold text-gray-700 select-none">
-                    <input type="checkbox" name="H_${h.replace(/ /g,'')}" value="Y" class="accent-orange-600 w-4 h-4"> ${h}
-                </label>`
-            ).join('');
-            
-            document.getElementById('ppe-grid').innerHTML = PPE.map(p => 
-                `<label class="flex items-center gap-2 p-3 border rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-blue-100 transition shadow-sm font-bold text-gray-700 select-none">
-                    <input type="checkbox" name="P_${p.replace(/ /g,'')}" value="Y" class="accent-blue-600 w-4 h-4"> ${p}
-                </label>`
-            ).join('');
-
-            // Toggle 'Other' Hazard Input
-            const otherCheck = document.querySelector('input[name="H_Others"]');
-            if(otherCheck) {
-                otherCheck.addEventListener('change', (e) => {
-                    document.getElementById('other-hazard-div').classList.toggle('hidden', !e.target.checked);
-                });
-            }
-            
-            // Toggle ID Type Input
-            document.getElementById('w-id-type').addEventListener('change', (e) => {
-                document.getElementById('w-id-type-other').classList.toggle('hidden', e.target.value !== 'Other');
-            });
+            document.getElementById('hazards-grid').innerHTML = HAZARDS.map(h => `<label class="flex items-center gap-2 p-3 border rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-orange-100 transition shadow-sm font-bold text-gray-700"><input type="checkbox" name="H_${h.replace(/ /g,'')}" value="Y" ${h==='Others'?'id="chk-haz-others"':''} class="accent-orange-600 w-4 h-4"> ${h}</label>`).join('');
+            document.getElementById('chk-haz-others')?.addEventListener('change', (e) => document.getElementById('other-hazard-div').classList.toggle('hidden', !e.target.checked));
+            document.getElementById('ppe-grid').innerHTML = PPE.map(p => `<label class="flex items-center gap-2 p-3 border rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-blue-100 transition shadow-sm font-bold text-gray-700"><input type="checkbox" name="P_${p.replace(/ /g,'')}" value="Y" class="accent-blue-600 w-4 h-4"> ${p}</label>`).join('');
+            document.getElementById('w-id-type').addEventListener('change', (e) => document.getElementById('w-id-type-other').classList.toggle('hidden', e.target.value !== 'Other'));
         }
 
-        // --- NAVIGATION SWITCHER ---
         function switchView(viewName) {
-            // Hide all content views
             document.querySelectorAll('.content-area > div').forEach(d => d.classList.add('hidden'));
-            // Reset Nav Active States
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            const viewMap = {'dashboard': 'view-dashboard', 'new-permit': 'view-form', 'workers': 'view-workers', 'users': 'view-users', 'map': 'view-map', 'admin': 'view-admin'};
             
-            // Map names to IDs
-            const viewMap = {
-                'dashboard': 'view-dashboard', 
-                'new-permit': 'view-form', 
-                'workers': 'view-workers', 
-                'users': 'view-users', 
-                'map': 'view-map', 
-                'admin': 'view-admin'
-            };
-            
-            // Show Target View
             if(document.getElementById(viewMap[viewName])) {
                 document.getElementById(viewMap[viewName]).classList.remove('hidden');
-                
-                // Highlight corresponding nav item
-                let navId = 'nav-' + viewName;
-                if(viewName === 'dashboard') navId = 'nav-dashboard'; // Special case if needed
-                
-                // Find nav item by onclick attribute or ID
-                const navItem = document.getElementById(navId) || 
-                                document.querySelector(`.nav-item[onclick*="${viewName}"]`);
-                
-                if(navItem) navItem.classList.add('active');
+                // Highlight Nav
+                if(viewName === 'new-permit') document.getElementById('nav-new-permit').classList.add('active');
+                else if(viewName === 'admin') document.getElementById('nav-admin').classList.add('active');
+                else if(viewName === 'users') document.getElementById('nav-users').classList.add('active');
+                else if(viewName === 'workers') document.getElementById('nav-workers').classList.add('active');
+                else document.querySelector(`.nav-item[onclick*="${viewName}"]`)?.classList.add('active');
             }
             
-            // View Specific Logic
             if(viewName === 'dashboard') loadDashboard();
             if(viewName === 'new-permit') attachFileValidators();
             if(viewName === 'users') loadManageUsers();
             if(viewName === 'workers') loadWorkers('mgmt');
         }
 
-        // --- USER MANAGEMENT LOGIC ---
         async function loadManageUsers() {
-             const t = document.querySelector('#table-manage-users tbody'); 
-             t.innerHTML = '<tr><td colspan="5" class="text-center p-4">Loading...</td></tr>';
-             
+             const t = document.querySelector('#table-manage-users tbody'); t.innerHTML = '<tr><td colspan="5" class="p-4 text-center">Loading...</td></tr>';
              const roles = ['Requester', 'Reviewer', 'Approver'];
              let allUsers = [];
-             
-             // Fetch users for each role in current location
-             // (MasterAdmin logic would fetch ALL locations - simplified here for this file)
              for(let r of roles) {
-                 const u = await apiCall('/get-users-by-loc', 'POST', { 
-                     region: currentUser.Region, 
-                     unit: currentUser.Unit, 
-                     location: currentUser.Location, 
-                     role: r 
-                 });
+                 const u = await apiCall('/get-users-by-loc', 'POST', { region: currentUser.Region, unit: currentUser.Unit, location: currentUser.Location, role: r });
                  if(Array.isArray(u)) allUsers = [...allUsers, ...u];
              }
-             
              t.innerHTML = '';
              if(allUsers.length === 0) {
-                 t.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-500 italic">No users found for your location.</td></tr>`;
+                 t.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-500">No users found.</td></tr>`;
              } else {
                  allUsers.forEach(u => {
-                     // Can only delete if not self
-                     const delBtn = u.Email !== currentUser.Email ? 
-                        `<button class="bg-red-100 text-red-600 hover:bg-red-200 px-3 py-1 rounded font-bold text-xs transition" onclick="deleteUser('${u.Email}')">Delete</button>` : 
-                        '<span class="text-gray-400 text-xs">Me</span>';
-                        
-                     t.innerHTML += `<tr class="hover:bg-gray-50 transition border-b border-gray-100">
-                        <td class="p-3"><div class="font-bold text-gray-800">${u.Name}</div></td>
-                        <td class="p-3 text-gray-600 font-mono text-xs">${u.Email}</td>
-                        <td class="p-3"><span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-bold uppercase">${u.Role}</span></td>
-                        <td class="p-3 text-gray-500 text-xs">${currentUser.Location}</td>
-                        <td class="p-3">${delBtn}</td>
-                     </tr>`;
+                     const delBtn = u.Email !== currentUser.Email ? `<button class="bg-red-100 text-red-600 hover:bg-red-200 px-3 py-1 rounded font-bold text-xs" onclick="deleteUser('${u.Email}')">Delete</button>` : '<span class="text-gray-400 text-xs">Me</span>';
+                     t.innerHTML += `<tr class="hover:bg-gray-50 transition border-b border-gray-100"><td class="p-3 font-bold text-gray-800">${u.Name}</td><td class="p-3 text-gray-600 font-mono text-xs">${u.Email}</td><td class="p-3"><span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-bold uppercase">${u.Role}</span></td><td class="p-3 text-gray-500 text-xs">${currentUser.Location}</td><td class="p-3">${delBtn}</td></tr>`;
                  });
              }
         }
         
         async function deleteUser(email) {
-            if(!confirm(`PERMANENT ACTION:\n\nAre you sure you want to delete user ${email}?\nThis cannot be undone.`)) return;
-            
-            // NOTE: Backend endpoint /api/delete-user is assumed present or needs adding to server.js
-            // Simulating success for UI demonstration if endpoint missing
-            alert(`Delete request sent for ${email}. (Backend implementation required for persistent delete)`);
-            // await apiCall('/delete-user', 'POST', {email}); loadManageUsers();
+            if(!confirm("Are you sure you want to delete user " + email + "? This cannot be undone.")) return;
+            const res = await apiCall('/delete-user', 'POST', {email: email});
+            if(res.success) { alert("User deleted"); loadManageUsers(); } else { alert(res.error || "Delete failed"); }
         }
 
-        // --- DASHBOARD LOGIC ---
         async function loadDashboard() {
             const res = await apiCall('/dashboard', 'POST', {role: currentUser.Role, email: currentUser.Email});
-            const container = document.getElementById('dashboard-content'); 
-            container.innerHTML = '';
-            
+            const container = document.getElementById('dashboard-content'); container.innerHTML = '';
             const pending = res.filter(p => p.Status.includes('Pending'));
             const active = res.filter(p => p.Status === 'Active' || p.Status.includes('Renewal'));
             const closed = res.filter(p => p.Status.includes('Closed') || p.Status === 'Rejected');
@@ -1187,116 +803,134 @@
                 return `
                     <div class="glass border-l-4 border-${color}-500 transform transition hover:shadow-lg">
                         <div class="flex justify-between items-center border-b pb-2 mb-3">
-                            <h3 class="font-bold text-${color}-700 uppercase text-sm tracking-wide flex items-center gap-2">
-                                <span class="h-3 w-3 rounded-full bg-${color}-500"></span> ${title}
-                            </h3>
+                            <h3 class="font-bold text-${color}-700 uppercase text-sm tracking-wide flex items-center gap-2">${title}</h3>
                             <span class="bg-${color}-100 text-${color}-800 text-xs font-bold px-3 py-1 rounded-full border border-${color}-200">${items.length}</span>
                         </div>
-                        <div class="overflow-x-auto">
-                        <table class="w-full text-left text-xs data-table">
-                            <thead><tr><th>Permit ID</th><th>Type</th><th>Location</th><th>Status</th><th>Valid From</th></tr></thead>
-                            <tbody>${items.map(p => `
-                                <tr onclick="openPermit('${p.PermitID}')" class="group hover:bg-${color}-50 transition">
-                                    <td class="font-bold text-blue-600 group-hover:underline">${p.PermitID}</td>
-                                    <td class="font-medium">${p.WorkType}</td>
-                                    <td class="text-gray-500">${p.LocationUnit}</td>
-                                    <td><span class="px-2 py-0.5 rounded bg-${color}-50 text-${color}-700 font-bold border border-${color}-200 text-[10px] uppercase">${p.Status}</span></td>
-                                    <td class="font-mono text-gray-500">${p.ValidFrom.split('T')[0]}</td>
-                                </tr>`).join('')}
-                            </tbody>
-                        </table>
-                        </div>
+                        <div class="overflow-x-auto"><table class="w-full text-left text-xs data-table"><thead><tr><th>ID</th><th>Type</th><th>Location</th><th>Status</th><th>Date</th></tr></thead><tbody>${items.map(p => `<tr onclick="openPermit('${p.PermitID}')" class="group hover:bg-${color}-50 transition"><td class="font-bold text-blue-600 group-hover:underline">${p.PermitID}</td><td class="font-medium">${p.WorkType}</td><td class="text-gray-500">${p.LocationUnit}</td><td><span class="px-2 py-0.5 rounded bg-${color}-50 text-${color}-700 font-bold border border-${color}-200 text-[10px] uppercase">${p.Status}</span></td><td class="font-mono text-gray-500">${p.ValidFrom.split('T')[0]}</td></tr>`).join('')}</tbody></table></div>
                     </div>`;
             };
-            
             container.innerHTML += renderTable('Action Required', pending, 'red');
             container.innerHTML += renderTable('Active Permits', active, 'green');
-            container.innerHTML += renderTable('Closed / Archived', closed, 'gray');
-            
-            if(res.length === 0) {
-                container.innerHTML = `<div class="text-center p-10 text-gray-400 bg-white rounded-lg border border-dashed border-gray-300">No permits found.</div>`;
-            }
-            
+            container.innerHTML += renderTable('Closed / Archive', closed, 'gray');
             loadStats(res);
         }
 
-        // --- OPEN PERMIT LOGIC ---
         async function openPermit(id) {
             const p = await apiCall('/permit-data', 'POST', {permitId:id});
-            document.getElementById('view-dashboard').classList.add('hidden'); 
-            document.getElementById('view-form').classList.remove('hidden');
+            currentPermitId = id; currentPermitIOCLData = p.IOCLSupervisors || []; permitRequirePhoto = (p.RequireRenewalPhotos === 'Y');
+            document.getElementById('view-dashboard').classList.add('hidden'); document.getElementById('view-form').classList.remove('hidden');
+            document.getElementById('permit-title').innerText = `Permit: ${id}`;
+            document.getElementById('permit-header-display').innerText = `Status: ${p.Status}`;
             
-            document.getElementById('permit-title').innerText = `Permit #${id}`;
-            document.getElementById('permit-subtitle').innerText = `Status: ${p.Status}`;
-            
-            // Populate Fields
             document.querySelectorAll('#pf input, #pf textarea, #pf select').forEach(el => {
-                if(el.type === 'checkbox') el.checked = (p[el.name] === 'Y'); 
-                else if(el.type !== 'file') el.value = p[el.name] || ''; 
-                el.disabled = true; // Read Only
+                if(el.type === 'checkbox') el.checked = (p[el.name] === 'Y'); else if(el.type !== 'file') el.value = p[el.name] || ''; el.disabled = true;
             });
 
-            // REQ E: Validity Display
             document.getElementById('validity-box').classList.remove('hidden');
-            document.getElementById('val-time-from').innerText = p.ValidFrom.replace('T', ' '); 
-            document.getElementById('val-time-to').innerText = p.ValidTo.replace('T', ' ');
+            document.getElementById('val-time-from').innerText = p.ValidFrom.replace('T', ' '); document.getElementById('val-time-to').innerText = p.ValidTo.replace('T', ' ');
             document.getElementById('val-status').innerText = p.Status.toUpperCase();
 
-            // Renewal & Photo Logic
+            // Populate Workers
+            currentPermitWorkers = p.SelectedWorkers;
+            const wTable = document.getElementById('worker-display-table'); wTable.classList.remove('hidden');
+            wTable.querySelector('tbody').innerHTML = currentPermitWorkers.map(w => `<tr><td>${escapeHtml(w.Name)}</td><td>${escapeHtml(w.IDType)}: ${escapeHtml(w.ID)}</td><td>${escapeHtml(w.Contact)}</td></tr>`).join('');
+
+            // Populate IOCL Supervisors
+            renderIOCLTable();
+
+            // Renewals Logic
             const rens = JSON.parse(p.RenewalsJSON || "[]");
-            const permitRequirePhoto = (p.RequireRenewalPhotos === 'Y');
             const canRenew = (currentUser.Role === 'Requester' && (p.Status === 'Active' || p.Status.includes('Renewal')));
             
-            // Show Renewal Section?
             if (rens.length > 0 || canRenew) {
                 document.getElementById('renewals-section').classList.remove('hidden');
-                
-                const histBody = document.getElementById('renewal-history-body');
-                histBody.innerHTML = rens.map(r => `
-                    <tr class="border-b border-gray-100 hover:bg-purple-50">
-                        <td class="p-2 font-mono text-[10px]">${r.valid_from}<br>${r.valid_to}</td>
-                        <td class="p-2">HC:${r.hc}% Tox:${r.toxic}</td>
-                        <td class="p-2">${r.worker_list?.length || 0}</td>
-                        <td class="p-2 font-bold text-purple-700">${r.status}</td>
-                        <td class="p-2 text-center">${r.photoUrl ? '📸' : '-'}</td>
-                    </tr>`).join('');
-                    
+                document.getElementById('renewal-history-body').innerHTML = rens.map(r => `<tr class="border-b border-gray-100 hover:bg-purple-50"><td class="p-2 font-mono text-[10px]">${r.valid_from}<br>${r.valid_to}</td><td class="p-2">HC:${r.hc}% Tox:${r.toxic}</td><td class="p-2">${r.worker_list?.length || 0}</td><td class="p-2 text-center">${r.photoUrl ? '📸' : '-'}</td><td class="p-2">${r.req_name}</td><td class="p-2 font-bold text-purple-700">${r.status}</td></tr>`).join('');
                 if (canRenew) {
                     document.getElementById('form-renewal').classList.remove('hidden');
-                    
-                    // --- CORRECTED PHOTO LOGIC: MANDATORY ON 1ST RENEWAL IF FLAG SET ---
-                    // Previous code checked (currentRenewalCount > 0 && flag). 
-                    // We REMOVED currentRenewalCount > 0.
+                    const renSel = document.getElementById('renewal-worker-select');
+                    renSel.innerHTML = currentPermitWorkers.map(w => `<label class="flex items-center gap-1 text-xs bg-white p-1 rounded border"><input type="checkbox" value="${escapeHtml(w.Name)}" checked class="ren-worker-cb accent-purple-600"> ${escapeHtml(w.Name)}</label>`).join('');
                     if (permitRequirePhoto) {
-                        document.getElementById('renewal-photo-wrapper').classList.remove('hidden');
-                        document.getElementById('ren-cam-sub').required = true;
+                        document.getElementById('renewal-photo-wrapper').classList.remove('hidden'); document.getElementById('ren-cam-sub').required = true;
                     } else {
-                        document.getElementById('renewal-photo-wrapper').classList.add('hidden');
-                        document.getElementById('ren-cam-sub').required = false;
+                        document.getElementById('renewal-photo-wrapper').classList.add('hidden'); document.getElementById('ren-cam-sub').required = false;
                     }
-                } else {
-                    document.getElementById('form-renewal').classList.add('hidden');
-                }
-            } else { 
-                document.getElementById('renewals-section').classList.add('hidden'); 
+                } else document.getElementById('form-renewal').classList.add('hidden');
+            } else document.getElementById('renewals-section').classList.add('hidden');
+
+            // --- PERMISSIONS & BUTTONS ---
+            const actionsDiv = document.getElementById("actions-bar"); actionsDiv.innerHTML = "";
+            const lastRen = rens.length > 0 ? rens[rens.length-1] : null;
+
+            if(currentUser.Role === 'Requester' && p.Status === 'New') {
+                document.querySelectorAll('#pf input, #pf select, #pf textarea').forEach(e => e.disabled = false);
+                const btn = document.createElement("button"); btn.className = "bg-blue-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg hover:bg-blue-700"; btn.innerText = "Submit Application"; btn.type = "button"; btn.onclick = savePermit; actionsDiv.appendChild(btn);
             }
-            
+            if(currentUser.Role === 'Reviewer' && p.Status === 'Pending Review') {
+                document.getElementById('fs-reviewer-section').classList.remove('hidden'); document.getElementById('iocl-reviewer-wrapper').classList.remove('hidden');
+                document.getElementById('Reviewer_Remarks').disabled = false; document.getElementById('AdditionalPrecautions').disabled = false;
+                const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-2 rounded shadow font-bold"; b1.innerText = "Reject"; b1.onclick = () => upd('reject');
+                const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-2 rounded shadow font-bold"; b2.innerText = "Review & Forward"; b2.onclick = () => upd('review');
+                actionsDiv.append(b1, b2);
+            }
+            if(currentUser.Role === 'Approver' && p.Status === 'Pending Approval') {
+                document.getElementById('fs-approver-section').classList.remove('hidden'); document.getElementById('iocl-approver-wrapper').classList.remove('hidden');
+                document.getElementById('Approver_Remarks').disabled = false; document.getElementById('RequireRenewalPhotos').disabled = false;
+                const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-2 rounded shadow font-bold"; b1.innerText = "Reject"; b1.onclick = () => upd('reject');
+                const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-2 rounded shadow font-bold"; b2.innerText = "Final Approve"; b2.onclick = () => upd('approve');
+                actionsDiv.append(b1, b2);
+            }
+            // Renewal Approvals
+            if(lastRen && lastRen.status.includes('pending')) {
+                if((currentUser.Role === 'Reviewer' && p.Status.includes('Review')) || (currentUser.Role === 'Approver' && p.Status.includes('Approval'))) {
+                    document.getElementById('action-renewal').classList.remove('hidden');
+                    document.getElementById('btn-approve-renewal').onclick = () => submitRenewal('approve'); // Actually calls endpoint to advance status
+                    document.getElementById('btn-reject-renewal').onclick = () => submitRenewal('reject');
+                }
+            }
+            // Closure Logic
+            if(p.Status.includes('Closure')) {
+                document.getElementById('closure-section').classList.remove('hidden');
+                document.getElementById('div-closure-req').classList.remove('hidden');
+                if(p.Status !== 'Closure Pending Review') document.getElementById('div-closure-rev').classList.remove('hidden');
+                if(p.Status === 'Closed' || p.Status === 'Closure Pending Approval') document.getElementById('div-closure-app').classList.remove('hidden');
+
+                if(currentUser.Role === 'Reviewer' && p.Status === 'Closure Pending Review') {
+                    document.getElementById('Closure_Reviewer_Remarks').disabled = false;
+                    const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-2 rounded shadow font-bold"; b2.innerText = "Verify Closure"; b2.onclick = () => upd('approve_closure');
+                    actionsDiv.appendChild(b2);
+                }
+                if(currentUser.Role === 'Approver' && p.Status === 'Closure Pending Approval') {
+                    document.getElementById('Closure_Approver_Remarks').disabled = false;
+                    const b2 = document.createElement("button"); b2.className = "bg-black text-white px-4 py-2 rounded shadow font-bold"; b2.innerText = "Close Permit"; b2.onclick = () => upd('approve');
+                    actionsDiv.appendChild(b2);
+                }
+            }
+
             attachFileValidators();
         }
 
-        // --- SUBMIT RENEWAL ---
-        async function submitRenewal(status) {
+        async function submitRenewal(act) {
+            // If acting on existing request
+            if(act === 'approve' || act === 'reject') {
+                const remark = document.getElementById('RenewalRemark').value;
+                const res = await apiCall('/renewal', 'POST', {PermitID: currentPermitId, action: act, rejectionReason: remark});
+                if(res.success) { alert("Action Taken"); switchView('dashboard'); } else alert(res.error);
+                return;
+            }
+
+            // New Request
              const getVal = (id) => document.getElementById(id).value;
             const fd = new FormData();
-            fd.append('PermitID', document.getElementById('PermitID').value);
+            fd.append('PermitID', currentPermitId);
             fd.append('action', 'initiate'); 
             fd.append('RenewalValidFrom', getVal("RenewalValidFrom"));
             fd.append('RenewalValidTo', getVal("RenewalValidTo"));
-            fd.append('hc', getVal("RenewalHC")); 
-            fd.append('toxic', getVal("RenewalToxic")); 
-            fd.append('oxygen', getVal("RenewalOxygen"));
+            fd.append('hc', getVal("RenewalHC")); fd.append('toxic', getVal("RenewalToxic")); fd.append('oxygen', getVal("RenewalOxygen"));
             fd.append('precautions', getVal("RenewalPrec"));
             
+            const selWorkers = []; document.querySelectorAll('.ren-worker-cb:checked').forEach(c => selWorkers.push(c.value));
+            fd.append('renewalWorkers', JSON.stringify(selWorkers));
+
             // Check Photo Mandatory
             const fileInput = document.getElementById("ren-cam-sub");
             const isPhotoMandatory = !document.getElementById('renewal-photo-wrapper').classList.contains('hidden');
@@ -1355,7 +989,6 @@
             const res = await apiCall('/get-workers', 'POST', {role:currentUser.Role, email:currentUser.Email, context:context}); 
             
             if(context === 'permit_dropdown') { 
-                // Populate the grid in Permit Form
                 const con = document.getElementById('worker-select-area');
                 con.innerHTML = res.map(w => `
                     <label class="flex items-center gap-3 border p-3 rounded-lg bg-white shadow-sm cursor-pointer hover:bg-blue-50 transition">
@@ -1366,7 +999,6 @@
                         </div>
                     </label>`).join(''); 
             } else { 
-                // Populate Management Table
                 const t = document.querySelector('#table-workers tbody'); 
                 t.innerHTML = "";
                 res.forEach(w => {
@@ -1382,66 +1014,122 @@
             } 
         }
 
+        // --- UPDATER ---
+        async function upd(act) {
+            let ioclData = getIOCLData('iocl-sup-container-rev'); // Simplified: assume fetching from correct container based on role
+            if(currentUser.Role === 'Approver') ioclData = getIOCLData('iocl-sup-container-app');
+
+            const body = { 
+                PermitID: currentPermitId, action: act, role: currentUser.Role, user: currentUser.Name,
+                IOCLSupervisors: ioclData,
+                comment: (currentUser.Role==='Reviewer' ? getVal("Reviewer_Remarks") : getVal("Approver_Remarks")),
+                // Add all specific fields from form if reviewing
+                AdditionalPrecautions: getVal("AdditionalPrecautions"),
+                RequireRenewalPhotos: document.getElementById('RequireRenewalPhotos').checked ? 'Y' : 'N',
+                PdfBgColor: getVal('PdfBgColor'),
+                Closure_Reviewer_Remarks: getVal('Closure_Reviewer_Remarks'),
+                Closure_Approver_Remarks: getVal('Closure_Approver_Remarks'),
+                Site_Restored_Check: document.getElementById("Site_Restored_Check").checked ? 'Y' : 'N'
+            };
+            
+            // Capture checklists/hazards if Reviewer
+            if(currentUser.Role === 'Reviewer' && act === 'review') {
+                 document.querySelectorAll('input[type=checkbox]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
+                 document.querySelectorAll('input[type=radio]:checked').forEach(r => body[r.name] = r.value);
+            }
+
+            const res = await apiCall('/update-status', 'POST', body);
+            if(res.success) { alert("Status Updated"); switchView('dashboard'); } else alert(res.error);
+        }
+
+        // --- HELPER FOR IOCL SUPERVISORS ---
+        function addIOCLRow(containerId, data=null) {
+             const div = document.createElement('div'); div.className = "flex gap-2 items-center mb-2 iocl-row";
+             div.innerHTML = `
+                <input class="iocl-name border p-1 w-1/3 text-xs rounded" placeholder="Name" value="${data?data.name:''}">
+                <input class="iocl-desig border p-1 w-1/3 text-xs rounded" placeholder="Desig" value="${data?data.desig:''}">
+                <input class="iocl-contact border p-1 w-1/3 text-xs rounded" placeholder="Contact" value="${data?data.contact:''}">
+                <button type="button" class="text-red-500 font-bold px-2" onclick="this.parentElement.remove()">x</button>
+             `;
+             document.getElementById(containerId).appendChild(div);
+        }
+        function getIOCLData(containerId) {
+             const rows = document.querySelectorAll(`#${containerId} .iocl-row`);
+             const arr = [];
+             rows.forEach(r => {
+                 arr.push({
+                     name: r.querySelector('.iocl-name').value,
+                     desig: r.querySelector('.iocl-desig').value,
+                     contact: r.querySelector('.iocl-contact').value,
+                     added_by: currentUser.Name, added_at: getNow()
+                 });
+             });
+             return arr;
+        }
+        function renderIOCLTable() {
+            const t = document.querySelector('#table-iocl-display tbody'); t.innerHTML = '';
+            if(!currentPermitIOCLData || currentPermitIOCLData.length === 0) { t.innerHTML = '<tr><td colspan="4" class="text-gray-400">None</td></tr>'; return; }
+            currentPermitIOCLData.forEach(x => {
+                t.innerHTML += `<tr><td>${x.name}</td><td>${x.desig}</td><td>${x.contact}</td><td class="text-xs text-gray-500">By ${x.added_by}</td></tr>`;
+            });
+            document.getElementById('iocl-sup-display-section').classList.remove('hidden');
+        }
+        // Bind buttons
+        document.getElementById('btn-add-rev-sup').onclick = () => addIOCLRow('iocl-sup-container-rev');
+        document.getElementById('btn-add-app-sup').onclick = () => addIOCLRow('iocl-sup-container-app');
+        
+        async function savePermit() {
+            if(!document.getElementById('gsr-check').checked) return alert("You must accept Golden Safety Rules.");
+            const fd = new FormData(document.getElementById("pf"));
+            document.querySelectorAll('input[type="checkbox"]').forEach(c => { if(c.name) fd.set(c.name, c.checked ? "Y" : "N"); });
+            fd.set("GSR_Accepted", "Y");
+            const selectedWorkers = [];
+            document.querySelectorAll('#worker-select-area input:checked').forEach(c => selectedWorkers.push(JSON.parse(c.value)));
+            fd.append("SelectedWorkers", JSON.stringify(selectedWorkers));
+            if(currentUser) fd.append("RequesterEmail", currentUser.Email);
+
+            const res = await fetch(API+'/save-permit', {method:'POST', body:fd, headers: {'Authorization': `Bearer ${authToken}`}});
+            const json = await res.json();
+            if(json.success) { alert("Permit Created: "+json.permitId); switchView('dashboard'); } else alert(json.error);
+        }
+
         // --- ADMIN FUNCTIONS ---
         async function uploadBulkUsers() {
             const file = document.getElementById('bulk-excel').files[0];
-            if(!file) return alert("Please select an Excel file.");
-            
+            if(!file) return alert("Select file");
             const fd = new FormData(); fd.append('excelFile', file);
-            
             document.getElementById('loader').style.display = 'flex';
             const res = await fetch(API+'/admin/bulk-upload', { method: 'POST', headers: {'Authorization': `Bearer ${authToken}`}, body: fd });
             const json = await res.json();
             document.getElementById('loader').style.display = 'none';
-            
-            alert(json.success ? `Success! ${json.count} users processed.` : `Error: ${json.error}`);
+            alert(json.success ? "Success" : json.error);
         }
 
         async function resetUserPassword() {
-            const email = document.getElementById('reset-email').value; 
-            const pass = document.getElementById('reset-temp-pass').value;
-            if(!email || !pass) return alert("Fill all fields");
-            
+            const email = document.getElementById('reset-email').value; const pass = document.getElementById('reset-temp-pass').value;
             const res = await apiCall('/admin/reset-password', 'POST', {targetEmail: email, newTempPass: pass});
-            alert(res.success ? "Password Reset Successfully. User must change on next login." : res.error);
+            alert(res.success ? "Reset Done" : res.error);
         }
 
-        function logout() { 
-            // Optional: Call logout API
-            location.reload(); 
+        function getGeo() {
+             if(!navigator.geolocation) return alert("Geo not supported");
+             navigator.geolocation.getCurrentPosition(p => {
+                 document.getElementById('ExactLocation').value = `${p.coords.latitude.toFixed(6)}, ${p.coords.longitude.toFixed(6)}`;
+                 document.getElementById('Latitude').value = p.coords.latitude;
+                 document.getElementById('Longitude').value = p.coords.longitude;
+             });
         }
+        function logout() { location.reload(); }
         
-        // --- STATS CHART ---
         async function loadStats(data) {
             if(!data) return;
             const ctx = document.getElementById('chartStatus').getContext('2d');
-            
             if(chartS) chartS.destroy();
-            
-            const counts = {}; 
-            data.forEach(d => counts[d.Status] = (counts[d.Status]||0)+1);
-            
-            chartS = new Chart(ctx, { 
-                type: 'doughnut', 
-                data: { 
-                    labels: Object.keys(counts), 
-                    datasets: [{ 
-                        data: Object.values(counts), 
-                        backgroundColor: ['#ef4444', '#22c55e', '#64748b', '#eab308'],
-                        borderWidth: 0
-                    }] 
-                }, 
-                options: { 
-                    responsive: true, 
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 } } } } 
-                } 
-            });
+            const counts = {}; data.forEach(d => counts[d.Status] = (counts[d.Status]||0)+1);
+            chartS = new Chart(ctx, { type: 'doughnut', data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: ['#f87171', '#4ade80', '#94a3b8'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } } });
         }
 
-        // Initialize App
         initLogin();
-
     </script>
 </body>
 </html>

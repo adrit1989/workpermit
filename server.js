@@ -1114,99 +1114,81 @@ app.post('/api/dashboard', authenticateAccess, async (req, res) => {
 });
 
 app.post('/api/save-permit', authenticateAccess, upload.any(), async (req, res) => {
-  try {
-    const requesterEmail = req.user.email;
-    let vf, vt;
     try {
-      vf = req.body.ValidFrom ? new Date(req.body.ValidFrom) : null;
-      vt = req.body.ValidTo ? new Date(req.body.ValidTo) : null;
-    } catch {
-      return res.status(400).json({ error: "Invalid Date Format" });
+        const pool = await getConnection();
+        let pid = req.body.PermitID;
+
+        // 1. MATHEMATICAL ID GENERATION
+        if (!pid || pid === 'undefined' || pid === '' || pid === 'null') {
+            const idRes = await pool.request().query("SELECT MAX(CAST(SUBSTRING(PermitID, 4, 10) AS INT)) as MaxVal FROM Permits WHERE PermitID LIKE 'WP-%'");
+            let nextNum = 1000;
+            if (idRes.recordset[0].MaxVal) nextNum = idRes.recordset[0].MaxVal + 1;
+            pid = `WP-${nextNum}`;
+        }
+
+        // 2. CRITICAL PDF FIX: Convert Checklist keys A_0 -> A_Q1
+        const data = { ...req.body };
+        Object.keys(req.body).forEach(key => {
+            if (key.includes('_')) {
+                const parts = key.split('_');
+                // Check if it's a checklist item (e.g., A_0, B_15)
+                if (parts.length === 2 && !isNaN(parts[1]) && parts[0].length === 1) {
+                    const newKey = `${parts[0]}_Q${parseInt(parts[1]) + 1}`;
+                    data[newKey] = req.body[key];
+                }
+            }
+        });
+
+        // 3. INITIAL RENEWAL FEATURE LOGIC
+        let renewalsArr = [];
+        if (req.body.InitRen === 'Y') {
+            let workers = [];
+            try {
+                workers = typeof data.SelectedWorkers === 'string' ? JSON.parse(data.SelectedWorkers) : (data.SelectedWorkers || []);
+            } catch (e) { workers = []; }
+
+            renewalsArr.push({
+                status: 'pending_review',
+                valid_from: req.body.InitRenFrom,
+                valid_till: req.body.InitRenTo,
+                hc: req.body.InitRenHC,
+                toxic: req.body.InitRenTox,
+                oxygen: req.body.InitRenO2,
+                precautions: req.body.InitRenPrec,
+                req_name: req.body.RequesterName,
+                req_at: getNowIST(),
+                worker_list: workers.map(w => w.Name)
+            });
+        }
+
+        // 4. DATABASE EXECUTION
+        const q = pool.request()
+            .input('p', pid)
+            .input('s', 'Pending Review')
+            .input('w', req.body.WorkType)
+            .input('re', req.user.email)
+            .input('rv', req.body.ReviewerEmail)
+            .input('ap', req.body.ApproverEmail)
+            .input('vf', new Date(req.body.ValidFrom))
+            .input('vt', new Date(req.body.ValidTo))
+            .input('j', sql.NVarChar(sql.MAX), JSON.stringify(data))
+            .input('ren', sql.NVarChar(sql.MAX), JSON.stringify(renewalsArr));
+
+        await q.query(`
+            IF EXISTS (SELECT 1 FROM Permits WHERE PermitID=@p)
+                UPDATE Permits SET FullDataJSON=@j, WorkType=@w, ValidFrom=@vf, ValidTo=@vt, Status=@s, ReviewerEmail=@rv, ApproverEmail=@ap, RenewalsJSON=@ren WHERE PermitID=@p
+            ELSE
+                INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, FullDataJSON, RenewalsJSON) 
+                VALUES (@p,@s,@w,@re,@rv,@ap,@vf,@vt,@j,@ren)
+        `);
+
+        log(`Permit Saved/Updated: ${pid}`);
+        res.json({ success: true, permitId: pid });
+
+    } catch (err) {
+        log("Save Permit Error: " + err.message, 'ERROR');
+        res.status(500).json({ error: err.message });
     }
-
-    if (!vf || !vt) return res.status(400).json({ error: "Start & End required" });
-    if (vt <= vf) return res.status(400).json({ error: "End > Start required" });
-
-    const pool = await getConnection();
-    let pid = req.body.PermitID;
-
-    // Mathematical ID
-    if (!pid || pid === 'undefined' || pid === 'null' || pid === '') {
-      const idRes = await pool.request().query("SELECT MAX(CAST(SUBSTRING(PermitID, 4, 10) AS INT)) as MaxVal FROM Permits WHERE PermitID LIKE 'WP-%'");
-      let nextNum = 1000;
-      if (idRes.recordset[0].MaxVal) {
-        nextNum = idRes.recordset[0].MaxVal + 1;
-      }
-      pid = `WP-${nextNum}`;
-    }
-
-    const chk = await pool.request().input('p', sql.NVarChar, pid)
-      .query("SELECT Status FROM Permits WHERE PermitID=@p");
-    
-    if (chk.recordset.length && chk.recordset[0].Status.includes('Closed')) {
-      return res.status(400).json({ error: "Permit CLOSED" });
-    }
-
-    let workers = req.body.SelectedWorkers;
-    if (typeof workers === 'string') { try { workers = JSON.parse(workers); } catch { workers = []; } }
-
-    let renewalsArr = [];
-    if (req.body.InitRen === 'Y') {
-      let photoUrl = null;
-      const renImg = req.files ? req.files.find(x => x.fieldname === 'InitRenImage') : null;
-      if (renImg) {
-        const blobName = `${pid}-1stRenewal.jpg`;
-        // Use verified safe upload
-        photoUrl = await uploadToAzure(renImg.buffer, blobName);
-      }
-      renewalsArr.push({
-        status: 'pending_review',
-        valid_from: req.body.InitRenFrom,
-        valid_till: req.body.InitRenTo,
-        hc: req.body.InitRenHC,
-        toxic: req.body.InitRenTox,
-        oxygen: req.body.InitRenO2,
-        precautions: req.body.InitRenPrec,
-        req_name: req.body.RequesterName,
-        req_at: getNowIST(),
-        worker_list: workers.map(w => w.Name),
-        photoUrl
-      });
-    }
-
-    const renewalsJsonStr = JSON.stringify(renewalsArr);
-    const data = { ...req.body, SelectedWorkers: workers, PermitID: pid, CreatedDate: getNowIST(), GSR_Accepted: 'Y' };
-
-    const safeLat = req.body.Latitude && req.body.Latitude !== 'undefined' ? String(req.body.Latitude) : null;
-    const safeLng = req.body.Longitude && req.body.Longitude !== 'undefined' ? String(req.body.Longitude) : null;
-
-    const q = pool.request()
-      .input('p', sql.NVarChar, pid)
-      .input('s', sql.NVarChar, 'Pending Review')
-      .input('w', sql.NVarChar, req.body.WorkType)
-      .input('re', sql.NVarChar, requesterEmail)
-      .input('rv', sql.NVarChar, req.body.ReviewerEmail)
-      .input('ap', sql.NVarChar, req.body.ApproverEmail)
-      .input('vf', sql.DateTime, vf)
-      .input('vt', sql.DateTime, vt)
-      .input('lat', sql.NVarChar, safeLat)
-      .input('lng', sql.NVarChar, safeLng)
-      .input('j', sql.NVarChar(sql.MAX), JSON.stringify(data))
-      .input('ren', sql.NVarChar(sql.MAX), renewalsJsonStr);
-
-    if (chk.recordset.length) {
-      await q.query("UPDATE Permits SET FullDataJSON=@j, WorkType=@w, ValidFrom=@vf, ValidTo=@vt, Latitude=@lat, Longitude=@lng, Status=@s, ReviewerEmail=@rv, ApproverEmail=@ap, RenewalsJSON=@ren WHERE PermitID=@p");
-    } else {
-      await q.query("INSERT INTO Permits (PermitID, Status, WorkType, RequesterEmail, ReviewerEmail, ApproverEmail, ValidFrom, ValidTo, Latitude, Longitude, FullDataJSON, RenewalsJSON) VALUES (@p,@s,@w,@re,@rv,@ap,@vf,@vt,@lat,@lng,@j,@ren)");
-    }
-    
-    log(`Permit Saved: ${pid} by ${requesterEmail}`);
-    res.json({ success: true, permitId: pid });
-
-  } catch (err) {
-    console.error("Save Error:", err.message);
-    res.status(500).json({ error: "Database Save Failed" });
-  }
 });
 
 app.post('/api/update-status', authenticateAccess, async (req, res) => {

@@ -935,15 +935,33 @@
                     </tr>`;
                 }).join('');
                 
+const rens = JSON.parse(p.RenewalsJSON || "[]");
+            const lastRen = rens.length > 0 ? rens[rens.length - 1] : null;
+            currentRenewalCount = rens.length;
+            const canRenew = (currentUser.Role === 'Requester' && (p.Status === 'Active' || p.Status.includes('Renewal')));
+            
+            if (rens.length > 0 || canRenew) {
+                document.getElementById('renewals-section').classList.remove('hidden');
+                
+                // REQ C: Renewal Table Rendering
+                document.getElementById('renewal-history-body').innerHTML = rens.map(r => {
+                    const photoHtml = r.photoUrl ? `<button type="button" class="text-blue-600 font-bold underline text-xs" onclick="viewSecurePhoto('${r.photoUrl}')">View Photo</button>` : 'N/A';
+                    return `<tr class="border-b border-gray-100 hover:bg-purple-50">
+                        <td class="p-2 font-mono text-[10px]">${r.valid_from}<br>${r.valid_to}</td>
+                        <td class="p-2">HC:${r.hc}% Tox:${r.toxic} O2:${r.oxygen}</td>
+                        <td class="p-2">${r.worker_list ? r.worker_list.join(', ') : 'All'}</td>
+                        <td class="p-2 text-[10px]">${r.precautions || '-'}</td>
+                        <td class="p-2">${r.req_name}</td>
+                        <td class="p-2 text-[10px]">${r.rev_name || '-'}<br>${r.rev_at || ''}</td>
+                        <td class="p-2 text-[10px]">${r.app_name || '-'}<br>${r.app_at || ''}</td>
+                        <td class="p-2 text-center">${photoHtml}</td>
+                    </tr>`;
+                }).join('');
+                
                 if (canRenew) {
-                    // Check if there is a renewal currently stuck in "pending" status
                     if (!lastRen || !lastRen.status.includes('pending')) {
                         document.getElementById('form-renewal').classList.remove('hidden');
-                        
-                        // ENABLE the inputs so the Requester can type
-                        document.querySelectorAll('#form-renewal input').forEach(el => {
-                            el.disabled = false;
-                        });
+                        document.querySelectorAll('#form-renewal input').forEach(el => { el.disabled = false; });
 
                         const renSel = document.getElementById('renewal-worker-select');
                         renSel.innerHTML = currentPermitWorkers.map(w => `<label class="flex items-center gap-1 text-xs bg-white p-1 rounded border"><input type="checkbox" value="${escapeHtml(w.Name)}" checked class="ren-worker-cb accent-purple-600"> ${escapeHtml(w.Name)}</label>`).join('');
@@ -951,22 +969,20 @@
                         if (permitRequirePhoto) {
                             document.getElementById('renewal-photo-wrapper').classList.remove('hidden'); 
                             document.getElementById('ren-cam-sub').required = true;
-                            document.getElementById('ren-cam-sub').disabled = false; // Ensure file input is enabled
+                            document.getElementById('ren-cam-sub').disabled = false; 
                         } else {
                             document.getElementById('renewal-photo-wrapper').classList.add('hidden'); 
                             document.getElementById('ren-cam-sub').required = false;
                         }
                     } else {
-                    document.getElementById('form-renewal').classList.remove('hidden');
-                    const renSel = document.getElementById('renewal-worker-select');
-                    renSel.innerHTML = currentPermitWorkers.map(w => `<label class="flex items-center gap-1 text-xs bg-white p-1 rounded border"><input type="checkbox" value="${escapeHtml(w.Name)}" checked class="ren-worker-cb accent-purple-600"> ${escapeHtml(w.Name)}</label>`).join('');
-                    if (permitRequirePhoto) {
-                        document.getElementById('renewal-photo-wrapper').classList.remove('hidden'); document.getElementById('ren-cam-sub').required = true;
-                    } else {
-                        document.getElementById('renewal-photo-wrapper').classList.add('hidden'); document.getElementById('ren-cam-sub').required = false;
+                        document.getElementById('form-renewal').classList.add('hidden');
                     }
-                } else document.getElementById('form-renewal').classList.add('hidden');
-            } else document.getElementById('renewals-section').classList.add('hidden');
+                } else {
+                    document.getElementById('form-renewal').classList.add('hidden');
+                }
+            } else {
+                document.getElementById('renewals-section').classList.add('hidden');
+            }
 
             const actionsDiv = document.getElementById("actions-bar"); actionsDiv.innerHTML = "";
             
@@ -1368,4 +1384,5 @@
     </script>
 </body>
 </html>
+
 

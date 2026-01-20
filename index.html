@@ -513,7 +513,7 @@
         </div>
     </div>
 
-    <script nonce="NONCE_PLACEHOLDER">
+   <script nonce="NONCE_PLACEHOLDER">
     /* ==========================================================================
        1. GLOBAL CONSTANTS & STATE
        ========================================================================== */
@@ -592,8 +592,12 @@
         document.getElementById('chk-init-renewal').addEventListener('change', (e) => {
             document.getElementById('div-init-renewal').classList.toggle('hidden', !e.target.checked);
         });
-        document.getElementById('RenewalValidFrom')?.addEventListener('change', checkRenewalTime);
-        document.getElementById('RenewalValidTo')?.addEventListener('change', checkRenewalTime);
+        
+        // Safety check for renewal date listeners
+        const rFrom = document.getElementById('RenewalValidFrom');
+        const rTo = document.getElementById('RenewalValidTo');
+        if(rFrom) rFrom.addEventListener('change', checkRenewalTime);
+        if(rTo) rTo.addEventListener('change', checkRenewalTime);
     }
 
     document.getElementById('login-form').addEventListener('submit', async (e) => {
@@ -606,6 +610,12 @@
             authToken = res.token; currentUser = res.user; enterApp(); 
         } else alert(res.msg);
     });
+
+    // MISSING FUNCTION RESTORED
+    function showChangePassword() {
+        document.getElementById('view-pwd-change').classList.remove('hidden');
+        document.getElementById('view-pwd-change').dataset.email = currentUser.Email;
+    }
 
     document.getElementById('btn-force-pwd').addEventListener('click', async () => {
         const p1 = document.getElementById('new-pwd-1').value; 
@@ -632,7 +642,7 @@
     }
 
     /* ==========================================================================
-       4. NAVIGATION & MAP (Issue E Fix)
+       4. NAVIGATION & MAP (FIXED)
        ========================================================================== */
     function switchView(viewName) {
         document.querySelectorAll('.content-area > div').forEach(d => d.classList.add('hidden'));
@@ -653,19 +663,25 @@
         if(viewName === 'map') { setTimeout(initMap, 200); }
     }
 
+    // MISSING MAP FUNCTION RESTORED & FIXED FOR COORDINATES
     async function initMap() {
         try {
             const mapData = await apiCall('/map-data', 'POST', {});
             const mapEl = document.getElementById('map');
             if (!mapEl || !window.google) return; 
 
-            const center = mapData.length > 0 ? { lat: mapData[0].lat, lng: mapData[0].lng } : { lat: 20.5937, lng: 78.9629 };
+            // SAFETY: Ensure valid floats
+            let validPoints = mapData.filter(p => p.lat && p.lng && !isNaN(parseFloat(p.lat)) && !isNaN(parseFloat(p.lng)));
+            
+            const center = validPoints.length > 0 
+                ? { lat: parseFloat(validPoints[0].lat), lng: parseFloat(validPoints[0].lng) } 
+                : { lat: 20.5937, lng: 78.9629 };
+            
             mapInstance = new google.maps.Map(mapEl, { zoom: 5, center: center });
 
-            mapData.forEach(p => {
-                if(!p.lat || !p.lng) return;
+            validPoints.forEach(p => {
                 const marker = new google.maps.Marker({
-                    position: { lat: p.lat, lng: p.lng },
+                    position: { lat: parseFloat(p.lat), lng: parseFloat(p.lng) },
                     map: mapInstance,
                     title: p.PermitID
                 });
@@ -685,7 +701,6 @@
         const container = document.getElementById('dashboard-content'); 
         container.innerHTML = '';
         
-        // Smart Filtering
         const pending = res.filter(p => {
             const s = p.Status;
             if (currentUser.Role === 'MasterAdmin') return s.includes('Pending') || s === 'Submitted';
@@ -728,7 +743,7 @@
     }
 
     /* ==========================================================================
-       6. CORE PERMIT LOGIC (ISSUES A, B, C, D FIXED HERE)
+       6. CORE PERMIT LOGIC (ALL BUGS FIXED)
        ========================================================================== */
     async function openPermit(id) {
         const p = await apiCall('/permit-data', 'POST', { permitId: id });
@@ -741,20 +756,19 @@
         currentPermitIOCLData = p.IOCLSupervisors || [];
         permitRequirePhoto = (p.RequireRenewalPhotos === 'Y');
 
-        // UI Reset
         document.getElementById('view-dashboard').classList.add('hidden');
         document.getElementById('view-form').classList.remove('hidden');
         document.getElementById('permit-title').innerText = `Permit: ${id}`;
         document.getElementById('permit-header-display').innerText = `Status: ${p.Status}`;
 
-        // Reset Action Sections
+        // RESET ALL ACTIONS
         ['fs-reviewer-section', 'fs-approver-section', 'rev-renewal-decision', 'app-renewal-decision', 'action-renewal', 'pending-renewal-display', 'odd-hour-approval-controls']
             .forEach(id => document.getElementById(id).classList.add('hidden'));
         
         const actionsDiv = document.getElementById("actions-bar");
         actionsDiv.innerHTML = "";
 
-        // Populate Form
+        // FORM LOGIC
         const isMainPending = (p.Status === 'Pending Review' || p.Status === 'Pending Approval');
         const isAuth = (currentUser.Role === 'Reviewer' || currentUser.Role === 'Approver');
 
@@ -771,18 +785,19 @@
         if (currentUser.Role === 'Requester') document.getElementById('ppe-section-wrapper').classList.add('hidden');
         else document.getElementById('ppe-section-wrapper').classList.remove('hidden');
 
-        // Fix D: Worker Data Parsing
+        // WORKER FIX
         let wData = p.SelectedWorkers;
         if (typeof wData === 'string') { try { wData = JSON.parse(wData); } catch (e) { wData = []; } }
         currentPermitWorkers = Array.isArray(wData) ? wData : [];
-        
         const wTbody = document.getElementById('worker-display-body');
         document.getElementById('worker-display-table').classList.toggle('hidden', currentPermitWorkers.length === 0);
         if (wTbody) wTbody.innerHTML = currentPermitWorkers.map(w => `<tr><td class="p-2 font-bold">${escapeHtml(w.Name)}</td><td class="p-2">${escapeHtml(w.IDType)}: ${escapeHtml(w.ID)}</td><td class="p-2 font-mono">${escapeHtml(w.Contact)}</td></tr>`).join('');
         
         renderIOCLTable();
 
-        // Main Approval Buttons (Fix B)
+        // --- BUTTON LOGIC ---
+        
+        // 1. Initial Review
         if (p.Status === 'Pending Review' && currentUser.Role === 'Reviewer') {
             document.getElementById('fs-reviewer-section').classList.remove('hidden');
             const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-2 rounded font-bold mr-2"; b1.innerText = "Reject"; b1.onclick = () => upd('reject');
@@ -796,37 +811,42 @@
             actionsDiv.append(b1, b2);
         }
 
-        // Renewal Logic (Fix A & C)
+        // 2. Renewal Logic (Fix A, C)
         const rens = JSON.parse(p.RenewalsJSON || "[]");
         const lastRen = rens.length > 0 ? rens[rens.length - 1] : null;
-        const canRenew = (currentUser.Role === 'Requester' && p.Status === 'Active');
 
-        if (rens.length > 0 || canRenew) {
+        if (rens.length > 0 || (currentUser.Role === 'Requester' && p.Status === 'Active')) {
             document.getElementById('renewals-section').classList.remove('hidden');
             document.getElementById('renewal-history-body').innerHTML = rens.map(r => `<tr class="border-b text-[10px]"><td class="p-2">${r.valid_from}<br>to ${r.valid_to}</td><td class="p-2">${r.req_name}</td><td class="p-2">${r.status}</td><td class="p-2">${r.photoUrl ? 'YES' : 'NO'}</td></tr>`).join('');
             
-            const showRenForm = (canRenew && (!lastRen || !lastRen.status.includes('pending')));
+            const showRenForm = (currentUser.Role === 'Requester' && p.Status === 'Active' && (!lastRen || !lastRen.status.includes('pending')));
             document.getElementById('form-renewal').classList.toggle('hidden', !showRenForm);
             if(showRenForm) {
                 document.getElementById('renewal-worker-select').innerHTML = currentPermitWorkers.map(w => `<label class="flex items-center gap-1 text-xs bg-white p-1 rounded border"><input type="checkbox" value="${escapeHtml(w.Name)}" checked class="ren-worker-cb"> ${escapeHtml(w.Name)}</label>`).join('');
-                document.getElementById('renewal-photo-wrapper').classList.toggle('hidden', !permitRequirePhoto);
             }
         }
 
         if (lastRen && lastRen.status.includes('pending')) {
             if (currentUser.Role !== 'Requester') document.getElementById('pending-renewal-display').classList.remove('hidden');
+            
             const isRevTurn = (currentUser.Role === 'Reviewer' && p.Status === 'Renewal Pending Review');
             const isAppTurn = (currentUser.Role === 'Approver' && p.Status === 'Renewal Pending Approval');
 
             if (isRevTurn || isAppTurn) {
-                // 1st Renewal (Embedded Radio)
+                // SPECIAL 1st RENEWAL CASE (Radio Buttons integrated in flow)
+                // Logic: If status is 'Renewal Pending Review/Approval' AND renewals count is 1
                 if (rens.length === 1 && p.Status.includes('Renewal')) {
                     if (isRevTurn) document.getElementById('rev-renewal-decision').classList.remove('hidden');
                     if (isAppTurn) document.getElementById('app-renewal-decision').classList.remove('hidden');
-                    const b = document.createElement("button"); b.className = "bg-purple-600 text-white px-4 py-2 rounded font-bold"; b.innerText = "Process Renewal Decision"; b.onclick = () => upd('approve_1st_ren');
+                    
+                    // Add generic button to process the radio selection
+                    const b = document.createElement("button"); 
+                    b.className = "bg-purple-600 text-white px-4 py-2 rounded font-bold shadow"; 
+                    b.innerText = "Confirm Renewal Decision"; 
+                    b.onclick = () => upd('approve_1st_ren');
                     actionsDiv.appendChild(b);
                 } 
-                // Subsequent Renewals (Standalone Box)
+                // STANDALONE RENEWALS (Separate Box)
                 else {
                     document.getElementById('action-renewal').classList.remove('hidden');
                     document.getElementById('btn-approve-renewal').onclick = () => submitRenewal('approve');
@@ -837,7 +857,7 @@
                         document.getElementById('btn-approve-renewal').disabled = true;
                         window.toggleRenewalApproveBtn = () => { document.getElementById('btn-approve-renewal').disabled = !document.getElementById('odd-hour-allow-check').checked; };
                     } else {
-                         document.getElementById('btn-approve-renewal').disabled = false;
+                        document.getElementById('btn-approve-renewal').disabled = false;
                     }
                 }
             }
@@ -847,7 +867,7 @@
         attachFileValidators();
     }
 
-    // --- CLOSURE & UPDATE LOGIC ---
+    // --- CLOSURE LOGIC ---
     function handleClosureUI(p, actionsDiv) {
         const isClosable = (p.Status === 'Active');
         if (currentUser.Role === 'Requester' && isClosable) {
@@ -855,7 +875,7 @@
             document.getElementById('div-closure-req').classList.remove('hidden');
             document.getElementById('Closure_Requestor_Remarks').disabled = false;
             document.getElementById('Site_Restored_Check').disabled = false;
-            const b = document.createElement("button"); b.className = "bg-red-600 text-white px-4 py-2 rounded font-bold"; b.innerText = "Submit Closure"; b.onclick = () => upd('initiate_closure');
+            const b = document.createElement("button"); b.className = "bg-red-600 text-white px-4 py-2 rounded font-bold"; b.innerText = "Job Complete / Submit Closure"; b.onclick = () => upd('initiate_closure');
             actionsDiv.appendChild(b);
         }
         if (p.Status.includes('Closure')) {
@@ -880,6 +900,7 @@
         }
     }
 
+    // --- UPDATE FUNCTION (Handles 1st Renewal Radios) ---
     async function upd(act) {
         if (act === 'initiate_closure' && !document.getElementById("Site_Restored_Check").checked) return alert("Please confirm site restoration.");
         
@@ -899,12 +920,14 @@
             Site_Restored_Check: document.getElementById("Site_Restored_Check").checked ? 'Y' : 'N'
         };
 
+        // Capture Radios for 1st Renewal
         if (act === 'review' || act === 'approve' || act === 'approve_1st_ren') {
             const revDec = document.querySelector('input[name="RevRenAction"]:checked');
             const appDec = document.querySelector('input[name="AppRenAction"]:checked');
             if (currentUser.Role === 'Reviewer' && revDec) body.FirstRenewalAction = revDec.value;
             if (currentUser.Role === 'Approver' && appDec) body.FirstRenewalAction = appDec.value;
             
+            // Map the special "Process Renewal Decision" button to standard backend actions
             if (act === 'approve_1st_ren') {
                 if (currentUser.Role === 'Reviewer') body.action = (revDec && revDec.value === 'reject') ? 'reject' : 'review';
                 if (currentUser.Role === 'Approver') body.action = (appDec && appDec.value === 'reject') ? 'reject' : 'approve';
@@ -920,6 +943,7 @@
         else { alert(res.error || "Update Failed"); }
     }
 
+    // --- RENEWAL SUBMIT ---
     async function submitRenewal(act) {
         if(act === 'approve' || act === 'reject') {
             const remark = document.getElementById('RenewalRemark').value;
@@ -969,8 +993,8 @@
             }
         }
     }
-
-    // --- HELPERS ---
+    
+    // --- HELPER FUNCTIONS ---
     function getIOCLData(id) { return Array.from(document.querySelectorAll(`#${id} .iocl-row`)).map(r => ({ name: r.querySelector('.iocl-name').value, desig: r.querySelector('.iocl-desig').value, contact: r.querySelector('.iocl-contact').value, added_by: currentUser.Name, added_at: getNow() })); }
     function addIOCLRow(id) { const d=document.createElement('div'); d.className="flex gap-2 mb-2 iocl-row"; d.innerHTML=`<input class="iocl-name border p-1 w-1/3 text-xs" placeholder="Name"><input class="iocl-desig border p-1 w-1/3 text-xs" placeholder="Desig"><input class="iocl-contact border p-1 w-1/3 text-xs" placeholder="Contact"><button type="button" class="text-red-500" onclick="this.parentElement.remove()">x</button>`; document.getElementById(id).appendChild(d); }
     function renderIOCLTable() {
@@ -978,6 +1002,33 @@
         if(!currentPermitIOCLData.length) { t.innerHTML = '<tr><td colspan="4">None</td></tr>'; return; }
         currentPermitIOCLData.forEach(x => t.innerHTML += `<tr><td>${x.name}</td><td>${x.desig}</td><td>${x.contact}</td><td class="text-xs text-gray-500">${x.added_by}</td></tr>`);
         document.getElementById('iocl-sup-display-section').classList.remove('hidden');
+    }
+
+    // RESTORED MISSING FUNCTIONS
+    function renderChecklists() {
+        const container = document.getElementById('checklists-container'); container.innerHTML = '';
+        Object.keys(CL_DATA).forEach(sec => {
+            let itemsHtml = CL_DATA[sec].map((item, i) => {
+                let extra = `<input class="w-full text-xs border-b mt-1" placeholder="Remarks" name="${sec}_${i}_Rem">`;
+                if(sec==='A' && i===11) extra = `<div class="grid grid-cols-3 gap-2 mt-2"><input name="GP_Q12_HC" id="GP_Q12_HC" placeholder="HC % LEL" onkeyup="syncGasToRenewal()"><input name="GP_Q12_ToxicGas" id="GP_Q12_ToxicGas" placeholder="Toxic PPM" onkeyup="syncGasToRenewal()"><input name="GP_Q12_Oxygen" id="GP_Q12_Oxygen" placeholder="O2 %" onkeyup="syncGasToRenewal()"></div>`;
+                return `<div class="p-3 border rounded-lg bg-gray-50 text-xs hover:shadow-md"><p class="mb-2 font-semibold text-gray-700 min-h-[30px]">${item}</p><div class="flex gap-2 justify-center"><label class="cursor-pointer flex items-center gap-1"><input type="radio" name="${sec}_${i}" value="Y" checked class="accent-green-600"> Y</label><label class="cursor-pointer flex items-center gap-1"><input type="radio" name="${sec}_${i}" value="N" class="accent-red-600"> N</label><label class="cursor-pointer flex items-center gap-1"><input type="radio" name="${sec}_${i}" value="NA" class="accent-gray-600"> NA</label></div>${extra}</div>`;
+            }).join('');
+            container.innerHTML += `<div class="glass border-t-4 border-gray-400"><div class="flex justify-between items-center border-b pb-2 mb-4 bg-gray-50 p-2 rounded"><h4 class="font-bold text-gray-700">Section ${sec} Checks</h4><div class="flex gap-2 text-xs"><label class="cursor-pointer font-bold"><input type="radio" name="Master_${sec}" value="Y" class="sec-toggle" data-sec="${sec}"> All Yes</label><label class="cursor-pointer font-bold"><input type="radio" name="Master_${sec}" value="N" class="sec-toggle" data-sec="${sec}"> All No</label></div></div><div class="checklist-grid">${itemsHtml}</div></div>`;
+        });
+        document.querySelectorAll('.sec-toggle').forEach(el => { el.addEventListener('change', (e) => { document.querySelectorAll(`input[name^="${e.target.dataset.sec}_"]`).forEach(rb => { if(rb.value === e.target.value) rb.checked = true; }); }); });
+    }
+
+    function renderHazards() {
+        document.getElementById('hazards-grid').innerHTML = HAZARDS.map(h => `<label class="flex items-center gap-2 p-3 border rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-orange-100 font-bold"><input type="checkbox" name="H_${h.replace(/ /g,'')}" value="Y" ${h==='Others'?'id="chk-haz-others"':''} class="accent-orange-600 w-4 h-4"> ${h}</label>`).join('');
+        document.getElementById('chk-haz-others')?.addEventListener('change', (e) => document.getElementById('other-hazard-div').classList.toggle('hidden', !e.target.checked));
+        document.getElementById('ppe-grid').innerHTML = PPE.map(p => `<label class="flex items-center gap-2 p-3 border rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-blue-100 font-bold"><input type="checkbox" name="P_${p.replace(/ /g,'')}" value="Y" class="accent-blue-600 w-4 h-4"> ${p}</label>`).join('');
+        document.getElementById('w-id-type').addEventListener('change', (e) => document.getElementById('w-id-type-other').classList.toggle('hidden', e.target.value !== 'Other'));
+    }
+
+    window.syncGasToRenewal = function() {
+        if(document.getElementById('chk-init-renewal').checked) {
+            safeSet('InitRenHC', getVal('GP_Q12_HC')); safeSet('InitRenTox', getVal('GP_Q12_ToxicGas')); safeSet('InitRenO2', getVal('GP_Q12_Oxygen'));
+        }
     }
 
     function showNewPermit() {
@@ -1000,6 +1051,11 @@
         document.querySelectorAll('#worker-select-area input:checked').forEach(c => selectedWorkers.push(JSON.parse(c.value)));
         fd.append("SelectedWorkers", JSON.stringify(selectedWorkers));
         if(currentUser) fd.append("RequesterEmail", currentUser.Email);
+
+        // Capture Gas values explicitly
+        fd.append("GP_Q12_HC", document.getElementById('GP_Q12_HC')?.value || "");
+        fd.append("GP_Q12_ToxicGas", document.getElementById('GP_Q12_ToxicGas')?.value || "");
+        fd.append("GP_Q12_Oxygen", document.getElementById('GP_Q12_Oxygen')?.value || "");
 
         const res = await fetch(API+'/save-permit', {method:'POST', body:fd, headers: {'Authorization': `Bearer ${authToken}`}});
         const json = await res.json();
@@ -1087,3 +1143,4 @@
 </script>
 </body>
 </html>
+

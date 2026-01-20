@@ -538,7 +538,7 @@
                 const res = await fetch(API+ep, opts);
                 if(res.status === 401) { location.reload(); return; }
                 return await res.json();
-            } catch(e) { console.error(e); return {error: "Network Error"}; }
+            } catch(e) {console.warn("Fetch aborted or network issue:", e.message);return { aborted: true };}
             finally { document.getElementById('loader').style.display = 'none'; }
         }
 
@@ -1498,3 +1498,4 @@ async function upd(act) {
     </script>
 </body>
 </html>
+

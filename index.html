@@ -54,7 +54,7 @@
 
         /* REQ C: 3 Column Checklist Grid */
         .checklist-grid { 
-            display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; 
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; 
         }
 
         /* Responsive */
@@ -216,7 +216,7 @@
                     <div class="nav-item hidden" onclick="switchView('new-permit')" id="nav-new-permit"><span>📝</span> Create Permit</div>
                     <div class="nav-item" onclick="switchView('workers')" id="nav-workers"><span>👷</span> Workers</div>
                     <div class="nav-item hidden" id="nav-users" onclick="switchView('users')"><span>👥</span> User Mgmt</div>
-                    <div class="nav-item" onclick="switchView('map')" id="nav-map"><span>🗺️</span> Map View</div>
+                    <div class="nav-item hidden" onclick="switchView('map')" id="nav-map"><span>🗺️</span> Map View</div>
                     <div class="nav-item hidden" id="nav-admin" onclick="switchView('admin')"><span>🔐</span> Admin Console</div>
                 </nav>
 
@@ -317,8 +317,7 @@
                             </div>
                         </div>
 
-                        <div id="checklists-container" class="space-y-4">
-                            </div>
+                        <div id="checklists-container" class="space-y-4"></div>
                         
                         <div class="glass border-t-4 border-blue-500">
                             <h3 class="section-title text-blue-600 border-b pb-2 mb-4 font-bold">3. Workers</h3>
@@ -335,8 +334,10 @@
                             <h3 class="section-title text-red-600 border-b pb-2 mb-4 font-bold">4. Hazards & PPE</h3>
                             <div id="hazards-grid" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4"></div>
                             <div id="other-hazard-div" class="hidden mb-2"><input id="H_Others_Detail" name="H_Others_Detail" placeholder="Specify other hazards..." class="w-full"></div>
-                            <h4 class="font-bold text-gray-500 text-xs uppercase mb-2">PPE Required</h4>
-                            <div id="ppe-grid" class="grid grid-cols-2 md:grid-cols-4 gap-2"></div>
+                            <div id="ppe-section-wrapper" class="hidden">
+                                <h4 class="font-bold text-gray-500 text-xs uppercase mb-2">PPE Required (Reviewer Only)</h4>
+                                <div id="ppe-grid" class="grid grid-cols-2 md:grid-cols-4 gap-2"></div>
+                            </div>
                         </div>
                         
                         <div id="fs-reviewer-section" class="glass hidden border-l-4 border-yellow-500">
@@ -638,7 +639,7 @@
         function setText(id, val) { const el = document.getElementById(id); if(el) el.innerText = val; }
         function getNow() { return new Date().toLocaleString("en-GB").replace(',',''); }
 
-        // --- REQ F: Login Hierarchy ---
+        // --- REQ F & A: Login Hierarchy with Location Mapping ---
         async function initLogin() {
             const regions = await apiCall('/get-hierarchy', 'POST', {});
             const rSel = document.getElementById('login-region');
@@ -672,17 +673,44 @@
             document.getElementById('login-role').addEventListener('change', loadUsers);
         }
 
-        // --- REQ B: File Validation ---
+        // --- REQ B: Common Toggle Yes/No/NA ---
+        function renderChecklists() {
+            const container = document.getElementById('checklists-container'); container.innerHTML = '';
+            Object.keys(CL_DATA).forEach(sec => {
+                container.innerHTML += `<div class="glass border-t-4 border-gray-400">
+                    <div class="flex justify-between items-center border-b pb-2 mb-4 bg-gray-50 p-2 rounded">
+                        <h4 class="font-bold text-gray-700">Section ${sec} Checks</h4>
+                        <div class="flex gap-2 text-xs">
+                            <label class="cursor-pointer font-bold"><input type="radio" name="Master_${sec}" value="Y" class="sec-toggle" data-sec="${sec}"> All Yes</label>
+                            <label class="cursor-pointer font-bold"><input type="radio" name="Master_${sec}" value="N" class="sec-toggle" data-sec="${sec}"> All No</label>
+                            <label class="cursor-pointer font-bold"><input type="radio" name="Master_${sec}" value="NA" class="sec-toggle" data-sec="${sec}"> All NA</label>
+                        </div>
+                    </div>
+                    <div class="checklist-grid">${CL_DATA[sec].map((item, i) => `<div class="p-3 border rounded-lg bg-gray-50 text-xs hover:shadow-md transition"><p class="mb-2 font-semibold text-gray-700 min-h-[30px]">${item}</p><div class="flex gap-2 justify-center"><label class="cursor-pointer flex items-center gap-1"><input type="radio" name="${sec}_${i}" value="Y" checked class="accent-green-600"> Y</label><label class="cursor-pointer flex items-center gap-1"><input type="radio" name="${sec}_${i}" value="N" class="accent-red-600"> N</label><label class="cursor-pointer flex items-center gap-1"><input type="radio" name="${sec}_${i}" value="NA" class="accent-gray-600"> NA</label></div></div>`).join('')}</div>
+                </div>`;
+            });
+            document.querySelectorAll('.sec-toggle').forEach(el => {
+                el.addEventListener('change', (e) => {
+                    const sec = e.target.dataset.sec; const val = e.target.value;
+                    document.querySelectorAll(`input[name^="${sec}_"]`).forEach(rb => { if(rb.value === val) rb.checked = true; });
+                });
+            });
+        }
+
+        function renderHazards() {
+            document.getElementById('hazards-grid').innerHTML = HAZARDS.map(h => `<label class="flex items-center gap-2 p-3 border rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-orange-100 transition shadow-sm font-bold text-gray-700"><input type="checkbox" name="H_${h.replace(/ /g,'')}" value="Y" ${h==='Others'?'id="chk-haz-others"':''} class="accent-orange-600 w-4 h-4"> ${h}</label>`).join('');
+            document.getElementById('chk-haz-others')?.addEventListener('change', (e) => document.getElementById('other-hazard-div').classList.toggle('hidden', !e.target.checked));
+            // REQ E: PPE is handled differently (hidden for requester, visible for reviewer)
+            document.getElementById('ppe-grid').innerHTML = PPE.map(p => `<label class="flex items-center gap-2 p-3 border rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-blue-100 transition shadow-sm font-bold text-gray-700"><input type="checkbox" name="P_${p.replace(/ /g,'')}" value="Y" class="accent-blue-600 w-4 h-4"> ${p}</label>`).join('');
+            document.getElementById('w-id-type').addEventListener('change', (e) => document.getElementById('w-id-type-other').classList.toggle('hidden', e.target.value !== 'Other'));
+        }
+
+        // --- File Validation ---
         function attachFileValidators() {
             document.querySelectorAll('input[type="file"]').forEach(input => {
                 input.addEventListener('change', function() {
                     const file = this.files[0];
-                    if(file) {
-                        if(!file.type.startsWith('image/')) {
-                            alert("WARNING: Only Image files (JPG/PNG) are allowed. File rejected.");
-                            this.value = ''; 
-                        }
-                    }
+                    if(file && !file.type.startsWith('image/')) { alert("WARNING: Only Image files (JPG/PNG) are allowed."); this.value = ''; }
                 });
             });
         }
@@ -728,21 +756,10 @@
             if(currentUser.Role === 'Requester') document.getElementById('nav-new-permit').classList.remove('hidden');
             if(currentUser.Role === 'MasterAdmin') document.getElementById('nav-admin').classList.remove('hidden');
             if(currentUser.Role === 'Approver' || currentUser.Role === 'MasterAdmin') document.getElementById('nav-users').classList.remove('hidden');
+            // REQ G: Map only for Reviewer/Approver/Admin
+            if(currentUser.Role !== 'Requester') document.getElementById('nav-map').classList.remove('hidden');
             
             renderChecklists(); renderHazards(); switchView('dashboard');
-        }
-
-        function renderChecklists() {
-            const container = document.getElementById('checklists-container'); container.innerHTML = '';
-            Object.keys(CL_DATA).forEach(sec => {
-                container.innerHTML += `<div class="glass border-t-4 border-gray-400"><h4 class="font-bold text-gray-700 border-b pb-2 mb-4 bg-gray-50 p-2 rounded">Section ${sec} Checks</h4><div class="checklist-grid">${CL_DATA[sec].map((item, i) => `<div class="p-3 border rounded-lg bg-gray-50 text-xs hover:shadow-md transition"><p class="mb-2 font-semibold text-gray-700 min-h-[30px]">${item}</p><div class="flex gap-2 justify-center"><label class="cursor-pointer flex items-center gap-1"><input type="radio" name="${sec}_${i}" value="Y" checked class="accent-green-600"> Y</label><label class="cursor-pointer flex items-center gap-1"><input type="radio" name="${sec}_${i}" value="N" class="accent-red-600"> N</label><label class="cursor-pointer flex items-center gap-1"><input type="radio" name="${sec}_${i}" value="NA" class="accent-gray-600"> NA</label></div></div>`).join('')}</div></div>`;
-            });
-        }
-        function renderHazards() {
-            document.getElementById('hazards-grid').innerHTML = HAZARDS.map(h => `<label class="flex items-center gap-2 p-3 border rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-orange-100 transition shadow-sm font-bold text-gray-700"><input type="checkbox" name="H_${h.replace(/ /g,'')}" value="Y" ${h==='Others'?'id="chk-haz-others"':''} class="accent-orange-600 w-4 h-4"> ${h}</label>`).join('');
-            document.getElementById('chk-haz-others')?.addEventListener('change', (e) => document.getElementById('other-hazard-div').classList.toggle('hidden', !e.target.checked));
-            document.getElementById('ppe-grid').innerHTML = PPE.map(p => `<label class="flex items-center gap-2 p-3 border rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-blue-100 transition shadow-sm font-bold text-gray-700"><input type="checkbox" name="P_${p.replace(/ /g,'')}" value="Y" class="accent-blue-600 w-4 h-4"> ${p}</label>`).join('');
-            document.getElementById('w-id-type').addEventListener('change', (e) => document.getElementById('w-id-type-other').classList.toggle('hidden', e.target.value !== 'Other'));
         }
 
         function switchView(viewName) {
@@ -752,18 +769,32 @@
             
             if(document.getElementById(viewMap[viewName])) {
                 document.getElementById(viewMap[viewName]).classList.remove('hidden');
-                // Highlight Nav
-                if(viewName === 'new-permit') document.getElementById('nav-new-permit').classList.add('active');
-                else if(viewName === 'admin') document.getElementById('nav-admin').classList.add('active');
-                else if(viewName === 'users') document.getElementById('nav-users').classList.add('active');
-                else if(viewName === 'workers') document.getElementById('nav-workers').classList.add('active');
-                else document.querySelector(`.nav-item[onclick*="${viewName}"]`)?.classList.add('active');
+                let navId = 'nav-' + viewName;
+                if(viewName === 'dashboard') navId = 'nav-dashboard';
+                const navItem = document.getElementById(navId) || document.querySelector(`.nav-item[onclick*="${viewName}"]`);
+                if(navItem) navItem.classList.add('active');
             }
             
             if(viewName === 'dashboard') loadDashboard();
-            if(viewName === 'new-permit') attachFileValidators();
+            if(viewName === 'new-permit') { 
+                attachFileValidators(); 
+                // REQ A: Fetch Reviewers/Approvers for THIS location
+                loadMappedApprovers();
+            }
             if(viewName === 'users') loadManageUsers();
             if(viewName === 'workers') loadWorkers('mgmt');
+        }
+
+        // REQ A: Strict Mapping for Dropdowns
+        async function loadMappedApprovers() {
+            const reviewers = await apiCall('/get-users-by-loc', 'POST', { region: currentUser.Region, unit: currentUser.Unit, location: currentUser.Location, role: 'Reviewer' });
+            const approvers = await apiCall('/get-users-by-loc', 'POST', { region: currentUser.Region, unit: currentUser.Unit, location: currentUser.Location, role: 'Approver' });
+            
+            const rSel = document.getElementById("ReviewerEmail"); rSel.innerHTML = "";
+            reviewers.forEach(u => rSel.innerHTML += `<option value="${u.Email}">${u.Name}</option>`);
+            
+            const aSel = document.getElementById("ApproverEmail"); aSel.innerHTML = "";
+            approvers.forEach(u => aSel.innerHTML += `<option value="${u.Email}">${u.Name}</option>`);
         }
 
         async function loadManageUsers() {
@@ -779,7 +810,8 @@
                  t.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-500">No users found.</td></tr>`;
              } else {
                  allUsers.forEach(u => {
-                     const delBtn = u.Email !== currentUser.Email ? `<button class="bg-red-100 text-red-600 hover:bg-red-200 px-3 py-1 rounded font-bold text-xs" onclick="deleteUser('${u.Email}')">Delete</button>` : '<span class="text-gray-400 text-xs">Me</span>';
+                     // REQ H: Users can only see/delete based on role logic (backend enforces, frontend visual)
+                     const delBtn = u.Email !== currentUser.Email ? `<button class="bg-red-100 text-red-600 hover:bg-red-200 px-3 py-1 rounded font-bold text-xs" onclick="deleteUser('${u.Email}')">Delete</button>` : '-';
                      t.innerHTML += `<tr class="hover:bg-gray-50 transition border-b border-gray-100"><td class="p-3 font-bold text-gray-800">${u.Name}</td><td class="p-3 text-gray-600 font-mono text-xs">${u.Email}</td><td class="p-3"><span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-bold uppercase">${u.Role}</span></td><td class="p-3 text-gray-500 text-xs">${currentUser.Location}</td><td class="p-3">${delBtn}</td></tr>`;
                  });
              }
@@ -822,6 +854,10 @@
             document.getElementById('permit-title').innerText = `Permit: ${id}`;
             document.getElementById('permit-header-display').innerText = `Status: ${p.Status}`;
             
+            // REQ E: PPE Handling
+            if(currentUser.Role === 'Requester') document.getElementById('ppe-section-wrapper').classList.add('hidden');
+            else document.getElementById('ppe-section-wrapper').classList.remove('hidden');
+            
             document.querySelectorAll('#pf input, #pf textarea, #pf select').forEach(el => {
                 if(el.type === 'checkbox') el.checked = (p[el.name] === 'Y'); else if(el.type !== 'file') el.value = p[el.name] || ''; el.disabled = true;
             });
@@ -830,15 +866,13 @@
             document.getElementById('val-time-from').innerText = p.ValidFrom.replace('T', ' '); document.getElementById('val-time-to').innerText = p.ValidTo.replace('T', ' ');
             document.getElementById('val-status').innerText = p.Status.toUpperCase();
 
-            // Populate Workers
             currentPermitWorkers = p.SelectedWorkers;
             const wTable = document.getElementById('worker-display-table'); wTable.classList.remove('hidden');
             wTable.querySelector('tbody').innerHTML = currentPermitWorkers.map(w => `<tr><td>${escapeHtml(w.Name)}</td><td>${escapeHtml(w.IDType)}: ${escapeHtml(w.ID)}</td><td>${escapeHtml(w.Contact)}</td></tr>`).join('');
 
-            // Populate IOCL Supervisors
             renderIOCLTable();
 
-            // Renewals Logic
+            // REQ C: Renewal Table for ALL
             const rens = JSON.parse(p.RenewalsJSON || "[]");
             const canRenew = (currentUser.Role === 'Requester' && (p.Status === 'Active' || p.Status.includes('Renewal')));
             
@@ -848,6 +882,7 @@
                 if (canRenew) {
                     document.getElementById('form-renewal').classList.remove('hidden');
                     const renSel = document.getElementById('renewal-worker-select');
+                    // REQ D: Only approved workers in renewal too
                     renSel.innerHTML = currentPermitWorkers.map(w => `<label class="flex items-center gap-1 text-xs bg-white p-1 rounded border"><input type="checkbox" value="${escapeHtml(w.Name)}" checked class="ren-worker-cb accent-purple-600"> ${escapeHtml(w.Name)}</label>`).join('');
                     if (permitRequirePhoto) {
                         document.getElementById('renewal-photo-wrapper').classList.remove('hidden'); document.getElementById('ren-cam-sub').required = true;
@@ -857,7 +892,6 @@
                 } else document.getElementById('form-renewal').classList.add('hidden');
             } else document.getElementById('renewals-section').classList.add('hidden');
 
-            // --- PERMISSIONS & BUTTONS ---
             const actionsDiv = document.getElementById("actions-bar"); actionsDiv.innerHTML = "";
             const lastRen = rens.length > 0 ? rens[rens.length-1] : null;
 
@@ -868,6 +902,9 @@
             if(currentUser.Role === 'Reviewer' && p.Status === 'Pending Review') {
                 document.getElementById('fs-reviewer-section').classList.remove('hidden'); document.getElementById('iocl-reviewer-wrapper').classList.remove('hidden');
                 document.getElementById('Reviewer_Remarks').disabled = false; document.getElementById('AdditionalPrecautions').disabled = false;
+                // Allow editing PPE and Checklists
+                document.querySelectorAll('#ppe-grid input, .checklist-grid input').forEach(el => el.disabled = false);
+                
                 const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-2 rounded shadow font-bold"; b1.innerText = "Reject"; b1.onclick = () => upd('reject');
                 const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-2 rounded shadow font-bold"; b2.innerText = "Review & Forward"; b2.onclick = () => upd('review');
                 actionsDiv.append(b1, b2);
@@ -879,15 +916,15 @@
                 const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-2 rounded shadow font-bold"; b2.innerText = "Final Approve"; b2.onclick = () => upd('approve');
                 actionsDiv.append(b1, b2);
             }
-            // Renewal Approvals
+            
             if(lastRen && lastRen.status.includes('pending')) {
                 if((currentUser.Role === 'Reviewer' && p.Status.includes('Review')) || (currentUser.Role === 'Approver' && p.Status.includes('Approval'))) {
                     document.getElementById('action-renewal').classList.remove('hidden');
-                    document.getElementById('btn-approve-renewal').onclick = () => submitRenewal('approve'); // Actually calls endpoint to advance status
+                    document.getElementById('btn-approve-renewal').onclick = () => submitRenewal('approve');
                     document.getElementById('btn-reject-renewal').onclick = () => submitRenewal('reject');
                 }
             }
-            // Closure Logic
+
             if(p.Status.includes('Closure')) {
                 document.getElementById('closure-section').classList.remove('hidden');
                 document.getElementById('div-closure-req').classList.remove('hidden');
@@ -905,23 +942,19 @@
                     actionsDiv.appendChild(b2);
                 }
             }
-
             attachFileValidators();
         }
 
         async function submitRenewal(act) {
-            // If acting on existing request
             if(act === 'approve' || act === 'reject') {
                 const remark = document.getElementById('RenewalRemark').value;
                 const res = await apiCall('/renewal', 'POST', {PermitID: currentPermitId, action: act, rejectionReason: remark});
                 if(res.success) { alert("Action Taken"); switchView('dashboard'); } else alert(res.error);
                 return;
             }
-
-            // New Request
              const getVal = (id) => document.getElementById(id).value;
             const fd = new FormData();
-            fd.append('PermitID', currentPermitId);
+            fd.append('PermitID', document.getElementById('PermitID').value);
             fd.append('action', 'initiate'); 
             fd.append('RenewalValidFrom', getVal("RenewalValidFrom"));
             fd.append('RenewalValidTo', getVal("RenewalValidTo"));
@@ -931,12 +964,11 @@
             const selWorkers = []; document.querySelectorAll('.ren-worker-cb:checked').forEach(c => selWorkers.push(c.value));
             fd.append('renewalWorkers', JSON.stringify(selWorkers));
 
-            // Check Photo Mandatory
             const fileInput = document.getElementById("ren-cam-sub");
             const isPhotoMandatory = !document.getElementById('renewal-photo-wrapper').classList.contains('hidden');
             
             if(isPhotoMandatory && fileInput.files.length === 0) {
-                alert("⛔ MANDATORY: You must upload a site condition photo before submitting this renewal.");
+                alert("⛔ MANDATORY: You must upload a site condition photo.");
                 return;
             }
             if(fileInput.files.length > 0) fd.append('RenewalImage', fileInput.files[0]);
@@ -980,15 +1012,14 @@
                 alert("Worker Saved Successfully"); 
                 document.getElementById('modal-worker').classList.add('hidden'); 
                 loadWorkers('mgmt'); 
-            } else {
-                alert(res.error);
-            }
+            } else { alert(res.error); }
         });
 
         async function loadWorkers(context) { 
             const res = await apiCall('/get-workers', 'POST', {role:currentUser.Role, email:currentUser.Email, context:context}); 
             
             if(context === 'permit_dropdown') { 
+                // REQ D: Only approved workers for requester
                 const con = document.getElementById('worker-select-area');
                 con.innerHTML = res.map(w => `
                     <label class="flex items-center gap-3 border p-3 rounded-lg bg-white shadow-sm cursor-pointer hover:bg-blue-50 transition">
@@ -1002,28 +1033,38 @@
                 const t = document.querySelector('#table-workers tbody'); 
                 t.innerHTML = "";
                 res.forEach(w => {
+                    // REQ F: Delete only for Requester
+                    let actions = '';
+                    if(currentUser.Role === 'Requester') {
+                        actions = `<button class="text-red-600 font-bold hover:underline text-xs" onclick="workerAction('${w.WorkerID}', 'delete')">Delete</button>`;
+                    } else if (w.Status.includes('Pending')) {
+                        actions = `<button class="text-green-600 font-bold text-xs mr-2" onclick="workerAction('${w.WorkerID}', 'approve')">Approve</button>
+                                   <button class="text-red-600 font-bold text-xs" onclick="workerAction('${w.WorkerID}', 'reject')">Reject</button>`;
+                    }
+
                     t.innerHTML += `
                         <tr class="hover:bg-gray-50 border-b border-gray-100">
                             <td class="p-3 font-bold">${escapeHtml(w.Name)}</td>
                             <td class="p-3 font-mono text-xs">${escapeHtml(w.IDType)}: ${escapeHtml(w.ID)}</td>
                             <td class="p-3 text-xs">${escapeHtml(w.Role || 'Worker')}</td>
                             <td class="p-3"><span class="px-2 py-1 rounded text-xs font-bold ${w.Status.includes('Approved')?'bg-green-100 text-green-700':'bg-orange-100 text-orange-700'}">${w.Status}</span></td>
-                            <td class="p-3"><button class="text-blue-600 font-bold hover:underline text-xs" onclick="alert('Edit Logic Placeholder')">Edit</button></td>
+                            <td class="p-3">${actions}</td>
                         </tr>`;
                 });
             } 
         }
+        
+        async function workerAction(id, act) { await apiCall('/save-worker', 'POST', {WorkerID:id, Action:act, Role:currentUser.Role, ApproverName: currentUser.Name}); loadWorkers('mgmt'); }
 
         // --- UPDATER ---
         async function upd(act) {
-            let ioclData = getIOCLData('iocl-sup-container-rev'); // Simplified: assume fetching from correct container based on role
+            let ioclData = getIOCLData('iocl-sup-container-rev'); 
             if(currentUser.Role === 'Approver') ioclData = getIOCLData('iocl-sup-container-app');
 
             const body = { 
                 PermitID: currentPermitId, action: act, role: currentUser.Role, user: currentUser.Name,
                 IOCLSupervisors: ioclData,
                 comment: (currentUser.Role==='Reviewer' ? getVal("Reviewer_Remarks") : getVal("Approver_Remarks")),
-                // Add all specific fields from form if reviewing
                 AdditionalPrecautions: getVal("AdditionalPrecautions"),
                 RequireRenewalPhotos: document.getElementById('RequireRenewalPhotos').checked ? 'Y' : 'N',
                 PdfBgColor: getVal('PdfBgColor'),
@@ -1032,7 +1073,6 @@
                 Site_Restored_Check: document.getElementById("Site_Restored_Check").checked ? 'Y' : 'N'
             };
             
-            // Capture checklists/hazards if Reviewer
             if(currentUser.Role === 'Reviewer' && act === 'review') {
                  document.querySelectorAll('input[type=checkbox]').forEach(c => body[c.name] = c.checked ? 'Y' : 'N');
                  document.querySelectorAll('input[type=radio]:checked').forEach(r => body[r.name] = r.value);
@@ -1074,7 +1114,6 @@
             });
             document.getElementById('iocl-sup-display-section').classList.remove('hidden');
         }
-        // Bind buttons
         document.getElementById('btn-add-rev-sup').onclick = () => addIOCLRow('iocl-sup-container-rev');
         document.getElementById('btn-add-app-sup').onclick = () => addIOCLRow('iocl-sup-container-app');
         

@@ -616,6 +616,9 @@
                 email: document.getElementById("new-user-email").value,
                 role: document.getElementById("new-user-role").value,
                 password: document.getElementById("new-user-pass").value
+                region: document.getElementById("new-user-region").value,
+                unit: document.getElementById("new-user-unit").value,
+                location: document.getElementById("new-user-location").value
             };
             const res = await apiCall('/add-user', 'POST', body);
             if(res.success) { alert("User Added"); document.getElementById('view-add-user').classList.add('hidden'); loadManageUsers(); } else alert(res.error);
@@ -1481,6 +1484,7 @@ async function upd(act) {
     </script>
 </body>
 </html>
+
 
 
 

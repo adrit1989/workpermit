@@ -1177,7 +1177,7 @@
         async function submitRenewal(act) {
             if(act === 'approve' || act === 'reject') {
                 const remark = document.getElementById('RenewalRemark').value;
-                const res = await apiCall('/renewal', 'POST', {PermitID: currentPermitId, action: act, rejectionReason: remark});
+                const res = await apiCall('/update-status', 'POST', {PermitID: currentPermitId, action: act, rejectionReason: remark});
                 if(res.success) { alert("Action Taken"); switchView('dashboard'); } else alert(res.error);
                 return;
             }
@@ -1498,4 +1498,5 @@ async function upd(act) {
     </script>
 </body>
 </html>
+
 

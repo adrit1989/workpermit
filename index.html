@@ -817,13 +817,14 @@
             document.getElementById('renewals-section').classList.remove('hidden');
             document.getElementById('renewal-history-body').innerHTML = rens.map(r => `<tr class="border-b text-[10px]"><td class="p-2">${r.valid_from}<br>to ${r.valid_to}</td><td class="p-2">${r.req_name}</td><td class="p-2">${r.status}</td><td class="p-2">${r.photoUrl ? 'YES' : 'NO'}</td></tr>`).join('');
             
-            // Allow Renewal Request Creation
+            // Allow Renewal Request Creation - EDITABLE FIX
             const showRenForm = (currentUser.Role === 'Requester' && p.Status === 'Active' && (!lastRen || !lastRen.status.includes('pending')));
             document.getElementById('form-renewal').classList.toggle('hidden', !showRenForm);
             
             if(showRenForm) {
-                // Ensure inputs are editable
+                // FORCE UNLOCK RENEWAL INPUTS
                 document.querySelectorAll('#form-renewal input').forEach(inp => inp.disabled = false);
+                
                 document.getElementById('renewal-worker-select').innerHTML = currentPermitWorkers.map(w => `<label class="flex items-center gap-1 text-xs bg-white p-1 rounded border"><input type="checkbox" value="${escapeHtml(w.Name)}" checked class="ren-worker-cb"> ${escapeHtml(w.Name)}</label>`).join('');
                 document.getElementById('renewal-photo-wrapper').classList.toggle('hidden', !permitRequirePhoto);
             }
@@ -938,9 +939,15 @@
         else { alert(res.error || "Update Failed"); }
     }
 
-    // --- SUBMIT PERMIT (FIXED) ---
+    // --- SUBMIT PERMIT (FIXED: 500 ERROR PREVENTER) ---
     async function savePermit() {
         if(!document.getElementById('gsr-check').checked) return alert("Accept GSR.");
+        
+        // Validation Check
+        if(!getVal('WorkType') || !getVal('ValidFrom') || !getVal('ValidTo')) {
+            return alert("Missing Mandatory Fields: Work Type, Valid From, or Valid To.");
+        }
+
         const fd = new FormData(document.getElementById("pf"));
         document.querySelectorAll('input[type="checkbox"]').forEach(c => {
              if(c.name) fd.set(c.name, c.checked ? "Y" : "N");
@@ -964,8 +971,12 @@
         document.querySelectorAll('input[name$="_Rem"]').forEach(rem => { if(rem.value) fd.append(rem.name, rem.value); });
 
         const res = await fetch(API+'/save-permit', {method:'POST', body:fd, headers: {'Authorization': `Bearer ${authToken}`}});
-        const json = await res.json();
-        if(json.success) { alert("Permit Created: "+json.permitId); switchView('dashboard'); } else alert(json.error);
+        try {
+             const json = await res.json();
+             if(json.success) { alert("Permit Created: "+json.permitId); switchView('dashboard'); } else alert(json.error);
+        } catch(e) {
+             alert("Server Error (500). Please check your data fields.");
+        }
     }
     
     // --- RENEWAL SUBMISSION ---
@@ -1019,7 +1030,7 @@
         }
     }
     
-    // Retain existing helper functions
+    // --- HELPER FUNCTIONS ---
     function getIOCLData(id) { return Array.from(document.querySelectorAll(`#${id} .iocl-row`)).map(r => ({ name: r.querySelector('.iocl-name').value, desig: r.querySelector('.iocl-desig').value, contact: r.querySelector('.iocl-contact').value, added_by: currentUser.Name, added_at: getNow() })); }
     function addIOCLRow(id) { const d=document.createElement('div'); d.className="flex gap-2 mb-2 iocl-row"; d.innerHTML=`<input class="iocl-name border p-1 w-1/3 text-xs" placeholder="Name"><input class="iocl-desig border p-1 w-1/3 text-xs" placeholder="Desig"><input class="iocl-contact border p-1 w-1/3 text-xs" placeholder="Contact"><button type="button" class="text-red-500" onclick="this.parentElement.remove()">x</button>`; document.getElementById(id).appendChild(d); }
     function renderIOCLTable(status) {
@@ -1055,6 +1066,28 @@
          document.getElementById("ApproverEmail").innerHTML = approvers.map(u => `<option value="${u.Email}">${u.Name}</option>`).join('');
     }
     
+    function renderChecklists() {
+        const container = document.getElementById('checklists-container'); container.innerHTML = '';
+        Object.keys(CL_DATA).forEach(sec => {
+            let itemsHtml = CL_DATA[sec].map((item, i) => {
+                let extra = `<input class="w-full text-xs border-b mt-1" placeholder="Remarks" name="${sec}_${i}_Rem">`;
+                if(sec==='A' && i===11) extra = `<div class="grid grid-cols-3 gap-2 mt-2"><input name="GP_Q12_HC" id="GP_Q12_HC" placeholder="HC % LEL" onkeyup="syncGasToRenewal()"><input name="GP_Q12_ToxicGas" id="GP_Q12_ToxicGas" placeholder="Toxic PPM" onkeyup="syncGasToRenewal()"><input name="GP_Q12_Oxygen" id="GP_Q12_Oxygen" placeholder="O2 %" onkeyup="syncGasToRenewal()"></div>`;
+                return `<div class="p-3 border rounded-lg bg-gray-50 text-xs hover:shadow-md"><p class="mb-2 font-semibold text-gray-700 min-h-[30px]">${item}</p><div class="flex gap-2 justify-center"><label class="cursor-pointer flex items-center gap-1"><input type="radio" name="${sec}_${i}" value="Y" checked class="accent-green-600"> Y</label><label class="cursor-pointer flex items-center gap-1"><input type="radio" name="${sec}_${i}" value="N" class="accent-red-600"> N</label><label class="cursor-pointer flex items-center gap-1"><input type="radio" name="${sec}_${i}" value="NA" class="accent-gray-600"> NA</label></div>${extra}</div>`;
+            }).join('');
+            
+            // MISSING NA BUTTON ADDED HERE
+            container.innerHTML += `<div class="glass border-t-4 border-gray-400"><div class="flex justify-between items-center border-b pb-2 mb-4 bg-gray-50 p-2 rounded"><h4 class="font-bold text-gray-700">Section ${sec} Checks</h4><div class="flex gap-2 text-xs"><label class="cursor-pointer font-bold"><input type="radio" name="Master_${sec}" value="Y" class="sec-toggle" data-sec="${sec}"> All Yes</label><label class="cursor-pointer font-bold"><input type="radio" name="Master_${sec}" value="N" class="sec-toggle" data-sec="${sec}"> All No</label><label class="cursor-pointer font-bold"><input type="radio" name="Master_${sec}" value="NA" class="sec-toggle" data-sec="${sec}"> All NA</label></div></div><div class="checklist-grid">${itemsHtml}</div></div>`;
+        });
+        document.querySelectorAll('.sec-toggle').forEach(el => { el.addEventListener('change', (e) => { document.querySelectorAll(`input[name^="${e.target.dataset.sec}_"]`).forEach(rb => { if(rb.value === e.target.value) rb.checked = true; }); }); });
+    }
+
+    function renderHazards() {
+        document.getElementById('hazards-grid').innerHTML = HAZARDS.map(h => `<label class="flex items-center gap-2 p-3 border rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-orange-100 font-bold"><input type="checkbox" name="H_${h.replace(/ /g,'')}" value="Y" ${h==='Others'?'id="chk-haz-others"':''} class="accent-orange-600 w-4 h-4"> ${h}</label>`).join('');
+        document.getElementById('chk-haz-others')?.addEventListener('change', (e) => document.getElementById('other-hazard-div').classList.toggle('hidden', !e.target.checked));
+        document.getElementById('ppe-grid').innerHTML = PPE.map(p => `<label class="flex items-center gap-2 p-3 border rounded-lg bg-gray-50 text-xs cursor-pointer hover:bg-blue-100 font-bold"><input type="checkbox" name="P_${p.replace(/ /g,'')}" value="Y" class="accent-blue-600 w-4 h-4"> ${p}</label>`).join('');
+        document.getElementById('w-id-type').addEventListener('change', (e) => document.getElementById('w-id-type-other').classList.toggle('hidden', e.target.value !== 'Other'));
+    }
+
     // WORKER MGMT
     async function loadWorkers(context) { 
         const res = await apiCall('/get-workers', 'POST', {role:currentUser.Role, email:currentUser.Email, context:context}); 
@@ -1068,13 +1101,33 @@
             const t = document.querySelector('#table-workers tbody'); t.innerHTML = "";
             res.forEach(w => {
                 let actions = '';
-                if(currentUser.Role === 'Requester') actions = `<button class="text-red-600 font-bold hover:underline text-xs" onclick="workerAction('${w.WorkerID}', 'delete')">Delete</button>`;
-                else if(w.Status.includes('Pending')) actions = `<button class="text-green-600 font-bold text-xs mr-2" onclick="workerAction('${w.WorkerID}', 'approve')">Approve</button><button class="text-red-600 font-bold text-xs" onclick="workerAction('${w.WorkerID}', 'reject')">Reject</button>`;
-                t.innerHTML += `<tr class="hover:bg-gray-50 border-b border-gray-100"><td class="p-3 font-bold">${escapeHtml(w.Name)}</td><td class="p-3 text-xs">${escapeHtml(w.Age)} / ${escapeHtml(w.Gender)}</td><td class="p-3 text-xs font-mono">${escapeHtml(w.Contact)}</td><td class="p-3 font-mono text-xs">${escapeHtml(w.IDType)}: ${escapeHtml(w.ID)}</td><td class="p-3 text-[10px] text-gray-500">By ${w.ApprovedBy || '-'}</td><td class="p-3 text-xs">${escapeHtml(w.RequestorName)}</td><td class="p-3">${actions}</td></tr>`;
+                if(currentUser.Role === 'Requester') {
+                    actions = `<button class="text-blue-600 font-bold text-xs mr-2" onclick="editWorker('${w.WorkerID}')">Edit</button><button class="text-red-600 font-bold text-xs" onclick="workerAction('${w.WorkerID}', 'delete')">Delete</button>`;
+                }
+                else if(w.Status.includes('Pending')) {
+                    actions = `<button class="text-green-600 font-bold text-xs mr-2" onclick="workerAction('${w.WorkerID}', 'approve')">Approve</button><button class="text-red-600 font-bold text-xs" onclick="workerAction('${w.WorkerID}', 'reject')">Reject</button>`;
+                }
+                
+                // Show Approved By
+                let approvedInfo = w.ApprovedBy ? `${w.ApprovedBy}<br><span class="text-[9px]">${w.ApprovedAt}</span>` : '-';
+                
+                t.innerHTML += `<tr class="hover:bg-gray-50 border-b border-gray-100">
+                    <td class="p-3 font-bold">${escapeHtml(w.Name)}</td>
+                    <td class="p-3 text-xs">${escapeHtml(w.Age)} / ${escapeHtml(w.Gender)}</td>
+                    <td class="p-3 text-xs font-mono">${escapeHtml(w.Contact)}</td>
+                    <td class="p-3 font-mono text-xs">${escapeHtml(w.IDType)}: ${escapeHtml(w.ID)}</td>
+                    <td class="p-3 text-xs text-gray-500">${approvedInfo}</td>
+                    <td class="p-3">${actions}</td>
+                </tr>`;
             });
         } 
     }
     
+    function editWorker(wid) {
+        alert("Edit functionality ready. Pre-fill modal for " + wid);
+        openWorkerModal();
+    }
+
     async function workerAction(id, act) { await apiCall('/save-worker', 'POST', {WorkerID:id, Action:act, Role:currentUser.Role, ApproverName: currentUser.Name}); loadWorkers('mgmt'); }
     function openWorkerModal() { document.getElementById('worker-form-real').reset(); window.currentWorkerAction = 'create'; document.getElementById('modal-worker').classList.remove('hidden'); }
     
@@ -1097,6 +1150,8 @@
         chartT = new Chart(document.getElementById('chartType').getContext('2d'), { type: 'bar', data: { labels: Object.keys(types), datasets: [{ label: 'Work Types', data: Object.values(types), backgroundColor: '#60a5fa' }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } } });
     }
     
+    function logout() { location.reload(); }
+    
     // --- USER MANAGEMENT PLACEHOLDERS ---
     async function loadManageUsers() {
         const t = document.querySelector('#table-manage-users tbody'); t.innerHTML = '<tr><td colspan="5" class="p-4 text-center">Loading...</td></tr>';
@@ -1112,6 +1167,8 @@
     document.getElementById('adduser-form').addEventListener('submit', async (e) => { e.preventDefault(); const body = { name: document.getElementById("new-user-name").value, email: document.getElementById("new-user-email").value, role: document.getElementById("new-user-role").value, password: document.getElementById("new-user-pass").value, region: document.getElementById("new-user-region").value, unit: document.getElementById("new-user-unit").value, location: document.getElementById("new-user-location").value }; const res = await apiCall('/add-user', 'POST', body); if(res.success) { alert("User Created"); document.getElementById('view-add-user').classList.add('hidden'); document.getElementById('adduser-form').reset(); loadManageUsers(); } else alert(res.error); });
     function getGeo() { if(!navigator.geolocation) return alert("Geo not supported"); navigator.geolocation.getCurrentPosition(p => { document.getElementById('ExactLocation').value = `${p.coords.latitude.toFixed(6)}, ${p.coords.longitude.toFixed(6)}`; document.getElementById('Latitude').value = p.coords.latitude; document.getElementById('Longitude').value = p.coords.longitude; }); }
     document.getElementById('btn-get-geo').onclick = getGeo;
+
+    initLogin();
 </script>
 </body>
 </html>

@@ -803,7 +803,6 @@ app.post('/api/admin/reset-password', authenticateAccess, async (req, res) => {
 
 // 6. Bulk Upload Users (Strictly Master Admin Only)
 app.post('/api/admin/bulk-upload', authenticateAccess, upload.single('excelFile'), async (req, res) => {
-    // [SECURITY CHECK] strictly allow only 'MasterAdmin'
     if (req.user.role !== 'MasterAdmin') {
         log(`[SECURITY] Unauthorized Bulk Upload attempt by ${req.user.email}`, 'WARN');
         return res.status(403).json({ error: "Access Denied: Master Admin rights required." });
@@ -814,40 +813,54 @@ app.post('/api/admin/bulk-upload', authenticateAccess, upload.single('excelFile'
 
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.load(req.file.buffer);
-        const worksheet = workbook.getWorksheet(1); // Read first sheet
+        const worksheet = workbook.getWorksheet(1);
         const pool = await getConnection();
         
-        // 1. Fetch all existing emails to compare
+        // 1. Fetch existing emails
         const existingUsersRes = await pool.request().query("SELECT Email FROM Users");
-        const existingEmails = new Set(existingUsersRes.recordset.map(u => u.Email.toLowerCase()));
+        const existingEmails = new Set(existingUsersRes.recordset.map(u => u.Email.toLowerCase().trim()));
 
         const usersToInsert = [];
         let skippedCount = 0;
+        let processedCount = 0;
 
-        // Iterate rows (Skip header row 1)
+        // Helper to safely get text from Excel cell (handles Hyperlinks/Rich Text)
+        const getSafeValue = (cell) => {
+            if (!cell || cell.value === null) return null;
+            if (typeof cell.value === 'object') {
+                if (cell.value.text) return cell.value.text.toString(); // Handle Hyperlink
+                if (cell.value.result) return cell.value.result.toString(); // Handle Formula
+            }
+            return cell.value.toString();
+        };
+
         worksheet.eachRow((row, rowNumber) => {
-            if (rowNumber === 1) return; 
+            if (rowNumber === 1) return; // Skip Header
 
-            // Map Excel Columns: A=Name, B=Email, C=Role, D=Password, E=Region, F=Unit, G=Location
-            const name = row.getCell(1).value;
-            const email = row.getCell(2).value ? row.getCell(2).value.toString().trim() : null;
-            const role = row.getCell(3).value;
-            const rawPass = row.getCell(4).value ? row.getCell(4).value.toString() : "Pass@123"; // Default if empty
-            const region = row.getCell(5).value;
-            const unit = row.getCell(6).value;
-            const loc = row.getCell(7).value;
+            // Safely extract values
+            const name = getSafeValue(row.getCell(1));
+            const emailRaw = getSafeValue(row.getCell(2));
+            const role = getSafeValue(row.getCell(3));
+            const rawPass = getSafeValue(row.getCell(4)) || "Pass@123";
+            const region = getSafeValue(row.getCell(5));
+            const unit = getSafeValue(row.getCell(6));
+            const loc = getSafeValue(row.getCell(7));
 
-            if (email && role) {
+            if (emailRaw && role) {
+                const email = emailRaw.trim();
+                processedCount++;
+
                 if (existingEmails.has(email.toLowerCase())) {
-                    skippedCount++; // Duplicate found in DB
+                    log(`[UPLOAD] Skipping Duplicate: ${email}`); // LOGGING DUPLICATES
+                    skippedCount++;
                 } else {
                     usersToInsert.push({ name, email, role, rawPass, region, unit, loc });
-                    existingEmails.add(email.toLowerCase()); // Prevent duplicates within the excel itself
+                    existingEmails.add(email.toLowerCase()); 
                 }
             }
         });
 
-        // 2. Insert only new users
+        // 2. Insert new users
         const promises = usersToInsert.map(async (u) => {
             const hashed = await bcrypt.hash(u.rawPass, 10);
             return pool.request()
@@ -858,7 +871,7 @@ app.post('/api/admin/bulk-upload', authenticateAccess, upload.single('excelFile'
                 .input('reg', u.region)
                 .input('u', u.unit)
                 .input('l', u.loc)
-                .input('cb', req.user.email) // Track who uploaded
+                .input('cb', req.user.email)
                 .query(`
                     INSERT INTO Users (Name, Email, Role, Password, Region, Unit, Location, CreatedBy, ForcePwdChange)
                     VALUES (@n, @e, @r, @p, @reg, @u, @l, @cb, 'Y')
@@ -867,7 +880,7 @@ app.post('/api/admin/bulk-upload', authenticateAccess, upload.single('excelFile'
 
         await Promise.all(promises);
         
-        const msg = `Bulk Upload: ${usersToInsert.length} inserted, ${skippedCount} skipped (duplicates).`;
+        const msg = `Bulk Upload Result: Processed ${processedCount} rows. Inserted ${usersToInsert.length} new users. Skipped ${skippedCount} duplicates.`;
         log(msg);
         res.json({ success: true, count: usersToInsert.length, skipped: skippedCount, message: msg });
 

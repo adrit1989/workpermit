@@ -504,6 +504,7 @@
 
     <script nonce="NONCE_PLACEHOLDER">
         /* 1. CONSTANTS */
+/* 1. CONSTANTS */
         const API = "/api";
         let authToken = null, currentUser = null;
         let mapInstance = null, chartS = null, chartT = null;
@@ -676,7 +677,6 @@
             const container = document.getElementById('dashboard-content'); 
             container.innerHTML = '';
             
-            // 1. Filter Data
             const pending = res.filter(p => {
                 const s = p.Status;
                 if (currentUser.Role === 'MasterAdmin') return s.includes('Pending') || s === 'Submitted';
@@ -688,9 +688,7 @@
             const active = res.filter(p => p.Status === 'Active' || (p.Status.includes('Renewal') && !p.Status.includes('Pending')));
             const closed = res.filter(p => p.Status === 'Closed' || p.Status === 'Rejected');
 
-            // 2. Updated Render Helper (Shows Empty Tables)
             const renderTable = (title, items, color) => {
-                // MODIFIED: Generate rows or a "No Records" message
                 let rowsHtml = '';
                 if (items.length === 0) {
                     rowsHtml = `<tr><td colspan="6" class="p-4 text-center text-gray-400 italic bg-gray-50">No permits found in this category.</td></tr>`;
@@ -708,7 +706,6 @@
                     }).join('');
                 }
 
-                // Always return the table HTML, even if empty
                 return `<div class="glass border-l-4 border-${color}-500 mb-6">
                     <div class="flex justify-between items-center border-b pb-2 mb-3">
                         <h3 class="font-bold text-${color}-700 uppercase text-sm">${title}</h3>
@@ -727,11 +724,9 @@
                 </div>`;
             };
 
-            // 3. Render All Sections Always
             container.innerHTML += renderTable('Action Required', pending, 'orange');
             container.innerHTML += renderTable('Active Permits', active, 'green');
             container.innerHTML += renderTable('Closed / Archive', closed, 'gray');
-            
             loadStats(res);
         }
 
@@ -748,7 +743,6 @@
             currentPermitIOCLData = p.IOCLSupervisors || [];
             permitRequirePhoto = (p.RequireRenewalPhotos === 'Y');
 
-            // UI Reset
             document.getElementById('view-dashboard').classList.add('hidden');
             document.getElementById('view-form').classList.remove('hidden');
             document.getElementById('permit-title').innerText = `Permit: ${id}`;
@@ -760,8 +754,7 @@
             const actionsDiv = document.getElementById("actions-bar");
             actionsDiv.innerHTML = "";
 
-            // --- Form Field Logic ---
-            const isMainPending = (p.Status === 'Pending Review' || p.Status === 'Pending Approval');
+            const isMainPending = (p.Status.includes('Pending Review') || p.Status.includes('Pending Approval'));
             const isAuthority = (currentUser.Role === 'Reviewer' || currentUser.Role === 'Approver');
 
             document.querySelectorAll('#pf input, #pf textarea, #pf select').forEach(el => {
@@ -772,7 +765,7 @@
                 if (currentUser.Role === 'Approver' && el.id === 'RequireRenewalPhotos') shouldDisable = false;
                 
                 if (el.type === 'checkbox') el.checked = (p[el.name] === 'Y');
-                else if (el.type === 'radio') el.checked = false; // Reset radios
+                else if (el.type === 'radio') el.checked = false; 
                 else if (el.type !== 'file') el.value = p[el.name] || '';
                 el.disabled = shouldDisable;
             });
@@ -780,7 +773,6 @@
             if (currentUser.Role === 'Requester') document.getElementById('ppe-section-wrapper').classList.add('hidden');
             else document.getElementById('ppe-section-wrapper').classList.remove('hidden');
 
-            // --- Workers ---
             let wData = p.SelectedWorkers;
             if (typeof wData === 'string') { try { wData = JSON.parse(wData); } catch (e) { wData = []; } }
             currentPermitWorkers = Array.isArray(wData) ? wData : [];
@@ -790,43 +782,34 @@
             
             renderIOCLTable(p.Status);
 
-            // --- 1st Renewal Logic ---
             const rens = JSON.parse(p.RenewalsJSON || "[]");
             const lastRen = rens.length > 0 ? rens[rens.length - 1] : null;
-            // Check if this is the very first renewal request bundled with the permit
             const isFirstRenRequest = (rens.length === 1 && p.InitRen === 'Y');
 
-            // --- Reviewer View ---
-            if (p.Status === 'Pending Review' && currentUser.Role === 'Reviewer') {
+            if ((p.Status === 'Pending Review' || p.Status === 'Renewal Pending Review') && currentUser.Role === 'Reviewer') {
                 document.getElementById('fs-reviewer-section').classList.remove('hidden');
                 
-                // Show Yes/No radios ONLY if there is a pending 1st renewal
-                if (isFirstRenRequest && lastRen.status === 'pending_review') {
+                if (isFirstRenRequest && lastRen && lastRen.status === 'pending_review') {
                     document.getElementById('rev-renewal-decision').classList.remove('hidden');
                 }
 
-                const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-2 rounded font-bold mr-2"; b1.innerText = "Reject Permit"; b1.onclick = () => upd('reject');
-                const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-2 rounded font-bold"; b2.innerText = "Review & Forward"; b2.onclick = () => upd('review');
+                const b1 = document.createElement("button"); b1.type = "button"; b1.className = "bg-red-600 text-white px-4 py-2 rounded font-bold mr-2"; b1.innerText = "Reject Permit"; b1.onclick = () => upd('reject');
+                const b2 = document.createElement("button"); b2.type = "button"; b2.className = "bg-green-600 text-white px-4 py-2 rounded font-bold"; b2.innerText = "Review & Forward"; b2.onclick = () => upd('review');
                 actionsDiv.append(b1, b2);
             }
 
-            // --- Approver View ---
             if ((p.Status === 'Pending Approval' || p.Status === 'Renewal Pending Approval') && currentUser.Role === 'Approver') {
-            
                 document.getElementById('fs-approver-section').classList.remove('hidden');
 
-                // Show Yes/No radios ONLY if Reviewer said YES (status is pending_approval)
-                // If Reviewer said NO (status is rejected), Approver sees nothing (Auto-rejected)
-                if (isFirstRenRequest && lastRen.status === 'pending_approval') {
+                if (isFirstRenRequest && lastRen && lastRen.status === 'pending_approval') {
                     document.getElementById('app-renewal-decision').classList.remove('hidden');
                 }
 
-                const b1 = document.createElement("button"); b1.className = "bg-red-600 text-white px-4 py-2 rounded font-bold mr-2"; b1.innerText = "Reject Permit"; b1.onclick = () => upd('reject');
-                const b2 = document.createElement("button"); b2.className = "bg-green-600 text-white px-4 py-2 rounded font-bold"; b2.innerText = "Final Approve"; b2.onclick = () => upd('approve');
+                const b1 = document.createElement("button"); b1.type = "button"; b1.className = "bg-red-600 text-white px-4 py-2 rounded font-bold mr-2"; b1.innerText = "Reject Permit"; b1.onclick = () => upd('reject');
+                const b2 = document.createElement("button"); b2.type = "button"; b2.className = "bg-green-600 text-white px-4 py-2 rounded font-bold"; b2.innerText = "Final Approve"; b2.onclick = () => upd('approve');
                 actionsDiv.append(b1, b2);
             }
 
-            // --- Subsequent Renewals (Standalone) ---
             if (!isFirstRenRequest && lastRen && lastRen.status.includes('pending')) {
                 if (currentUser.Role !== 'Requester') document.getElementById('pending-renewal-display').classList.remove('hidden');
                 
@@ -848,34 +831,31 @@
                 }
             }
 
-            // --- Requester View (Renewals) ---
             if (rens.length > 0 || (currentUser.Role === 'Requester' && p.Status === 'Active')) {
                 document.getElementById('renewals-section').classList.remove('hidden');
-                // --- Requester View (Renewals) & Table Population ---
-            if (rens.length > 0 || (currentUser.Role === 'Requester' && p.Status === 'Active')) {
-                document.getElementById('renewals-section').classList.remove('hidden');
-                
-                // UPDATED TABLE ROW GENERATION
                 document.getElementById('renewal-history-body').innerHTML = rens.map(r => `
                     <tr class="border-b text-[10px]">
                         <td class="p-2">${r.valid_from}<br>to ${r.valid_to}</td>
                         <td class="p-2">${r.hc}/${r.toxic}/${r.oxygen}</td>
-                        <td class="p-2 text-gray-600 italic">${r.precautions || '-'}</td> <td class="p-2">
+                        <td class="p-2 text-gray-600 italic">${r.precautions || '-'}</td>
+                        <td class="p-2">
                             <div class="font-bold">${r.req_name}</div>
-                            <div class="text-[9px] text-gray-500">${r.req_at || ''}</div> </td>
+                            <div class="text-[9px] text-gray-500">${r.req_at || ''}</div>
+                        </td>
                         <td class="p-2">
                             <div class="font-bold">${r.rev_name || '-'}</div>
-                            <div class="text-[9px] text-gray-500">${r.rev_at || ''}</div> </td>
+                            <div class="text-[9px] text-gray-500">${r.rev_at || ''}</div>
+                        </td>
                         <td class="p-2">
                             <div class="font-bold">${r.app_name || '-'}</div>
-                            <div class="text-[9px] text-gray-500">${r.app_at || ''}</div> </td>
+                            <div class="text-[9px] text-gray-500">${r.app_at || ''}</div>
+                        </td>
                         <td class="p-2">${r.photoUrl ? 'YES' : 'NO'}</td>
                     </tr>
                 `).join('');
                 
                 const showRenForm = (currentUser.Role === 'Requester' && p.Status === 'Active' && (!lastRen || !lastRen.status.includes('pending')));
                 document.getElementById('form-renewal').classList.toggle('hidden', !showRenForm);
-
                 if(showRenForm) {
                     document.querySelectorAll('#form-renewal input').forEach(inp => inp.disabled = false);
                     document.getElementById('renewal-worker-select').innerHTML = currentPermitWorkers.map(w => `<label class="flex items-center gap-1 text-xs bg-white p-1 rounded border"><input type="checkbox" value="${escapeHtml(w.Name)}" checked class="ren-worker-cb"> ${escapeHtml(w.Name)}</label>`).join('');
@@ -894,7 +874,7 @@
                 document.getElementById('div-closure-req').classList.remove('hidden');
                 document.getElementById('Closure_Requestor_Remarks').disabled = false;
                 document.getElementById('Site_Restored_Check').disabled = false;
-                const b = document.createElement("button"); b.className = "bg-red-600 text-white px-4 py-2 rounded font-bold"; b.innerText = "Submit Closure"; b.onclick = () => upd('initiate_closure');
+                const b = document.createElement("button"); b.type = "button"; b.className = "bg-red-600 text-white px-4 py-2 rounded font-bold"; b.innerText = "Submit Closure"; b.onclick = () => upd('initiate_closure');
                 actionsDiv.appendChild(b);
             }
             if (p.Status.includes('Closure')) {
@@ -905,7 +885,7 @@
                 if (p.Status === 'Closure Pending Review' && currentUser.Role === 'Reviewer') {
                     document.getElementById('div-closure-rev').classList.remove('hidden');
                     document.getElementById('Closure_Reviewer_Remarks').disabled = false;
-                    const b = document.createElement("button"); b.className = "bg-green-600 text-white px-4 py-2 rounded font-bold"; b.innerText = "Verify Closure"; b.onclick = () => upd('approve_closure');
+                    const b = document.createElement("button"); b.type = "button"; b.className = "bg-green-600 text-white px-4 py-2 rounded font-bold"; b.innerText = "Verify Closure"; b.onclick = () => upd('approve_closure');
                     actionsDiv.appendChild(b);
                 }
                 if (p.Status === 'Closure Pending Approval' && currentUser.Role === 'Approver') {
@@ -913,13 +893,13 @@
                     document.getElementById('div-closure-app').classList.remove('hidden');
                     document.getElementById('Closure_Approver_Remarks').disabled = false;
                     safeSet("Closure_Reviewer_Remarks", p.Closure_Reviewer_Remarks || "");
-                    const b = document.createElement("button"); b.className = "bg-black text-white px-4 py-2 rounded font-bold"; b.innerText = "Final Permit Close"; b.onclick = () => upd('approve');
+                    const b = document.createElement("button"); b.type = "button"; b.className = "bg-black text-white px-4 py-2 rounded font-bold"; b.innerText = "Final Permit Close"; b.onclick = () => upd('approve');
                     actionsDiv.appendChild(b);
                 }
             }
         }
 
-  async function upd(act) {
+        async function upd(act) {
             if (act === 'initiate_closure' && !document.getElementById("Site_Restored_Check").checked) return alert("Please confirm site restoration.");
             
             let ioclData = [];
@@ -941,21 +921,17 @@
                 Site_Restored_Check: document.getElementById("Site_Restored_Check").checked ? 'Y' : 'N'
             };
 
-            // CAPTURE 1st RENEWAL DECISION
             if (act === 'review' || act === 'approve') {
                 const revDec = document.querySelector('input[name="RevRenAction"]:checked');
                 const appDec = document.querySelector('input[name="AppRenAction"]:checked');
                 
-                // If Reviewer selected Yes/No, send it. If not, don't send (might be standard permit).
                 if (currentUser.Role === 'Reviewer' && revDec) {
-                    body.FirstRenewalAction = revDec.value; // 'recommend' or 'reject'
-                    // Trigger the backend to process this decision alongside the review
+                    body.FirstRenewalAction = revDec.value; 
                     body.action = 'approve_1st_ren'; 
                 }
                 
-                // If Approver selected Yes/No
                 if (currentUser.Role === 'Approver' && appDec) {
-                    body.FirstRenewalAction = appDec.value; // 'approve' or 'reject'
+                    body.FirstRenewalAction = appDec.value; 
                     body.action = 'approve_1st_ren';
                 }
             }
@@ -1067,8 +1043,6 @@
 
         async function savePermit() {
             if(!document.getElementById('gsr-check').checked) return alert("Accept GSR.");
-            
-            // VALIDATION: PREVENT 500 ERROR
             if(!getVal('WorkType') || !getVal('ValidFrom') || !getVal('ValidTo')) {
                 return alert("Missing Mandatory Fields: Work Type, Valid From, or Valid To.");
             }
@@ -1081,7 +1055,6 @@
             fd.append("SelectedWorkers", JSON.stringify(selectedWorkers));
             if(currentUser) fd.append("RequesterEmail", currentUser.Email);
 
-            // SAFELY Capture Gas values (Fix for 500 Error)
             const hcEl = document.getElementById('GP_Q12_HC');
             const toxEl = document.getElementById('GP_Q12_ToxicGas');
             const o2El = document.getElementById('GP_Q12_Oxygen');
@@ -1179,6 +1152,7 @@
     </script>
 </body>
 </html>
+
 
 
 

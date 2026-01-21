@@ -38,8 +38,8 @@ app.use(
         scriptSrc: ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, https://cdn.jsdelivr.net, https://maps.googleapis.com],
         styleSrc: ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`, https://fonts.googleapis.com],
         imgSrc: ["'self'", "data:", "blob:", https://maps.gstatic.com, https://maps.googleapis.com],
-        fontSrc: ["'self'", https://fonts.gstatic.com],
-        connectSrc: ["'self'", https://maps.googleapis.com, https://cdn.jsdelivr.net],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        connectSrc: ["'self'", "https://maps.googleapis.com", "https://cdn.jsdelivr.net"],
         frameAncestors: ["'none'"]
       }
     }
@@ -48,8 +48,8 @@ app.use(
 
 /* --- CORS --- */
 const allowedOrigins = [
-  https://workpermit-a8hueufcdzc0ftcd.centralindia-01.azurewebsites.net,
-  http://localhost:3000
+ "https://workpermit-a8hueufcdzc0ftcd.centralindia-01.azurewebsites.net",
+  "http://localhost:3000"
 ];
 
 app.use(cors({

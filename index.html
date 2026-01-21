@@ -321,8 +321,7 @@
                                         <tr>
                                             <th>Validity</th>
                                             <th>Gas (HC/Tox/O2)</th>
-                                            <th>Precautions</th> 
-                                            <th>Requester</th>
+                                            <th>Precautions</th> <th>Requester</th>
                                             <th>Reviewer</th>
                                             <th>Approver</th>
                                             <th>Photo</th>
@@ -361,7 +360,7 @@
                             <div id="action-renewal" class="hidden p-4 bg-yellow-50 mt-2 rounded border border-yellow-200">
                                 <textarea id="RenewalRemark" placeholder="Rejection Reason / Remarks" class="w-full mb-2"></textarea>
                                 <div class="grid grid-cols-2 gap-2">
-                                    <button type="button" id="btn-approve-renewal" class="bg-green-600 text-white py-2 rounded font-bold shadow">Approve</button>
+                                    <button type="button" id="btn-approve-renewal" class="bg-green-600 text-white py-2 rounded font-bold shadow">Submit Renewal Decision</button>
                                     <button type="button" id="btn-reject-renewal" class="bg-red-600 text-white py-2 rounded font-bold shadow">Reject</button>
                                 </div>
                             </div>
@@ -471,7 +470,7 @@
                     <div id="val-time-to" class="text-sm font-mono text-gray-700 font-bold"></div>
                     <div id="val-status" class="mt-2 inline-block px-3 py-1 rounded-full bg-green-200 text-green-800 text-xs font-bold">ACTIVE</div>
                 </div>
-                </div>
+            </div>
         </div>
     </div>
 
@@ -753,6 +752,7 @@
             currentPermitIOCLData = p.IOCLSupervisors || [];
             permitRequirePhoto = (p.RequireRenewalPhotos === 'Y');
 
+            // UI Reset
             document.getElementById('view-dashboard').classList.add('hidden');
             document.getElementById('view-form').classList.remove('hidden');
             document.getElementById('permit-title').innerText = `Permit: ${id}`;
@@ -777,8 +777,10 @@
                 
                 if ((isMainPending || p.Status === 'Active') && currentUser.Role === 'Approver' && (el.id === 'Approver_Remarks' || el.id === 'AdditionalPrecautions' || el.name === 'AppRenAction')) shouldDisable = false;
                 
+                // Fix B: Strictly disable RequireRenewalPhotos once approved
                 if (currentUser.Role === 'Approver' && el.id === 'RequireRenewalPhotos') {
-                     shouldDisable = (p.Status === 'Active'); 
+                     // Only editable if we are in the INITIAL Pending Approval state. Not Active, Not Renewal.
+                     shouldDisable = (p.Status !== 'Pending Approval'); 
                 }
                 
                 if (el.type === 'checkbox') el.checked = (p[el.name] === 'Y');
@@ -811,14 +813,12 @@
                     document.getElementById('rev-renewal-decision').classList.remove('hidden');
                 }
 
-                // FIX B: Only show standard buttons if it is the MAIN permit (not renewal)
                 if (p.Status === 'Pending Review') {
                     const b1 = document.createElement("button"); b1.type = "button"; b1.className = "bg-red-600 text-white px-4 py-2 rounded font-bold mr-2"; b1.innerText = "Reject Permit"; b1.onclick = () => upd('reject');
                     const b2 = document.createElement("button"); b2.type = "button"; b2.className = "bg-green-600 text-white px-4 py-2 rounded font-bold"; b2.innerText = "Review & Forward"; b2.onclick = () => upd('review');
                     actionsDiv.append(b1, b2);
                 } else if(p.Status === 'Renewal Pending Review') {
-                    // For Renewal, show button to submit renewal decision
-                     const b2 = document.createElement("button"); b2.type = "button"; b2.className = "bg-green-600 text-white px-4 py-2 rounded font-bold"; b2.innerText = "Submit Renewal Decision"; b2.onclick = () => upd('review'); // upd('review') handles renewal logic internally
+                     const b2 = document.createElement("button"); b2.type = "button"; b2.className = "bg-green-600 text-white px-4 py-2 rounded font-bold"; b2.innerText = "Submit Renewal Decision"; b2.onclick = () => upd('review');
                      actionsDiv.append(b2);
                 }
             }
@@ -841,7 +841,7 @@
                 }
             }
 
-            // --- [Requirement B] Active View for Approver (Update Supervisors) ---
+            // --- Active View for Approver (Update Supervisors) ---
             if (p.Status === 'Active' && currentUser.Role === 'Approver') {
                 document.getElementById('fs-approver-section').classList.remove('hidden');
                 document.getElementById('app-renewal-decision').classList.add('hidden');
@@ -864,7 +864,10 @@
                 if (isRevTurn || isAppTurn) {
                     document.getElementById('action-renewal').classList.remove('hidden');
                     document.getElementById('RenewalRemark').disabled = false;
+                    // Fix A: Replaced Approve Button with Submit Renewal Decision
+                    document.getElementById('btn-approve-renewal').innerText = "Submit Renewal Decision";
                     document.getElementById('btn-approve-renewal').onclick = () => submitRenewal('approve');
+                    
                     document.getElementById('btn-reject-renewal').onclick = () => submitRenewal('reject');
                     
                     if (lastRen.oddHourReq === 'Y' && isAppTurn) {
@@ -880,6 +883,8 @@
             // --- Requester View (Renewals) ---
             if (rens.length > 0 || (currentUser.Role === 'Requester' && p.Status === 'Active')) {
                 document.getElementById('renewals-section').classList.remove('hidden');
+                
+                // Fix D: Ensure timestamps are accessed correctly from JSON object
                 document.getElementById('renewal-history-body').innerHTML = rens.map(r => `
                     <tr class="border-b text-[10px]">
                         <td class="p-2">${r.valid_from}<br>to ${r.valid_to}</td>
@@ -952,7 +957,9 @@
             if (act === 'initiate_closure' && !document.getElementById("Site_Restored_Check").checked) return alert("Please confirm site restoration.");
             
             let ioclData = [];
+            // Reviewer Logic
             if (currentUser.Role === 'Reviewer') ioclData = getIOCLData('iocl-sup-container-rev');
+            // Approver Logic
             if (currentUser.Role === 'Approver') {
                  const newOnes = getIOCLData('iocl-sup-container-app');
                  ioclData = [...currentPermitIOCLData, ...newOnes];
@@ -970,15 +977,13 @@
                 Site_Restored_Check: document.getElementById("Site_Restored_Check").checked ? 'Y' : 'N'
             };
 
-            // FIX 2: FORCE 1st Renewal Logic Detection
             if (act === 'review' || act === 'approve') {
                 const revDec = document.querySelector('input[name="RevRenAction"]:checked');
                 const appDec = document.querySelector('input[name="AppRenAction"]:checked');
                 
-                // If Reviewer selected Yes/No for renewal, WE MUST SEND 'approve_1st_ren'
                 if (currentUser.Role === 'Reviewer' && revDec) {
                     body.FirstRenewalAction = revDec.value; 
-                    body.action = 'approve_1st_ren';  // Force specific action for renewal
+                    body.action = 'approve_1st_ren'; 
                 }
                 
                 if (currentUser.Role === 'Approver' && appDec) {
@@ -1079,7 +1084,6 @@
             document.getElementById('btn-add-rev-sup').parentElement.classList.add('hidden');
             document.getElementById('btn-add-app-sup').parentElement.classList.add('hidden');
 
-            // [Requirement B]: Strict Hide for Renewal/Closure
             if (status.includes('Renewal') || status.includes('Closure')) return;
 
             if(currentUser.Role === 'Reviewer' && status === 'Pending Review') 
@@ -1228,7 +1232,7 @@
         async function downloadSecurePDF(id) { try { document.getElementById('loader').style.display = 'flex'; const res = await fetch(`${API}/download-pdf/${id}`, { headers: {'Authorization': `Bearer ${authToken}`} }); if(!res.ok) throw new Error("Err"); const blob = await res.blob(); const a = document.createElement('a'); a.href = window.URL.createObjectURL(blob); a.download = `${id}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); } catch(e) { alert("Download Failed"); } finally { document.getElementById('loader').style.display = 'none'; } }
         async function downloadSecureExcel() { try { document.getElementById('loader').style.display = 'flex'; const res = await fetch(`${API}/download-excel`, { headers: {'Authorization': `Bearer ${authToken}`} }); if(!res.ok) throw new Error("Err"); const blob = await res.blob(); const a = document.createElement('a'); a.href = window.URL.createObjectURL(blob); a.download = "Permits.xlsx"; document.body.appendChild(a); a.click(); document.body.removeChild(a); } catch(e) { alert("Failed"); } finally { document.getElementById('loader').style.display = 'none'; } }
         
-        // FIX A: Normalize path to handle Windows backslashes
+        // FIX C: Normalize path to handle Windows backslashes
         window.viewSecurePhoto = async function(url) { 
             if (!url) return alert("No photo"); 
             // Extract filename from path (handles both / and \)
@@ -1269,4 +1273,3 @@
     </script>
 </body>
 </html>
-

@@ -998,30 +998,66 @@ async function openPermit(id) {
         }
 
         async function submitRenewal(act) {
+            // Case 1: Reviewer/Approver Processing (Approve/Reject)
             if(act === 'approve' || act === 'reject') {
                 const remark = document.getElementById('RenewalRemark').value;
-                const res = await apiCall('/renewal', 'POST', {PermitID: currentPermitId, action: act, rejectionReason: remark});
-                if(res.success) { alert("Action Taken"); switchView('dashboard'); }
+                if (act === 'reject' && !remark) return alert("Please provide remarks for rejection.");
+                
+                // Determine next status based on current role
+                let actionType = act;
+                if (currentUser.Role === 'Reviewer' && act === 'approve') {
+                    actionType = 'forward_to_approver'; // Custom action for Reviewer -> Approver
+                }
+
+                const res = await apiCall('/renewal', 'POST', {
+                    PermitID: currentPermitId, 
+                    action: actionType, 
+                    rejectionReason: remark,
+                    role: currentUser.Role
+                });
+                
+                if(res.success) { 
+                    alert("Renewal Decision Submitted!"); 
+                    switchView('dashboard'); 
+                } else {
+                    alert("Error: " + res.error);
+                }
                 return;
             }
+
+            // Case 2: Requester Submitting New Request
             const fd = new FormData();
-            fd.append('PermitID', currentPermitId); fd.append('action', 'initiate'); 
-            fd.append('RenewalValidFrom', getVal("RenewalValidFrom")); fd.append('RenewalValidTo', getVal("RenewalValidTo"));
-            fd.append('hc', getVal("RenewalHC")); fd.append('toxic', getVal("RenewalToxic")); fd.append('oxygen', getVal("RenewalOxygen")); fd.append('precautions', getVal("RenewalPrec"));
-            const selWorkers = []; document.querySelectorAll('.ren-worker-cb:checked').forEach(c => selWorkers.push(c.value)); fd.append('renewalWorkers', JSON.stringify(selWorkers));
+            fd.append('PermitID', currentPermitId); 
+            fd.append('action', 'initiate'); 
+            fd.append('RenewalValidFrom', getVal("RenewalValidFrom")); 
+            fd.append('RenewalValidTo', getVal("RenewalValidTo"));
+            fd.append('hc', getVal("RenewalHC")); 
+            fd.append('toxic', getVal("RenewalToxic")); 
+            fd.append('oxygen', getVal("RenewalOxygen")); 
+            fd.append('precautions', getVal("RenewalPrec"));
+            
+            const selWorkers = []; 
+            document.querySelectorAll('.ren-worker-cb:checked').forEach(c => selWorkers.push(c.value)); 
+            fd.append('renewalWorkers', JSON.stringify(selWorkers));
+            
             if(!document.getElementById("odd-hour-agreement").classList.contains("hidden")) {
                 if(!document.getElementById("OddHourSafetyCheck").checked) return alert("Accept Odd Hour safety terms.");
                 fd.append('oddHourReq', 'Y');
             }
+            
             const fileInput = document.getElementById("ren-cam-sub");
             if(!document.getElementById('renewal-photo-wrapper').classList.contains('hidden') && fileInput.files.length === 0) return alert("⛔ Site photo is mandatory.");
             if(fileInput.files.length > 0) fd.append('RenewalImage', fileInput.files[0]);
 
             const res = await fetch(API+'/renewal', {method:'POST', body:fd, headers: {'Authorization': `Bearer ${authToken}`}});
             const json = await res.json();
-            if(json.success) { alert("Renewal Request Submitted!"); switchView('dashboard'); } else { alert(json.error || "Submission failed"); }
+            if(json.success) { 
+                alert("Renewal Request Submitted!"); 
+                switchView('dashboard'); 
+            } else { 
+                alert(json.error || "Submission failed"); 
+            }
         }
-
         function checkRenewalTime() {
             const fVal = document.getElementById("RenewalValidFrom").value; const tVal = document.getElementById("RenewalValidTo").value;
             const div = document.getElementById("odd-hour-agreement");
@@ -1203,19 +1239,54 @@ async function openPermit(id) {
         });
 
         async function loadStats(data) {
-            // Stats rendering now happens on 'stats' view activation.
-            if(!data && !currentPermitId) return; 
+            // 1. Ensure the stats view is actually visible before drawing
+            // If this function is called while view-stats is hidden, just return
+            if(document.getElementById('view-stats').classList.contains('hidden')) return;
+
+            // 2. Fetch data if missing
             if (!data) {
-                 const fetchedData = await apiCall('/dashboard', 'POST', {role: currentUser.Role, email: currentUser.Email});
-                 data = fetchedData;
+                 try {
+                     const fetchedData = await apiCall('/dashboard', 'POST', {role: currentUser.Role, email: currentUser.Email});
+                     if(!fetchedData) return;
+                     data = fetchedData;
+                 } catch(e) { console.error("Stats fetch failed", e); return; }
             }
             
             const counts = {}; const types = {};
-            data.forEach(d => { counts[d.Status] = (counts[d.Status]||0)+1; types[d.WorkType] = (types[d.WorkType]||0)+1; });
-            if(chartS) chartS.destroy();
-            chartS = new Chart(document.getElementById('chartStatus').getContext('2d'), { type: 'doughnut', data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts), backgroundColor: ['#f87171', '#4ade80', '#94a3b8', '#fbbf24'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } } });
-            if(chartT) chartT.destroy();
-            chartT = new Chart(document.getElementById('chartType').getContext('2d'), { type: 'bar', data: { labels: Object.keys(types), datasets: [{ label: 'Work Types', data: Object.values(types), backgroundColor: '#60a5fa' }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } } });
+            data.forEach(d => { 
+                counts[d.Status] = (counts[d.Status]||0)+1; 
+                types[d.WorkType] = (types[d.WorkType]||0)+1; 
+            });
+
+            // 3. Destroy existing charts before creating new ones (Prevent Crash)
+            if(chartS) { chartS.destroy(); chartS = null; }
+            if(chartT) { chartT.destroy(); chartT = null; }
+
+            // 4. Create Charts
+            const ctxS = document.getElementById('chartStatus');
+            const ctxT = document.getElementById('chartType');
+
+            if(ctxS && Object.keys(counts).length > 0) {
+                chartS = new Chart(ctxS.getContext('2d'), { 
+                    type: 'doughnut', 
+                    data: { 
+                        labels: Object.keys(counts), 
+                        datasets: [{ data: Object.values(counts), backgroundColor: ['#f87171', '#4ade80', '#94a3b8', '#fbbf24', '#60a5fa'] }] 
+                    }, 
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } } 
+                });
+            }
+
+            if(ctxT && Object.keys(types).length > 0) {
+                chartT = new Chart(ctxT.getContext('2d'), { 
+                    type: 'bar', 
+                    data: { 
+                        labels: Object.keys(types), 
+                        datasets: [{ label: 'Work Types', data: Object.values(types), backgroundColor: '#60a5fa' }] 
+                    }, 
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } } 
+                });
+            }
         }
         
         function logout() { location.reload(); }
@@ -1272,5 +1343,3 @@ async function openPermit(id) {
     </script>
 </body>
 </html>
-
-

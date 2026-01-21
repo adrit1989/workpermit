@@ -676,6 +676,7 @@
             const container = document.getElementById('dashboard-content'); 
             container.innerHTML = '';
             
+            // 1. Filter Data
             const pending = res.filter(p => {
                 const s = p.Status;
                 if (currentUser.Role === 'MasterAdmin') return s.includes('Pending') || s === 'Submitted';
@@ -687,20 +688,52 @@
             const active = res.filter(p => p.Status === 'Active' || (p.Status.includes('Renewal') && !p.Status.includes('Pending')));
             const closed = res.filter(p => p.Status === 'Closed' || p.Status === 'Rejected');
 
+            // 2. Updated Render Helper (Shows Empty Tables)
             const renderTable = (title, items, color) => {
-                if(items.length === 0) return '';
-                return `<div class="glass border-l-4 border-${color}-500 mb-6"><div class="flex justify-between items-center border-b pb-2 mb-3"><h3 class="font-bold text-${color}-700 uppercase text-sm">${title}</h3><span class="bg-${color}-100 text-${color}-800 text-xs font-bold px-3 py-1 rounded-full">${items.length}</span></div><div class="overflow-x-auto"><table class="w-full text-left text-xs data-table"><thead><tr class="bg-gray-50"><th class="p-3">ID</th><th>Type</th><th>Location</th><th>Status</th><th>Date</th><th>Action</th></tr></thead><tbody>${items.map(p => {
-                    let action = (p.Status === 'Closed' || p.Status === 'Active' || p.Status.includes('Renewal')) ? `<button class="btn-pdf" onclick="event.stopPropagation(); downloadSecurePDF('${p.PermitID}')">📥 PDF</button>` : '';
-                    return `<tr onclick="openPermit('${p.PermitID}')" class="hover:bg-gray-50 transition cursor-pointer"><td class="p-3 font-bold text-blue-600">${p.PermitID}</td><td>${p.WorkType || '-'}</td><td>${p.LocationUnit || '-'}</td><td><span class="px-2 py-0.5 rounded border bg-gray-50">${p.Status}</span></td><td class="font-mono">${p.ValidFrom ? p.ValidFrom.split('T')[0] : '-'}</td><td>${action}</td></tr>`;
-                }).join('')}</tbody></table></div></div>`;
+                // MODIFIED: Generate rows or a "No Records" message
+                let rowsHtml = '';
+                if (items.length === 0) {
+                    rowsHtml = `<tr><td colspan="6" class="p-4 text-center text-gray-400 italic bg-gray-50">No permits found in this category.</td></tr>`;
+                } else {
+                    rowsHtml = items.map(p => {
+                        let action = (p.Status === 'Closed' || p.Status === 'Active' || p.Status.includes('Renewal')) ? `<button class="btn-pdf" onclick="event.stopPropagation(); downloadSecurePDF('${p.PermitID}')">📥 PDF</button>` : '';
+                        return `<tr onclick="openPermit('${p.PermitID}')" class="hover:bg-gray-50 transition cursor-pointer">
+                            <td class="p-3 font-bold text-blue-600">${p.PermitID}</td>
+                            <td>${p.WorkType || '-'}</td>
+                            <td>${p.LocationUnit || '-'}</td>
+                            <td><span class="px-2 py-0.5 rounded border bg-gray-50 text-[10px] uppercase font-bold text-gray-600">${p.Status}</span></td>
+                            <td class="font-mono text-xs">${p.ValidFrom ? p.ValidFrom.split('T')[0] : '-'}</td>
+                            <td>${action}</td>
+                        </tr>`;
+                    }).join('');
+                }
+
+                // Always return the table HTML, even if empty
+                return `<div class="glass border-l-4 border-${color}-500 mb-6">
+                    <div class="flex justify-between items-center border-b pb-2 mb-3">
+                        <h3 class="font-bold text-${color}-700 uppercase text-sm">${title}</h3>
+                        <span class="bg-${color}-100 text-${color}-800 text-xs font-bold px-3 py-1 rounded-full">${items.length}</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs data-table">
+                            <thead>
+                                <tr class="bg-gray-50 border-b border-gray-200 text-gray-500 uppercase">
+                                    <th class="p-3">ID</th><th>Type</th><th>Location</th><th>Status</th><th>Date</th><th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">${rowsHtml}</tbody>
+                        </table>
+                    </div>
+                </div>`;
             };
 
+            // 3. Render All Sections Always
             container.innerHTML += renderTable('Action Required', pending, 'orange');
             container.innerHTML += renderTable('Active Permits', active, 'green');
             container.innerHTML += renderTable('Closed / Archive', closed, 'gray');
+            
             loadStats(res);
         }
-
         /* 6. CORE PERMIT LOGIC */
         async function openPermit(id) {
             const p = await apiCall('/permit-data', 'POST', { permitId: id });
@@ -1099,3 +1132,4 @@
     </script>
 </body>
 </html>
+

@@ -321,7 +321,8 @@
                                         <tr>
                                             <th>Validity</th>
                                             <th>Gas (HC/Tox/O2)</th>
-                                            <th>Precautions</th> <th>Requester</th>
+                                            <th>Precautions</th> 
+                                            <th>Requester</th>
                                             <th>Reviewer</th>
                                             <th>Approver</th>
                                             <th>Photo</th>
@@ -470,11 +471,7 @@
                     <div id="val-time-to" class="text-sm font-mono text-gray-700 font-bold"></div>
                     <div id="val-status" class="mt-2 inline-block px-3 py-1 rounded-full bg-green-200 text-green-800 text-xs font-bold">ACTIVE</div>
                 </div>
-                <div>
-                    <h3 class="text-xs font-bold text-gray-400 uppercase mb-2 tracking-wider">Selection Info</h3>
-                    <div id="right-panel-info" class="text-sm text-gray-500 italic bg-gray-50 p-3 rounded border">Select permit to view details.</div>
                 </div>
-            </div>
         </div>
     </div>
 
@@ -648,7 +645,6 @@
         function switchView(viewName) {
             document.querySelectorAll('.content-area > div').forEach(d => d.classList.add('hidden'));
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            // Fix E: Updated viewMap to include stats
             const viewMap = {'dashboard': 'view-dashboard', 'new-permit': 'view-form', 'workers': 'view-workers', 'users': 'view-users', 'map': 'view-map', 'admin': 'view-admin', 'stats': 'view-stats'};
             
             if(document.getElementById(viewMap[viewName])) {
@@ -663,7 +659,7 @@
             if(viewName === 'users') loadManageUsers();
             if(viewName === 'workers') loadWorkers('mgmt');
             if(viewName === 'map') { setTimeout(initMap, 200); }
-            if(viewName === 'stats') { loadStats(null); } // Trigger stats refresh if needed or just show
+            if(viewName === 'stats') { loadStats(null); }
         }
 
         async function initMap() {
@@ -757,7 +753,6 @@
             currentPermitIOCLData = p.IOCLSupervisors || [];
             permitRequirePhoto = (p.RequireRenewalPhotos === 'Y');
 
-            // UI Reset
             document.getElementById('view-dashboard').classList.add('hidden');
             document.getElementById('view-form').classList.remove('hidden');
             document.getElementById('permit-title').innerText = `Permit: ${id}`;
@@ -769,8 +764,7 @@
             const actionsDiv = document.getElementById("actions-bar");
             actionsDiv.innerHTML = "";
 
-            // --- Form Field Logic ---
-            const isMainPending = (p.Status === 'Pending Review' || p.Status === 'Pending Approval');
+            const isMainPending = (p.Status.includes('Pending Review') || p.Status.includes('Pending Approval'));
             const isAuthority = (currentUser.Role === 'Reviewer' || currentUser.Role === 'Approver');
 
             document.querySelectorAll('#pf input, #pf textarea, #pf select').forEach(el => {
@@ -783,7 +777,6 @@
                 
                 if ((isMainPending || p.Status === 'Active') && currentUser.Role === 'Approver' && (el.id === 'Approver_Remarks' || el.id === 'AdditionalPrecautions' || el.name === 'AppRenAction')) shouldDisable = false;
                 
-                // [Requirement D] RequireRenewalPhotos Locked if Active
                 if (currentUser.Role === 'Approver' && el.id === 'RequireRenewalPhotos') {
                      shouldDisable = (p.Status === 'Active'); 
                 }
@@ -819,7 +812,6 @@
                 }
 
                 // Fix A: Only show buttons if NOT in a pure renewal state, or handle differently.
-                // Logic: If status is 'Pending Review', show main buttons.
                 if (p.Status === 'Pending Review') {
                     const b1 = document.createElement("button"); b1.type = "button"; b1.className = "bg-red-600 text-white px-4 py-2 rounded font-bold mr-2"; b1.innerText = "Reject Permit"; b1.onclick = () => upd('reject');
                     const b2 = document.createElement("button"); b2.type = "button"; b2.className = "bg-green-600 text-white px-4 py-2 rounded font-bold"; b2.innerText = "Review & Forward"; b2.onclick = () => upd('review');
@@ -846,7 +838,6 @@
             // --- [Requirement B] Active View for Approver (Update Supervisors) ---
             if (p.Status === 'Active' && currentUser.Role === 'Approver') {
                 document.getElementById('fs-approver-section').classList.remove('hidden');
-                // Hide decision UI, just show supervisors & remarks
                 document.getElementById('app-renewal-decision').classList.add('hidden');
                 
                 const b = document.createElement("button"); 
@@ -962,7 +953,6 @@
             // Approver Logic
             if (currentUser.Role === 'Approver') {
                  const newOnes = getIOCLData('iocl-sup-container-app');
-                 // Merge new inputs with existing list. Since deletes are soft-deletes, they are already in currentPermitIOCLData.
                  ioclData = [...currentPermitIOCLData, ...newOnes];
             }
 
@@ -1090,10 +1080,15 @@
             document.getElementById('btn-add-rev-sup').parentElement.classList.add('hidden');
             document.getElementById('btn-add-app-sup').parentElement.classList.add('hidden');
 
-            if(currentUser.Role === 'Reviewer' && status.includes('Pending Review')) 
+            // Fix B: Check status - hide buttons if Renewal or Closure pending
+            // Only allow if it's the "Main" workflow stage for that user.
+            
+            // Reviewer can add only if it's "Pending Review" (Main Permit). NOT Renewal.
+            if(currentUser.Role === 'Reviewer' && status === 'Pending Review') 
                 document.getElementById('btn-add-rev-sup').parentElement.classList.remove('hidden');
             
-            if(currentUser.Role === 'Approver' && (status.includes('Pending Approval') || status === 'Active')) {
+            // Approver can add if "Pending Approval" (Main Permit) OR "Active" (Update Mode)
+            if(currentUser.Role === 'Approver' && (status === 'Pending Approval' || status === 'Active')) {
                 document.getElementById('btn-add-app-sup').parentElement.classList.remove('hidden');
             }
         }
@@ -1171,7 +1166,7 @@
 
             const res = await fetch(API+'/save-permit', {method:'POST', body:fd, headers: {'Authorization': `Bearer ${authToken}`}});
             const json = await res.json();
-            if(json.success) { alert("Permit Created: "+json.permitId); switchView('dashboard'); } else alert(json.error);
+            if(json.success) { alert("Permit Created: "+json.permitId); switchView('dashboard'); } else { alert(json.error); }
         }
         
         async function loadWorkers(context) { 
@@ -1213,8 +1208,7 @@
 
         async function loadStats(data) {
             // Stats rendering now happens on 'stats' view activation.
-            if(!data && !currentPermitId) return; // Basic check
-            // We need to fetch data if not provided
+            if(!data && !currentPermitId) return; 
             if (!data) {
                  const fetchedData = await apiCall('/dashboard', 'POST', {role: currentUser.Role, email: currentUser.Email});
                  data = fetchedData;
@@ -1239,7 +1233,7 @@
 
         async function downloadSecurePDF(id) { try { document.getElementById('loader').style.display = 'flex'; const res = await fetch(`${API}/download-pdf/${id}`, { headers: {'Authorization': `Bearer ${authToken}`} }); if(!res.ok) throw new Error("Err"); const blob = await res.blob(); const a = document.createElement('a'); a.href = window.URL.createObjectURL(blob); a.download = `${id}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a); } catch(e) { alert("Download Failed"); } finally { document.getElementById('loader').style.display = 'none'; } }
         async function downloadSecureExcel() { try { document.getElementById('loader').style.display = 'flex'; const res = await fetch(`${API}/download-excel`, { headers: {'Authorization': `Bearer ${authToken}`} }); if(!res.ok) throw new Error("Err"); const blob = await res.blob(); const a = document.createElement('a'); a.href = window.URL.createObjectURL(blob); a.download = "Permits.xlsx"; document.body.appendChild(a); a.click(); document.body.removeChild(a); } catch(e) { alert("Failed"); } finally { document.getElementById('loader').style.display = 'none'; } }
-        window.viewSecurePhoto = async function(url) { if (!url) return alert("No photo"); const filename = url.split('/').pop(); document.getElementById('loader').style.display = 'flex'; try { const res = await fetch(`${API}/view-photo/${filename}`, { method: 'GET', headers: {'Authorization': `Bearer ${authToken}`} }); if (!res.ok) throw new Error("Err"); const blob = await res.blob(); window.open(window.URL.createObjectURL(blob), '_blank'); } catch (e) { alert("Load Failed"); } finally { document.getElementById('loader').style.display = 'none'; } }
+        window.viewSecurePhoto = async function(url) { if (!url) return alert("No photo"); const filename = url.split(/[/\\]/).pop(); document.getElementById('loader').style.display = 'flex'; try { const res = await fetch(`${API}/view-photo/${filename}`, { method: 'GET', headers: {'Authorization': `Bearer ${authToken}`} }); if (!res.ok) throw new Error("Err"); const blob = await res.blob(); window.open(window.URL.createObjectURL(blob), '_blank'); } catch (e) { alert("Load Failed"); } finally { document.getElementById('loader').style.display = 'none'; } }
         
         document.getElementById('btn-add-rev-sup').onclick = () => addIOCLRow('iocl-sup-container-rev');
         document.getElementById('btn-add-app-sup').onclick = () => addIOCLRow('iocl-sup-container-app');

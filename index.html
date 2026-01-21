@@ -121,6 +121,7 @@
                     <div class="nav-item" onclick="switchView('workers')" id="nav-workers"><span>👷</span> Workers</div>
                     <div class="nav-item hidden" id="nav-users" onclick="switchView('users')"><span>👥</span> User Mgmt</div>
                     <div class="nav-item hidden" onclick="switchView('map')" id="nav-map"><span>🗺️</span> Map View</div>
+                    <div class="nav-item" onclick="switchView('stats')" id="nav-stats"><span>📈</span> Live Stats</div>
                     <div class="nav-item hidden" id="nav-admin" onclick="switchView('admin')"><span>🔐</span> Admin Console</div>
                 </nav>
                 <div class="p-4 border-t border-gray-700 bg-gray-900 flex flex-col gap-2">
@@ -141,6 +142,20 @@
                         </div>
                     </div>
                     <div id="dashboard-content" class="space-y-6"></div>
+                </div>
+
+                <div id="view-stats" class="hidden">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">Live Statistics</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="glass">
+                            <h3 class="font-bold text-gray-500 mb-4 uppercase text-sm">Permit Status Distribution</h3>
+                            <canvas id="chartStatus"></canvas>
+                        </div>
+                        <div class="glass">
+                            <h3 class="font-bold text-gray-500 mb-4 uppercase text-sm">Work Type Distribution</h3>
+                            <canvas id="chartType"></canvas>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="view-form" class="hidden">
@@ -217,33 +232,33 @@
                         </div>
 
                         <div class="glass border-t-4 border-red-500">
-    <h3 class="font-bold text-red-600 border-b pb-2 mb-4">4. Hazards & PPE</h3>
-    <div id="hazards-grid" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4"></div>
-    <div id="other-hazard-div" class="hidden mb-2">
-        <input id="H_Others_Detail" name="H_Others_Detail" placeholder="Specify other hazards..." class="w-full">
-    </div>
-    
-    <div id="ppe-section-wrapper" class="hidden">
-        <h4 class="font-bold text-gray-500 text-xs uppercase mb-2">PPE Required (Reviewer/Approver)</h4>
-        <div id="ppe-grid" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2"></div>
-        <textarea name="AdditionalPrecautions" id="AdditionalPrecautions" placeholder="Additional PPE / Precautions..." class="w-full text-sm p-2 border rounded" rows="2"></textarea>
-    </div>
-</div>
+                            <h3 class="font-bold text-red-600 border-b pb-2 mb-4">4. Hazards & PPE</h3>
+                            <div id="hazards-grid" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4"></div>
+                            <div id="other-hazard-div" class="hidden mb-2">
+                                <input id="H_Others_Detail" name="H_Others_Detail" placeholder="Specify other hazards..." class="w-full">
+                            </div>
+                            
+                            <div id="ppe-section-wrapper" class="hidden">
+                                <h4 class="font-bold text-gray-500 text-xs uppercase mb-2">PPE Required (Reviewer/Approver)</h4>
+                                <div id="ppe-grid" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2"></div>
+                                <textarea name="AdditionalPrecautions" id="AdditionalPrecautions" placeholder="Additional PPE / Precautions..." class="w-full text-sm p-2 border rounded" rows="2"></textarea>
+                            </div>
+                        </div>
 
                         <div id="fs-reviewer-section" class="glass hidden border-l-4 border-yellow-500">
                             <h3 class="font-bold text-yellow-700 border-b pb-2 mb-4">4. Reviewer</h3>
                             
                             <div id="rev-renewal-decision" class="mb-4 hidden p-4 bg-yellow-50 border border-yellow-200 rounded">
-                                        <h4 class="font-bold text-sm text-yellow-900 mb-2">1st Renewal: Accept and forward?</h4>
-                                            <div class="flex gap-6">
-                                               <label class="flex items-center gap-2 cursor-pointer font-bold text-gray-700">
-                                              <input type="radio" name="RevRenAction" value="recommend" class="w-5 h-5 accent-green-600"> Yes
-                                             </label>
-                                          <label class="flex items-center gap-2 cursor-pointer font-bold text-gray-700">
-                                    <input type="radio" name="RevRenAction" value="reject" class="w-5 h-5 accent-red-600"> No
-                                </label>
-                            </div>
-                         </div>
+                                            <h4 class="font-bold text-sm text-yellow-900 mb-2">1st Renewal: Accept and forward?</h4>
+                                                <div class="flex gap-6">
+                                                   <label class="flex items-center gap-2 cursor-pointer font-bold text-gray-700">
+                                                  <input type="radio" name="RevRenAction" value="recommend" class="w-5 h-5 accent-green-600"> Yes
+                                                 </label>
+                                                  <label class="flex items-center gap-2 cursor-pointer font-bold text-gray-700">
+                                            <input type="radio" name="RevRenAction" value="reject" class="w-5 h-5 accent-red-600"> No
+                                        </label>
+                                    </div>
+                                 </div>
 
                             <div class="mb-4 hidden" id="iocl-reviewer-wrapper">
                                 <label class="font-bold text-sm text-gray-700">Authorized IOCL Supervisors</label>
@@ -251,23 +266,22 @@
                                 <button type="button" id="btn-add-rev-sup" class="mt-2 text-xs bg-gray-200 px-2 py-1 rounded font-bold">+ Add Supervisor</button>
                             </div>
                             <textarea name="Reviewer_Remarks" id="Reviewer_Remarks" placeholder="Reviewer Remarks" class="w-full"></textarea>
-                            
                         </div>
 
                         <div id="fs-approver-section" class="glass hidden border-l-4 border-green-500">
                             <h3 class="font-bold text-green-700 border-b pb-2 mb-4">5. Approval</h3>
                             
                              <div id="app-renewal-decision" class="mb-4 hidden p-4 bg-green-50 border border-green-200 rounded">
-    <h4 class="font-bold text-sm text-green-900 mb-2">Reviewer has accepted the 1st renewal. Please log your decision:</h4>
-    <div class="flex gap-6">
-        <label class="flex items-center gap-2 cursor-pointer font-bold text-gray-700">
-            <input type="radio" name="AppRenAction" value="approve" class="w-5 h-5 accent-green-600"> Accept
-        </label>
-        <label class="flex items-center gap-2 cursor-pointer font-bold text-gray-700">
-            <input type="radio" name="AppRenAction" value="reject" class="w-5 h-5 accent-red-600"> Reject
-        </label>
-    </div>
-</div>
+                                <h4 class="font-bold text-sm text-green-900 mb-2">Reviewer has accepted the 1st renewal. Please log your decision:</h4>
+                                <div class="flex gap-6">
+                                    <label class="flex items-center gap-2 cursor-pointer font-bold text-gray-700">
+                                        <input type="radio" name="AppRenAction" value="approve" class="w-5 h-5 accent-green-600"> Accept
+                                    </label>
+                                    <label class="flex items-center gap-2 cursor-pointer font-bold text-gray-700">
+                                        <input type="radio" name="AppRenAction" value="reject" class="w-5 h-5 accent-red-600"> Reject
+                                    </label>
+                                </div>
+                            </div>
 
                             <div class="mb-4 hidden" id="iocl-approver-wrapper">
                                 <label class="font-bold text-sm text-gray-700">Authorized IOCL Supervisors</label>
@@ -303,18 +317,18 @@
 
                             <div class="overflow-x-auto mb-4 bg-white rounded shadow-sm border">
                                 <table class="mobile-table w-full text-xs text-left data-table" id="table-renewals">
-    <thead class="bg-purple-100">
-        <tr>
-            <th>Validity</th>
-            <th>Gas (HC/Tox/O2)</th>
-            <th>Precautions</th> <th>Requester</th>
-            <th>Reviewer</th>
-            <th>Approver</th>
-            <th>Photo</th>
-        </tr>
-    </thead>
-    <tbody id="renewal-history-body"></tbody>
-</table>
+                                    <thead class="bg-purple-100">
+                                        <tr>
+                                            <th>Validity</th>
+                                            <th>Gas (HC/Tox/O2)</th>
+                                            <th>Precautions</th> <th>Requester</th>
+                                            <th>Reviewer</th>
+                                            <th>Approver</th>
+                                            <th>Photo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="renewal-history-body"></tbody>
+                                </table>
                             </div>
                             <div id="form-renewal" class="hidden bg-white p-4 rounded border border-purple-200 shadow-sm">
                                 <h4 class="font-bold text-sm mb-2 text-purple-800">New Renewal Request</h4>
@@ -449,11 +463,6 @@
             </div>
 
             <div class="sidebar-right">
-                <div class="mb-6" id="charts-container">
-                    <h3 class="text-xs font-bold text-gray-400 uppercase mb-2 tracking-wider">Live Stats</h3>
-                    <div class="h-40 mb-4"><canvas id="chartStatus"></canvas></div>
-                    <div class="h-40"><canvas id="chartType"></canvas></div>
-                </div>
                 <div id="validity-box" class="hidden mb-6 p-4 bg-green-50 border border-green-200 rounded-lg shadow-sm text-center">
                     <div class="text-xs font-bold text-green-800 uppercase mb-1">Permit Validity</div>
                     <div id="val-time-from" class="text-sm font-mono text-gray-700 font-bold"></div>
@@ -639,11 +648,12 @@
         function switchView(viewName) {
             document.querySelectorAll('.content-area > div').forEach(d => d.classList.add('hidden'));
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            const viewMap = {'dashboard': 'view-dashboard', 'new-permit': 'view-form', 'workers': 'view-workers', 'users': 'view-users', 'map': 'view-map', 'admin': 'view-admin'};
+            // Fix E: Updated viewMap to include stats
+            const viewMap = {'dashboard': 'view-dashboard', 'new-permit': 'view-form', 'workers': 'view-workers', 'users': 'view-users', 'map': 'view-map', 'admin': 'view-admin', 'stats': 'view-stats'};
             
             if(document.getElementById(viewMap[viewName])) {
                 document.getElementById(viewMap[viewName]).classList.remove('hidden');
-                let navId = (viewName === 'dashboard') ? 'nav-dashboard' : 'nav-' + viewName;
+                let navId = (viewName === 'dashboard') ? 'nav-dashboard' : (viewName === 'stats' ? 'nav-stats' : 'nav-' + viewName);
                 const navItem = document.getElementById(navId);
                 if(navItem) navItem.classList.add('active');
             }
@@ -653,6 +663,7 @@
             if(viewName === 'users') loadManageUsers();
             if(viewName === 'workers') loadWorkers('mgmt');
             if(viewName === 'map') { setTimeout(initMap, 200); }
+            if(viewName === 'stats') { loadStats(null); } // Trigger stats refresh if needed or just show
         }
 
         async function initMap() {
@@ -746,6 +757,7 @@
             currentPermitIOCLData = p.IOCLSupervisors || [];
             permitRequirePhoto = (p.RequireRenewalPhotos === 'Y');
 
+            // UI Reset
             document.getElementById('view-dashboard').classList.add('hidden');
             document.getElementById('view-form').classList.remove('hidden');
             document.getElementById('permit-title').innerText = `Permit: ${id}`;
@@ -758,7 +770,7 @@
             actionsDiv.innerHTML = "";
 
             // --- Form Field Logic ---
-            const isMainPending = (p.Status.includes('Pending Review') || p.Status.includes('Pending Approval'));
+            const isMainPending = (p.Status === 'Pending Review' || p.Status === 'Pending Approval');
             const isAuthority = (currentUser.Role === 'Reviewer' || currentUser.Role === 'Approver');
 
             document.querySelectorAll('#pf input, #pf textarea, #pf select').forEach(el => {
@@ -806,9 +818,13 @@
                     document.getElementById('rev-renewal-decision').classList.remove('hidden');
                 }
 
-                const b1 = document.createElement("button"); b1.type = "button"; b1.className = "bg-red-600 text-white px-4 py-2 rounded font-bold mr-2"; b1.innerText = "Reject Permit"; b1.onclick = () => upd('reject');
-                const b2 = document.createElement("button"); b2.type = "button"; b2.className = "bg-green-600 text-white px-4 py-2 rounded font-bold"; b2.innerText = "Review & Forward"; b2.onclick = () => upd('review');
-                actionsDiv.append(b1, b2);
+                // Fix A: Only show buttons if NOT in a pure renewal state, or handle differently.
+                // Logic: If status is 'Pending Review', show main buttons.
+                if (p.Status === 'Pending Review') {
+                    const b1 = document.createElement("button"); b1.type = "button"; b1.className = "bg-red-600 text-white px-4 py-2 rounded font-bold mr-2"; b1.innerText = "Reject Permit"; b1.onclick = () => upd('reject');
+                    const b2 = document.createElement("button"); b2.type = "button"; b2.className = "bg-green-600 text-white px-4 py-2 rounded font-bold"; b2.innerText = "Review & Forward"; b2.onclick = () => upd('review');
+                    actionsDiv.append(b1, b2);
+                }
             }
 
             // --- Approver View ---
@@ -819,9 +835,12 @@
                     document.getElementById('app-renewal-decision').classList.remove('hidden');
                 }
 
-                const b1 = document.createElement("button"); b1.type = "button"; b1.className = "bg-red-600 text-white px-4 py-2 rounded font-bold mr-2"; b1.innerText = "Reject Permit"; b1.onclick = () => upd('reject');
-                const b2 = document.createElement("button"); b2.type = "button"; b2.className = "bg-green-600 text-white px-4 py-2 rounded font-bold"; b2.innerText = "Final Approve"; b2.onclick = () => upd('approve');
-                actionsDiv.append(b1, b2);
+                // Fix A: Only show buttons if status is 'Pending Approval' (Main).
+                if (p.Status === 'Pending Approval') {
+                    const b1 = document.createElement("button"); b1.type = "button"; b1.className = "bg-red-600 text-white px-4 py-2 rounded font-bold mr-2"; b1.innerText = "Reject Permit"; b1.onclick = () => upd('reject');
+                    const b2 = document.createElement("button"); b2.type = "button"; b2.className = "bg-green-600 text-white px-4 py-2 rounded font-bold"; b2.innerText = "Final Approve"; b2.onclick = () => upd('approve');
+                    actionsDiv.append(b1, b2);
+                }
             }
 
             // --- [Requirement B] Active View for Approver (Update Supervisors) ---
@@ -847,6 +866,8 @@
 
                 if (isRevTurn || isAppTurn) {
                     document.getElementById('action-renewal').classList.remove('hidden');
+                    // Fix B: Make remark editable
+                    document.getElementById('RenewalRemark').disabled = false;
                     document.getElementById('btn-approve-renewal').onclick = () => submitRenewal('approve');
                     document.getElementById('btn-reject-renewal').onclick = () => submitRenewal('reject');
                     
@@ -863,6 +884,7 @@
             // --- Requester View (Renewals) ---
             if (rens.length > 0 || (currentUser.Role === 'Requester' && p.Status === 'Active')) {
                 document.getElementById('renewals-section').classList.remove('hidden');
+                // Fix C & D: Timestamp + Photo Link
                 document.getElementById('renewal-history-body').innerHTML = rens.map(r => `
                     <tr class="border-b text-[10px]">
                         <td class="p-2">${r.valid_from}<br>to ${r.valid_to}</td>
@@ -880,7 +902,9 @@
                             <div class="font-bold">${r.app_name || '-'}</div>
                             <div class="text-[9px] text-gray-500">${r.app_at || ''}</div>
                         </td>
-                        <td class="p-2">${r.photoUrl ? 'YES' : 'NO'}</td>
+                        <td class="p-2">
+                             ${r.photoUrl ? `<button type="button" class="text-blue-600 underline font-bold" onclick="viewSecurePhoto('${r.photoUrl}')">View Photo</button>` : 'NO'}
+                        </td>
                     </tr>
                 `).join('');
                 
@@ -1188,8 +1212,14 @@
         });
 
         async function loadStats(data) {
-            if(!data) return;
-            document.getElementById('charts-container').classList.remove('hidden');
+            // Stats rendering now happens on 'stats' view activation.
+            if(!data && !currentPermitId) return; // Basic check
+            // We need to fetch data if not provided
+            if (!data) {
+                 const fetchedData = await apiCall('/dashboard', 'POST', {role: currentUser.Role, email: currentUser.Email});
+                 data = fetchedData;
+            }
+            
             const counts = {}; const types = {};
             data.forEach(d => { counts[d.Status] = (counts[d.Status]||0)+1; types[d.WorkType] = (types[d.WorkType]||0)+1; });
             if(chartS) chartS.destroy();
@@ -1233,11 +1263,3 @@
     </script>
 </body>
 </html>
-
-
-
-
-
-
-
-

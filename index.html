@@ -658,7 +658,10 @@
             if(viewName === 'users') loadManageUsers();
             if(viewName === 'workers') loadWorkers('mgmt');
             if(viewName === 'map') { setTimeout(initMap, 200); }
-            if(viewName === 'stats') { loadStats(null); }
+            if(viewName === 'stats') { 
+            // Wait 100ms for the div to become visible before drawing
+            setTimeout(() => loadStats(null), 100);} 
+        
         }
 
         async function initMap() {
@@ -1343,3 +1346,4 @@ async function openPermit(id) {
     </script>
 </body>
 </html>
+

@@ -254,13 +254,13 @@
                             <h3 class="font-bold text-green-700 border-b pb-2 mb-4">5. Approval</h3>
                             
                              <div id="app-renewal-decision" class="mb-4 hidden p-4 bg-green-50 border border-green-200 rounded">
-    <h4 class="font-bold text-sm text-green-900 mb-2">1st Renewal: Accept and forward?</h4>
+    <h4 class="font-bold text-sm text-green-900 mb-2">Reviewer has accepted the 1st renewal. Please log your decision:</h4>
     <div class="flex gap-6">
         <label class="flex items-center gap-2 cursor-pointer font-bold text-gray-700">
-            <input type="radio" name="AppRenAction" value="approve" class="w-5 h-5 accent-green-600"> Yes
+            <input type="radio" name="AppRenAction" value="approve" class="w-5 h-5 accent-green-600"> Accept
         </label>
         <label class="flex items-center gap-2 cursor-pointer font-bold text-gray-700">
-            <input type="radio" name="AppRenAction" value="reject" class="w-5 h-5 accent-red-600"> No
+            <input type="radio" name="AppRenAction" value="reject" class="w-5 h-5 accent-red-600"> Reject
         </label>
     </div>
 </div>
@@ -299,18 +299,18 @@
 
                             <div class="overflow-x-auto mb-4 bg-white rounded shadow-sm border">
                                 <table class="mobile-table w-full text-xs text-left data-table" id="table-renewals">
-                                    <thead class="bg-purple-100">
-                                        <tr>
-                                            <th>Validity</th>
-                                            <th>Gas (HC/Tox/O2)</th>
-                                            <th>Requester</th>
-                                            <th>Reviewer</th>
-                                            <th>Approver</th>
-                                            <th>Photo</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="renewal-history-body"></tbody>
-                                </table>
+    <thead class="bg-purple-100">
+        <tr>
+            <th>Validity</th>
+            <th>Gas (HC/Tox/O2)</th>
+            <th>Precautions</th> <th>Requester</th>
+            <th>Reviewer</th>
+            <th>Approver</th>
+            <th>Photo</th>
+        </tr>
+    </thead>
+    <tbody id="renewal-history-body"></tbody>
+</table>
                             </div>
                             <div id="form-renewal" class="hidden bg-white p-4 rounded border border-purple-200 shadow-sm">
                                 <h4 class="font-bold text-sm mb-2 text-purple-800">New Renewal Request</h4>
@@ -851,10 +851,31 @@
             // --- Requester View (Renewals) ---
             if (rens.length > 0 || (currentUser.Role === 'Requester' && p.Status === 'Active')) {
                 document.getElementById('renewals-section').classList.remove('hidden');
-                document.getElementById('renewal-history-body').innerHTML = rens.map(r => `<tr class="border-b text-[10px]"><td class="p-2">${r.valid_from}<br>to ${r.valid_to}</td><td class="p-2">${r.hc}/${r.toxic}/${r.oxygen}</td><td class="p-2">${r.req_name}</td><td class="p-2">${r.rev_name || '-'}</td><td class="p-2">${r.app_name || '-'}</td><td class="p-2">${r.photoUrl ? 'YES' : 'NO'}</td></tr>`).join('');
+                // --- Requester View (Renewals) & Table Population ---
+            if (rens.length > 0 || (currentUser.Role === 'Requester' && p.Status === 'Active')) {
+                document.getElementById('renewals-section').classList.remove('hidden');
+                
+                // UPDATED TABLE ROW GENERATION
+                document.getElementById('renewal-history-body').innerHTML = rens.map(r => `
+                    <tr class="border-b text-[10px]">
+                        <td class="p-2">${r.valid_from}<br>to ${r.valid_to}</td>
+                        <td class="p-2">${r.hc}/${r.toxic}/${r.oxygen}</td>
+                        <td class="p-2 text-gray-600 italic">${r.precautions || '-'}</td> <td class="p-2">
+                            <div class="font-bold">${r.req_name}</div>
+                            <div class="text-[9px] text-gray-500">${r.req_at || ''}</div> </td>
+                        <td class="p-2">
+                            <div class="font-bold">${r.rev_name || '-'}</div>
+                            <div class="text-[9px] text-gray-500">${r.rev_at || ''}</div> </td>
+                        <td class="p-2">
+                            <div class="font-bold">${r.app_name || '-'}</div>
+                            <div class="text-[9px] text-gray-500">${r.app_at || ''}</div> </td>
+                        <td class="p-2">${r.photoUrl ? 'YES' : 'NO'}</td>
+                    </tr>
+                `).join('');
                 
                 const showRenForm = (currentUser.Role === 'Requester' && p.Status === 'Active' && (!lastRen || !lastRen.status.includes('pending')));
                 document.getElementById('form-renewal').classList.toggle('hidden', !showRenForm);
+
                 if(showRenForm) {
                     document.querySelectorAll('#form-renewal input').forEach(inp => inp.disabled = false);
                     document.getElementById('renewal-worker-select').innerHTML = currentPermitWorkers.map(w => `<label class="flex items-center gap-1 text-xs bg-white p-1 rounded border"><input type="checkbox" value="${escapeHtml(w.Name)}" checked class="ren-worker-cb"> ${escapeHtml(w.Name)}</label>`).join('');
@@ -1158,6 +1179,7 @@
     </script>
 </body>
 </html>
+
 
 
 
